@@ -1,0 +1,61 @@
+# A schema whose init prints to stdout still generates cleanly because IR is written to a file.
+go generate ./...
+! stdout .
+exists internal/settings/zz_settings.go
+! exists internal/settings/schema/zz_cfgx_gen_main
+
+go build -o app$exe .
+exec ./app$exe serve
+stdout '^host="localhost"\r?\n$'
+
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(
+		settings.ServeCommand(&cobra.Command{Use: "serve"},
+			func(_ context.Context, s *settings.Serve) error {
+				fmt.Printf("host=%q\n", s.ServerHost())
+				return nil
+			}),
+	)
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import (
+	"fmt"
+
+	"github.com/epistemer/cfgx/dsl"
+)
+
+func init() {
+	fmt.Println("chatty schema init output on stdout")
+}
+
+var Server = dsl.Group("server", "HTTP server",
+	dsl.String("host", "Listen host").Default("localhost"),
+)
+
+var App = dsl.App("app", "Test app", Server)
+
+var Serve = dsl.Command("Serve").Uses(Server)

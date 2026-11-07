@@ -1,0 +1,38 @@
+# A schema whose init blocks fails within the timeout with "took longer than".
+cd internal/settings
+! go run github.com/epistemer/cfgx/cmd/cfgx gen -timeout 5s ./schema
+stderr 'took longer than 5s'
+! exists zz_settings.go
+! exists schema/zz_cfgx_gen_main
+
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import (
+	"os"
+	"time"
+
+	"github.com/epistemer/cfgx/dsl"
+)
+
+// Blocks forever. The goroutine is a safety net: if cfgx's timeout ever
+// stopped working, the program exits with an error instead of hanging CI.
+func init() {
+	go func() {
+		time.Sleep(8 * time.Second)
+		os.Exit(2)
+	}()
+	select {}
+}
+
+var Server = dsl.Group("server", "HTTP server",
+	dsl.String("host", "Listen host").Default("localhost"),
+)
+
+var App = dsl.App("app", "Test app", Server)
+
+var Serve = dsl.Command("Serve").Uses(Server)

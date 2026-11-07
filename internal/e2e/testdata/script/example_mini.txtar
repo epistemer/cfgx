@@ -1,0 +1,19 @@
+# Copy examples/mini into a temp dir, run go generate, verify zz_settings.go matches the committed file, then build and run it.
+cp $CFGX_ROOT/examples/mini/go.mod go.mod
+cp $CFGX_ROOT/examples/mini/go.sum go.sum
+go mod edit -replace github.com/epistemer/cfgx=$CFGX_ROOT
+
+cp $CFGX_ROOT/examples/mini/main.go main.go
+mkdir internal/settings/schema
+cp $CFGX_ROOT/examples/mini/internal/settings/settings.go internal/settings/settings.go
+cp $CFGX_ROOT/examples/mini/internal/settings/schema/schema.go internal/settings/schema/schema.go
+
+go generate ./...
+cmp internal/settings/zz_settings.go $CFGX_ROOT/examples/mini/internal/settings/zz_settings.go
+! exists internal/settings/schema/zz_cfgx_gen_main
+
+go build -o mini$exe .
+exec ./mini$exe serve
+stdout '^serve: host="localhost" port=8080 tls=false db_url="" db_timeout=0 db_debug=false\r?\n$'
+exec ./mini$exe migrate --database-url postgres://localhost/mini --database-timeout 15 --database-debug
+stdout '^migrate: db_url="postgres://localhost/mini" db_timeout=15 db_debug=true\r?\n$'
