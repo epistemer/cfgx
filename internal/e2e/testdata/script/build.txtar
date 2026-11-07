@@ -1,0 +1,18 @@
+# Build and run a minimal program that blank-imports github.com/epistemer/cfgx.
+exec go build -o app$exe .
+exec ./app$exe
+stdout '^cfgx ok\r?\n$'
+! stderr .
+
+-- main.go --
+package main
+
+import (
+	"fmt"
+
+	_ "github.com/epistemer/cfgx"
+)
+
+func main() {
+	fmt.Println("cfgx ok")
+}
