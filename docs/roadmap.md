@@ -112,13 +112,20 @@ graph LR
 **Goal:** an empty repository where CI, linting and the end-to-end test harness
 already work, so every later PR is tested the same way.
 
+**Status (2026-11-07):** M0.1–M0.4 are done on branch `m0-foundation`. They pass
+every check on Linux with Go 1.27.3: gofmt, vet, staticcheck v0.8.2, actionlint,
+and the race-enabled tests. Gemini wrote M0.2 and M0.3 and Claude reviewed them;
+Gemini reviewed M0.1 and M0.4, and its seven findings are fixed. Two things are
+left before the boxes can be ticked: the first CI run on GitHub, which needs the
+repository to exist and a push, and your merge into `main`.
+
 | ✓ | ID | Item | Size | Done when |
 |---|----|------|------|-----------|
 | ☐ | M0.1 | `git init`. Module `github.com/epistemer/cfgx` with a `go 1.26` directive (support the two latest Go releases). Package directories from [implementation.md §4](implementation.md), each with a `doc.go`. MIT LICENSE and a README stub. | S | `go build ./...` passes; layout matches §4 |
 | ☐ | M0.2 | CI (GitHub Actions): Go {1.26, 1.27} × {linux, macOS, windows}. Runs `gofmt` check, `go vet`, `staticcheck`, `go test -race`. Windows is in the matrix from day one because env var names are case-insensitive there and paths differ. | S | CI green on all six jobs |
 | ☐ | M0.3 | Test harness. A `testscript` runner in `internal/e2e` whose setup creates a temporary module containing `replace github.com/epistemer/cfgx => <repo>`. A golden-file helper with an `-update` flag. | M | A trivial script (`go build` inside a temp module) passes on all three OSes |
 | ☐ | M0.4 | `docs/adr/` with a template, plus ADR-0001 recording decisions D1–D11 by linking interface.md §0. | S | Merged |
-| ☐ | M0.5 | Cross-model review: agy's adversarial review (Gemini 4 Argon) of the three docs. Every finding becomes an amendment, a roadmap change, or a recorded rejection. Done on 2026-11-07: [review 0001](reviews/0001-gemini-doc-review.md). | S | Triage list merged (it lands with M0.1's first commit) |
+| ☑ | M0.5 | Cross-model review: agy's adversarial review (Gemini 4 Argon) of the three docs. Every finding becomes an amendment, a roadmap change, or a recorded rejection. Done on 2026-11-07: [review 0001](reviews/0001-gemini-doc-review.md). | S | Triage list merged (it lands with M0.1's first commit) |
 
 **Exit:** CI is green on empty packages, and the e2e harness runs everywhere.
 
@@ -162,7 +169,7 @@ it gets wide.
 | ☐ | M2.3 | `cfgx gen` loader: DSL self-registration, the temporary `main` placed as S1 decided, `go run`, IR decoding, and compile errors and panics mapped back to `schema.go` lines | M | testscript: a good schema produces IR; a broken schema reports `schema.go:LINE`; `gen --check` leaves the working tree untouched |
 | ☐ | M2.4 | `engine` v0: the `Key[V]` table type; default, env and flag layers; flag values that count only when `Changed`; loading only a command's own keys; the `atomic.Pointer` snapshot; basic `Errors` | L | Unit tests with hand-written tables; full default/env/flag precedence matrix |
 | ☐ | M2.5 | `internal/gen` v0 templates: the values struct, key table, group types and getters, group interfaces, command types, `XCommand` binders, `BindRoot`. Name derivation for file key, env, flag and getter, with collision checks for this subset. `go/format` plus `imports`. A **version guard**: generated code references `engine.GeneratedV1`, so a generator/runtime mismatch is a compile error. | L | Golden tests; output byte-identical across two runs; a test asserts no import of `cfgx/dsl` |
-| ☐ | M2.6 | `examples/mini` plus e2e: generate, build and run the binary | M | testscript asserts flag > env > default, and that `--help` shows defaults, on all OSes |
+| ☐ | M2.6 | `examples/mini` plus e2e: generate, build and run the binary. The example module declares `tool github.com/epistemer/cfgx/cmd/cfgx`, and the e2e `Setup` runs `go mod tidy` once cfgx has dependencies | M | testscript asserts flag > env > default, and that `--help` shows defaults, on all OSes |
 
 **Exit:** the walking skeleton runs on CI, and the generate time is recorded in
 the S1 ADR.
@@ -200,7 +207,7 @@ alias, deprecated) and M7 (mutable, epoch). Reloadable is after v0.1.0.
 | ☐ | M4.1 | `Int64`, `Uint`, `Float`, `Duration` (a unit is required), `ByteSize` | M | Golden + e2e tests; fuzzers for Duration and ByteSize |
 | ☐ | M4.2 | `Enum`: the Go type inferred from the values, canonical text, named types and `TextMarshaler`, defaults checked at generate time, "did you mean" | M | zp's `models.ZpTaskExecutionMode` case works end to end |
 | ☐ | M4.3 | The `cfgx.Secret` runtime type: masking, `Reveal`, `Bytes`, `IsSet`, constant-time `Equal`, `NewSecret`. Can start right after M1.5. | M | The S5 leak suite passes |
-| ☐ | M4.4 | `Secret` and `SecretFile` kinds (A10): no flag by default; `_FILE` env with one trailing newline trimmed (`\n` or `\r\n`), and an error if both are set; regular files only, with size limits; read eagerly, only for the command's relevant keys | M | testscript for env, `_FILE`, both set, file, missing file, FIFO and oversized file |
+| ☐ | M4.4 | `Secret` and `SecretFile` kinds (A10): no flag by default; `_FILE` env with one trailing newline trimmed (`\n` or `\r\n`), and an error if both are set; regular files only, with size limits; read eagerly, only for the command's relevant keys. CRLF fixtures are written by the test or stored as `*.raw`, which Git never normalizes | M | testscript for env, `_FILE`, both set, file, missing file, FIFO and oversized file |
 | ☐ | M4.5 | `Path`, `File`, `URL`, `Location`. Relative paths from a config file resolve against its directory for `Path`, `SecretFile` and `File` (A11); `.Default` takes the text form (A6). | M | Golden + e2e tests |
 | ☐ | M4.6 | `Strings`, `Ints`, `Durations`, `StringMap`: flags repeatable (accumulating through `pflag.SliceValue`) or comma-separated, env comma-separated or `k=v`, file nodes | M | e2e tests, including `--tag a --tag b`; fuzzers for the list and map parsers |
 | ☐ | M4.7 | `Text(name, desc, zero T)`: check at generate time that `*T` implements `TextUnmarshaler`; default stored through `MarshalText` | S | A `netip.Prefix` key works end to end |
@@ -382,7 +389,9 @@ hand (problem 3).
 
 The agy bridge runs **Gemini 4 Argon (High)** by default on this machine (set
 2026-11-07). agy reports that its read-only mode isn't enforced on Linux, so
-isolation comes from git worktrees, not from flags.
+isolation comes from git worktrees, not from flags. Worktrees live outside the
+repository (for example a sibling `../cfgx-worktrees/`), because `gofmt -l .`
+walks into dot-directories and would see them.
 
 | Worker | Best at | Owns |
 |--------|---------|------|
