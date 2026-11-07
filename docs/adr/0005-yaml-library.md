@@ -2,14 +2,14 @@
 
 | | |
 |---|---|
-| Status | Proposed |
+| Status | Accepted |
 | Date | 2026-11-07 |
 | Roadmap item | M1.4 |
-| Deciders | Claude (owner) decides; Gemini proposed |
+| Deciders | Claude (owner) decided; Gemini proposed |
 
 ## Context
 
-`cfgx` parses configuration files (both YAML and JSON) into its own intermediate node tree (`internal/node`: `{Kind, Scalar, Map, List, Pos}`) rather than unmarshaling into `map[string]any` (`docs/implementation.md` §3.2, §3.4; ADR 0001 D1, D7). Every key and value must carry a 1-based `line:column` source position (`File:Line:Col`), scalar text must remain in its original form so `cfgx`'s per-key parsers (`strconv`, `time.ParseDuration`, etc.) control type conversion without YAML 1.1/1.2 surprises, duplicate mapping keys must be rejected with source positions, and untrusted or malformed inputs (alias bombs, merge keys, multi-document streams, deep nesting) must be handled safely.
+`cfgx` parses configuration files (both YAML and JSON) into its own intermediate node tree (`internal/node`: `{Kind, Scalar, Map, List, Pos}`) rather than unmarshaling into `map[string]any` ([implementation.md](../implementation.md) §3.4). Every key and value must carry a 1-based `line:column` source position (`File:Line:Col`), scalar text must remain in its original form so `cfgx`'s per-key parsers (`strconv`, `time.ParseDuration`, etc.) control type conversion without YAML 1.1/1.2 surprises, duplicate mapping keys must be rejected with source positions, and untrusted or malformed inputs (alias bombs, merge keys, multi-document streams, deep nesting) must be handled safely.
 
 Because JSON is a subset of YAML 1.2, `docs/implementation.md` §3.4 proposes parsing JSON files through the same YAML parser and node builder so there is a single tree walker with `line:column` positions for both formats. Spike S4 (`spikes/s4-yaml`) evaluated the three live candidates against the archived `gopkg.in/yaml.v3` baseline:
 
@@ -18,7 +18,7 @@ Because JSON is a subset of YAML 1.2, `docs/implementation.md` §3.4 proposes pa
 - `github.com/goccy/go-yaml` `v1.19.2`
 - `gopkg.in/yaml.v3` `v3.0.1` (baseline only; archived on 2025-04-01)
 
-All reproducible tests and benchmarks live in the standalone module `spikes/s4-yaml` (`module github.com/epistemer/cfgx/spikes/s4-yaml`).
+All reproducible tests and benchmarks live in the standalone module `spikes/s4-yaml` (code at commit `6ff3155`). Claude independently re-checked the four claims the decision rests on: v3 rejects JSON's `\/` escape, v4 rejects multiple documents, v4 doesn't flag duplicate keys when loading into a `Node`, and v4 errors carry line and column.
 
 ## Options
 
@@ -80,11 +80,12 @@ Use **`go.yaml.in/yaml/v4` (`v4.0.0`)** to parse both YAML and JSON configuratio
 1. **Updates to `docs/implementation.md` §3.4 (File source & node builder)**:
    - Replace the `gopkg.in/yaml.v3` / `goccy/go-yaml` placeholder with `go.yaml.in/yaml/v4` (`v4.0.0`).
    - Confirm that the **JSON-through-YAML plan holds**: `.yaml`, `.yml`, and `.json` files all go through `yaml.Load(data, &doc)` into `yaml.Node` and the same `internal/node` tree builder.
-2. **Implementation requirements for `internal/node` (M3.1) and `source/file` (M5.2)**:
+2. **Implementation requirements for `internal/node` (M3.1) and the file layer (M3.3)**:
    - **Single-document enforcement**: Call `yaml.Load(data, &doc)` (which rejects multi-document streams and empty streams by default; treat a comment-only/empty file as an empty root map).
    - **Duplicate-key check in the `MappingNode` walker**: Because `yaml.Load(data, &doc)` bypasses `Constructor.checkMappingKeys` when the target is `yaml.Node`, the `MappingNode` loop in `internal/node` must check `seen[keyNode.Value]` as it walks `Content[i], Content[i+1]` pairs and return a `ParseError` at `keyNode.Line:keyNode.Column` referencing the prior definition at `prev.Line:prev.Column`.
    - **Reject aliases and merge keys**: In the node walker, reject `yaml.AliasNode` and unquoted `!!merge` (`<<`) keys with a `ParseError` at their `Line:Column` so config files remain static, self-contained trees immune to alias expansion bombs.
    - **Preserve `Scalar`, `Tag`, and `Quoted` metadata**: Record `Node.Value`, `Node.ShortTag()`, and whether `Node.Style` is quoted (`SingleQuotedStyle | DoubleQuotedStyle | LiteralStyle | FoldedStyle`) so `cfgx`'s per-key value parsers convert raw text according to the schema's target type.
    - **Unwrap `*yaml.LoadError` for syntax errors**: Use `errors.As(err, &loadErr)` on errors returned by `yaml.Load` to extract `loadErr.Mark.Line` and `loadErr.Mark.Column` into `cfgx.ParseError.Position`.
-3. **Documented JSON edge-case divergences**:
-   - Document in `source/file` that JSON files parsed through the YAML 1.2 loader accept YAML superset syntax (such as `#` comments and trailing commas) and require supplementary Unicode characters ($> \text{U+FFFF}$) to be written as literal UTF-8 (e.g. `"😀"`) or `\U0001F600` rather than UTF-16 surrogate pairs (`\uD83D\uDE00`).
+3. **JSON edge cases.** `.json` files accept YAML's superset syntax (comments, trailing commas); that leniency is documented. UTF-16 surrogate-pair escapes (`\uD83D\uDE00`), which Python's `json.dumps` writes by default, are rewritten to the equivalent `\U0001F600` escape before parsing, so valid JSON is never rejected. Columns after such an escape on the same line shift by two characters per pair.
+4. **Anchors, aliases and merge keys** are rejected in v0.1.0 with a clear error. Supporting them is a roadmap backlog item.
+5. **Risk: a brand-new major version.** v4.0.0 was released on 2026-11-04, days before this decision. `internal/node` keeps the library behind one package, so moving to a later v4 patch, or to another library, touches one package.

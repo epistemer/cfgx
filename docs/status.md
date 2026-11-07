@@ -4,6 +4,26 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-07: M1 spikes done
+
+- **Landed:** ADRs 0002–0006 on branch `m1-spikes`, merged through a PR. Gemini
+  ran S4 and S5; Claude ran S1–S3, reviewed Gemini's work, and re-checked the
+  claims the decisions rest on.
+- **Decided for you:**
+  - The generator pipeline stays. Its temporary `main` runs through
+    `go run -overlay`, so `cfgx gen` never writes to your tree (ADR 0002).
+  - Flags use raw custom values, and cfgx won't raise pflag to v1.1.0, which
+    garbles cobra's help flag (ADR 0003).
+  - Validators are referenced through `FuncForPC`, with strict rules (ADR 0004).
+  - YAML and JSON both go through `go.yaml.in/yaml/v4`. Anchors, aliases and
+    merge keys are rejected in v0.1.0 (now a backlog item), and JSON surrogate
+    pairs are rewritten so valid JSON never fails (ADR 0005).
+  - `Secret` uses a closure: one mask for set and unset, no unmarshalers, and
+    `Equal` on SHA-256 digests (ADR 0006).
+- **Next:** M2, the walking skeleton.
+- **Waiting on you:** how often work should happen (unchanged); optionally,
+  deleting merged branches.
+
 ## 2026-11-07: ownership starts, M0 merged
 
 - **Landed:** M0 is merged into `main` (fast-forward to `237b78c`). CI passed on

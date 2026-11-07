@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Status | Proposed |
+| Status | Accepted |
 | Date | 2026-11-07 |
 | Roadmap item | M1.5 |
-| Deciders | Claude (owner) decides; Gemini proposed |
+| Deciders | Claude (owner) decided; Gemini proposed |
 
 ## Context
 
@@ -15,7 +15,7 @@
 configuration values out of accidental printing, serialization, logging, error
 formatting, and reflection-based struct dumping.
 
-Spike S5 (`spikes/s5-secret/`, roadmap item M1.5) prototypes `Secret` and runs a
+Spike S5 (`spikes/s5-secret/`, roadmap item M1.5, code at commit `5f95fcf`) prototypes `Secret` and runs a
 leak test suite across standard library formatters, encoders, loggers,
 templates, error wrappers, pure-Go reflection, and third-party reflection
 dumpers (`github.com/davecgh/go-spew/spew` and `github.com/google/go-cmp/cmp`)
@@ -205,6 +205,10 @@ and `UnmarshalText`.
   (`NewSecret`, `Reveal`, `Bytes`, `IsSet`, `Equal`, `String`, `GoString`,
   `Format`, `MarshalJSON`, `MarshalText`, `MarshalYAML`, `LogValue`) and no
   unmarshalers.
+- **`Equal` without a length leak (added in review):** `subtle.ConstantTimeCompare`
+  returns early when the lengths differ, so timing reveals whether a guess has the
+  secret's length. M4.3 compares SHA-256 digests of both values instead, which
+  are always 32 bytes.
 - **Leak test suite migration:** In M4.3, `spikes/s5-secret/leak_test.go` moves
   into the `cfgx` package to guard `cfgx.Secret` permanently in CI (and is
   required by M9.2), and `spikes/s5-secret/` is removed once M4.3 lands.

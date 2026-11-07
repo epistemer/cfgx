@@ -141,13 +141,18 @@ production code depends on the answers. Spike code is throwaway: it lives in
 and can run in parallel. The questions and kill criteria are in
 [implementation.md §6](implementation.md).
 
+**Status (2026-11-07):** done. All five spikes passed and none of the kill
+criteria fired; the decisions are ADRs 0002–0006. The spike code was deleted when
+they merged, except `spikes/s5-secret`, whose leak suite moves into package
+`cfgx` in M4.3.
+
 | ✓ | ID | Spike | Size | Done when |
 |---|----|-------|------|-----------|
-| ☐ | M1.1 | **S1: generator pipeline.** A temporary `main` package plus `go run`. Test a schema that imports `internal/` packages, with `go.work`, with `-mod=vendor`, and from inside `go generate`. Measure cold and warm times. Decide where the temporary `main` lives without touching the working tree (`-overlay`, `_` or `.` directories). | M | ADR with timings, the placement decision, and keep-or-fallback |
-| ☐ | M1.2 | **S2: flags.** A custom `pflag.Value` with `Changed` semantics, cobra persistent flags merged into a child command, completion, and `--help` default display. | M | ADR plus a working proof of correct precedence |
-| ☐ | M1.3 | **S3: function references.** Turn `FuncForPC` names into importable references. Cover top-level, `internal/`, generic, closure and method-expression cases, `%2e`-escaped paths, ABI wrappers, and functions in the schema package (rejected). | S | ADR with the accepted and rejected name patterns |
-| ☐ | M1.4 | **S4: YAML library.** Compare candidates on node positions, strict duplicate keys, JSON input, maintenance, and dependency weight. | M | ADR naming the library |
-| ☐ | M1.5 | **S5: Secret leaks.** Check every `fmt` verb, nested exported and unexported fields, json, slog text and JSON handlers, `errors`, and reflection dumpers (`spew`, `go-cmp`) against the closure-based Secret. | S | ADR plus a leak test suite, kept for M4.3 |
+| ☑ | M1.1 | **S1: generator pipeline.** A temporary `main` package plus `go run`. Test a schema that imports `internal/` packages, with `go.work`, with `-mod=vendor`, and from inside `go generate`. Measure cold and warm times. Decide where the temporary `main` lives without touching the working tree (`-overlay`, `_` or `.` directories). | M | ADR with timings, the placement decision, and keep-or-fallback |
+| ☑ | M1.2 | **S2: flags.** A custom `pflag.Value` with `Changed` semantics, cobra persistent flags merged into a child command, completion, and `--help` default display. | M | ADR plus a working proof of correct precedence |
+| ☑ | M1.3 | **S3: function references.** Turn `FuncForPC` names into importable references. Cover top-level, `internal/`, generic, closure and method-expression cases, `%2e`-escaped paths, ABI wrappers, and functions in the schema package (rejected). | S | ADR with the accepted and rejected name patterns |
+| ☑ | M1.4 | **S4: YAML library.** Compare candidates on node positions, strict duplicate keys, JSON input, maintenance, and dependency weight. | M | ADR naming the library |
+| ☑ | M1.5 | **S5: Secret leaks.** Check every `fmt` verb, nested exported and unexported fields, json, slog text and JSON handlers, `errors`, and reflection dumpers (`spew`, `go-cmp`) against the closure-based Secret. | S | ADR plus a leak test suite, kept for M4.3 |
 
 **Exit:** five ADRs are merged. If a kill criterion fired, implementation.md is
 amended to the fallback before M2 starts.
@@ -185,7 +190,7 @@ reported at once with where it came from, and per-command loading is complete.
 
 | ✓ | ID | Item | Size | Done when |
 |---|----|------|------|-----------|
-| ☐ | M3.1 | `internal/node`: the tree type, plus YAML and JSON builders using the S4 library; positions; strict duplicate keys; `App.Formats` | M | Parser tests, including JSON read by the YAML path |
+| ☐ | M3.1 | `internal/node`: the tree type and a builder on `go.yaml.in/yaml/v4` (ADR 0005) for YAML and JSON; positions; duplicate keys checked by the walker; anchors, aliases and merge keys rejected; surrogate-pair escapes rewritten for `.json`; empty files as empty maps; `App.Formats` | M | Parser tests, including JSON read by the YAML path and JSON with surrogate pairs |
 | ☐ | M3.2 | File discovery (A11): `--config` (a persistent flag added by `BindRoot`) and `ZP_CONFIG` must exist; the `App.ConfigFile` search paths expand `$VAR`s and skip unset ones; `.yaml`, `.yml`, `.json` in order, and two matches is an error; nothing found is fine; an invalid file is an error | S | testscript for each route and each error |
 | ☐ | M3.3 | The file layer: key matching; unknown keys with "did you mean" (`internal/suggest`); a scan of the environment for unknown `ZP_*` names, case-insensitive on Windows; an env var that is present but empty provides the empty value | M | Typos in a file and in env produce warnings with suggestions; an empty env var clears a file value |
 | ☐ | M3.4 | Provenance per key, as the list of every layer that provided a value. `Problem{Key, Message, Source}`. `Errors` formatted exactly as in [interface.md §8](interface.md): sorted, counted, everything at once, never containing a secret's value. | M | Snapshot tests of the error output |
@@ -208,7 +213,7 @@ alias, deprecated) and M7 (mutable, epoch). Reloadable is after v0.1.0.
 |---|----|------|------|-----------|
 | ☐ | M4.1 | `Int64`, `Uint`, `Float`, `Duration` (a unit is required), `ByteSize` | M | Golden + e2e tests; fuzzers for Duration and ByteSize |
 | ☐ | M4.2 | `Enum`: the Go type inferred from the values, canonical text, named types and `TextMarshaler`, defaults checked at generate time, "did you mean" | M | zp's `models.ZpTaskExecutionMode` case works end to end |
-| ☐ | M4.3 | The `cfgx.Secret` runtime type: masking, `Reveal`, `Bytes`, `IsSet`, constant-time `Equal`, `NewSecret`. Can start right after M1.5. | M | The S5 leak suite passes |
+| ☐ | M4.3 | The `cfgx.Secret` runtime type from ADR 0006: masking, `Reveal`, `Bytes`, `IsSet`, `Equal` on SHA-256 digests, `NewSecret`, no unmarshalers. Moves the S5 leak suite into package `cfgx` and deletes `spikes/s5-secret`. | M | The leak suite passes in CI |
 | ☐ | M4.4 | `Secret` and `SecretFile` kinds (A10): no flag by default; `_FILE` env with one trailing newline trimmed (`\n` or `\r\n`), and an error if both are set; regular files only, with size limits; read eagerly, only for the command's relevant keys. CRLF fixtures are written by the test or stored as `*.raw`, which Git never normalizes | M | testscript for env, `_FILE`, both set, file, missing file, FIFO and oversized file |
 | ☐ | M4.5 | `Path`, `File`, `URL`, `Location`. Relative paths from a config file resolve against its directory for `Path`, `SecretFile` and `File` (A11); `.Default` takes the text form (A6). | M | Golden + e2e tests |
 | ☐ | M4.6 | `Strings`, `Ints`, `Durations`, `StringMap`: flags repeatable (accumulating through `pflag.SliceValue`) or comma-separated, env comma-separated or `k=v`, file nodes | M | e2e tests, including `--tag a --tag b`; fuzzers for the list and map parsers |
@@ -339,6 +344,8 @@ hand (problem 3).
 5. **TOML.**
 6. **Grouped `--help` output.**
 7. **Vet analyzer** that flags `Secret.Reveal()` values flowing into logging.
+8. **YAML anchors, aliases and merge keys** in config files. v0.1.0 rejects them
+   with a clear error (ADR 0005).
 
 **Parking lot** (each needs an amendment before it can be scheduled):
 - offline `config history | set | reset` for an app that isn't running
@@ -361,7 +368,7 @@ hand (problem 3).
 | Several replicas each keep their own runtime settings | Medium / medium | Documented limitation (interface §7.3); a shared store is in the backlog |
 | Delegated work drifts from the docs or collides with other work | Medium / medium | Briefs cite an item ID and its done-when; one worktree per task; one writer per file set; cross-model review before merge (see [Working with agents](#working-with-agents)) |
 | A secret leaks through a path we don't control, such as `Reveal()` passed to a logger | Medium / high | S5 leak suite; vet analyzer in the backlog |
-| The YAML library stops being maintained | Medium / medium | S4 choice; `internal/node` keeps the library behind one package |
+| The YAML library stops being maintained, or v4.0.0 (released 2026-11-04) has early bugs | Medium / medium | ADR 0005 chose the YAML organization's maintained line; `internal/node` keeps the library behind one package |
 | Scope creep | High / medium | v0.1.0 scope is frozen in implementation.md §8; everything else goes to the [backlog](#after-v010-ordered-backlog) |
 | Value-based rules treat a zero value as unset (a port of 0, an empty list) | Low / low | Documented in interface §3.5 (A4); the generate-time check stops non-zero defaults in exclusive rules |
 | Platform differences (Windows env case, paths) | Medium / medium | Windows and macOS in CI from M0 |
