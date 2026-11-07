@@ -55,17 +55,21 @@ There are two halves, connected by one contract, the **IR**:
 4. If the schema panics or doesn't compile, the generator reports the error at
    the user's `schema.go` location.
 
-Where the temporary `main` lives is part of **[spike S1]**. It must be inside the
-module, for `internal/` imports, and `cfgx gen --check` must not modify the
-working tree. Candidates, in order of preference:
-- `go run -overlay` with a virtual file, so nothing touches the disk
-- a directory that `./...` skips, if the go command accepts it when named
-  explicitly (import path elements can't start with a dot, so `.` prefixes may
-  fail; S1 checks `_` too)
-- a plainly named temporary directory, removed on exit and on signals
+**Placement [decided, ADR 0002]:** `go run -overlay`, at a stable virtual path
+inside the schema package's directory (`zz_cfgx_gen_main/main.go`, which must not
+exist on disk), with deterministic content. Nothing is written to the working
+tree, `--check` included, and warm runs hit the go command's executable cache.
+It takes about 0.1–0.3 s when nothing changed, about 0.3–0.5 s after a schema
+edit, and about 10 s on an empty cache. Module, workspace and vendor modes and
+`go generate` all work.
 
-S1 also measures cold and warm `go run` time, with `go.work`, `-mod=vendor` and
-a schema that imports `internal/` packages. Target: warm under 2 s.
+The temporary `main` writes the IR to a file the generator names rather than to
+stdout, so output from an `init` can't corrupt it. The generator resolves its
+argument with `go list -e`, so a broken schema reaches the user as a compile
+error from `go run`. It also merges any `-overlay` already in `GOFLAGS`,
+canonicalizes paths with `filepath.EvalSymlinks`, and runs the program with a
+timeout. On Unix the timeout dumps goroutine stacks (SIGQUIT), which show the
+`init` that hung (ADR 0002).
 
 ### 2.2 What `dsl` records
 
@@ -85,30 +89,37 @@ Each constructor captures:
 | Rules | key identities (pointer identity of the `*KeyDef` → stable path) |
 | Tags, groups, commands | identities resolved to names |
 
-**Function references [proposed, S3].** A function is accepted only if:
-- it's top-level and exported: after the package path, its symbol contains no
-  further dot. That rejects closures (`F.func1`), method values (`T.M-fm`) and
+**Function references [decided, ADR 0004].** A function is accepted only if:
+- it's top-level and exported: after the package path, its symbol is a single
+  identifier (`token.IsIdentifier` and `token.IsExported`), with no further dot. That rejects closures (`F.func1`), method values (`T.M-fm`) and
   method expressions (`T.M`, `(*T).M`)
 - it isn't a generic instance (no `[` in the name)
-- its package isn't the schema package and doesn't import `cfgx/dsl`, because
-  generated code must never import either
+- its package isn't `main` or the schema package, and doesn't import `cfgx/dsl`,
+  because generated code must never import them. One batched `go list -deps`
+  call checks every referenced package
+- the generated package can import it under Go's `internal/` rule. A function in
+  the generated package itself is referenced without an import
 
-The package path ends at the first `.` after the last `/`. Go is expected to
-escape dots in the last path element of symbol names as `%2e`
+The package path ends at the first `.` after the last `/`. Go escapes dots in the last path element of symbol names as `%2e`
 (`gopkg.in/yaml%2ev3.F`), which keeps that split unambiguous; the generator
 unescapes them. Rejections point at the schema line.
 
-**[spike S3]** Confirm all of this across Go versions, including generic
-functions, `internal/` packages and ABI wrapper names, and that every emitted
-reference is importable from the generated package.
+Confirmed on Go 1.26.0 and 1.27.3 (ADR 0004). Closure names depend on inlining
+and can even move into the caller's package, which is why the rule rejects any
+further dot instead of matching closure patterns. Generated code imports every
+referenced package under a generated alias, because a package's name can differ
+from its last path element.
 
 ### 2.3 Computed methods: a type-checking pass
 
 `Group.Computed("DSN")` declares that a hand-written method belongs to the
 group's interface. Its signature has to be exact, so the generator type-checks
 rather than copying source text (A8):
-1. Emit `zz_settings.go` with the computed methods left out of the interfaces.
-2. Type-check the package with `go/packages` (`NeedTypes`).
+1. Build `zz_settings.go` with the computed methods left out of the interfaces,
+   in memory.
+2. Type-check the package with `go/packages` (`NeedTypes`), passing that stub
+   through `packages.Config.Overlay`, so nothing is written yet (review 0002,
+   F06).
 3. Find each declared method on the group's receiver type (naming rule in
    interface §5.3) and render its signature with `types.TypeString` and an
    import-tracking qualifier, so package names, `/v2` paths and aliases come
@@ -253,17 +264,23 @@ unknown.
 
 **Flags.**
 - The engine registers a custom `pflag.Value` per key that stores raw text. Its
-  `Type()` returns `int`, `duration`, etc. for help, and `DefValue` holds the
-  schema default for display only.
+  `Type()` gives the help label (`int`, `duration`, `strings`, …). cfgx writes
+  `(default …)` into the usage text itself and leaves `DefValue` empty, because
+  pflag decides whether an unknown type's default is "zero" from its text and
+  would hide a string default of `0` or `false` (ADR 0003).
 - A flag counts **only if `Changed`**. This avoids viper's classic bug, where a
   flag's default overrides the env var and the file.
 - Bool flags set `NoOptDefVal = "true"`.
-- Slice and map keys append on every occurrence, because pflag calls `Set` once
-  per `--tag a --tag b`. Their values implement `pflag.SliceValue`.
+- Slice and map keys record each occurrence's raw text, because pflag calls
+  `Set` once per `--tag a --tag b`. The engine splits and validates them, so
+  pflag never rejects a value (ADR 0003). An explicitly empty occurrence provides
+  an empty list.
 - `Global` keys are registered as persistent flags on the root by `BindRoot`.
-- **[spike S2]** Confirm that cobra merges persistent flags into the child's
-  `Flags()` before `RunE`, that completion works with the custom values, and that
-  `--help` shows defaults correctly.
+- **[decided, ADR 0003]** Confirmed on cobra v1.10.2: persistent flags are
+  visible through the child's `Flags()` in `RunE`, completion works with the
+  custom values, and `--help` shows defaults without applying them. cfgx doesn't
+  raise pflag beyond what cobra requires, because pflag v1.1.0 renders cobra's
+  own help flag as `--help[=true|false]`.
 
 **Env.**
 - `os.LookupEnv` is called only for known names, plus the `_FILE` variants for
@@ -285,13 +302,22 @@ unknown.
 - File-backed values (`SecretFile`, `File`, `_FILE`) must be regular files, so a
   FIFO or device can't hang startup, and are capped at 1 MiB for secrets and
   16 MiB for `File`.
-- **[proposed]** Parse JSON with the YAML parser too, since JSON is valid
-  YAML 1.2. That gives one node builder and line numbers for both formats.
-  Duplicate-key handling must be strict.
-- **[spike S4]** Choose the YAML library. `gopkg.in/yaml.v3` was archived as
-  unmaintained in 2025. Candidates: the YAML organization's maintained fork, and
-  `goccy/go-yaml`. Criteria: node positions, duplicate-key errors, maintenance,
-  dependency weight.
+- **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
+  loading into `yaml.Node`. It rejects multi-document files and reports line and
+  column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree
+  also:
+  - rejects duplicate keys itself, naming both positions, since the library
+    doesn't when loading into a `Node`
+  - rejects anchors, aliases and merge keys in v0.1.0 (a backlog item)
+  - treats an empty or comment-only file (the loader's `io.EOF`) and a null root
+    as an empty map
+  - for `.json` files, first rewrites surrogate escapes with a string-aware
+    scanner, because YAML rejects them but JSON tools such as Python's
+    `json.dumps` write them. A pair becomes one `\U` escape, padded with spaces
+    after the closing quote so columns stay exact; a lone surrogate becomes
+    `\uFFFD` (ADR 0005)
+- `.json` files accept YAML's superset syntax (comments, trailing commas). The
+  leniency is documented rather than enforced against.
 
 **Config file discovery.**
 1. `--config` (persistent flag, added by `BindRoot`)
@@ -327,16 +353,19 @@ type Secret struct{ reveal func() string } // a closure: reflection can't read i
 
 - `String`, `GoString`, `Format` (all verbs), `MarshalJSON`, `MarshalText`,
   `MarshalYAML` and `LogValue` all return the mask.
-- `Equal` uses `crypto/subtle`. A `Secret` isn't comparable with `==`, since it
-  holds a func.
+- `Equal` compares SHA-256 digests with `crypto/subtle`, without an early
+  return (ADR 0006), so timing reveals neither the secret's length nor whether
+  it's set. A `Secret` isn't comparable with `==`,
+  since it holds a func.
 - In an unexported field of a printed struct, `fmt` can't call these methods and
   prints the field as an address (`{reveal:0x4f2a80}`). The secret isn't shown,
   and reflection-based dumpers can't reach it without `unsafe`. Interface §7.1
   says so (A10).
-- **[spike S5]** Write leak tests: every `fmt` verb, `%+v` and `%#v` on parent
-  structs with exported and unexported Secret fields, `json.Marshal`, `slog`
-  text and JSON handlers, `errors.New(fmt.Sprint(...))`, and reflection dumpers
-  (`spew`, `go-cmp`).
+- **[decided, ADR 0006]** The closure design passed every leak path tested:
+  fmt, json, xml, templates, log, slog, errors, gob, reflect, go-spew and go-cmp.
+  An unset Secret masks the same as a set one. There are no unmarshalers: they
+  would let a masked `"******"` round-trip into a real value, and would let
+  `dsl.Text` accept a Secret. The leak suite moves into package `cfgx` in M4.3.
 
 ### 3.7 Reloadable keys (after v0.1.0)
 
@@ -510,6 +539,10 @@ Runtime dependencies:
 | S3 | Are `FuncForPC` names reliably convertible to importable references, including `%2e`-escaped paths, method expressions and ABI wrappers? | no → validators must be referenced by `dsl.Func("pkg.Name")` |
 | S4 | Which YAML library: node positions, duplicate keys, JSON parsing? | none acceptable → separate JSON path with `encoding/json/jsontext` offsets |
 | S5 | Can Secret masking hold under all `fmt`, json, slog and reflection-dumper paths? | a leak path we can't close → document it and add the vet analyzer earlier |
+
+**Outcome (2026-11-07):** all five spikes passed and none of the kill criteria
+fired. The decisions are ADRs [0002](adr/0002-generator-pipeline.md) to
+[0006](adr/0006-secret-type.md).
 
 ---
 
