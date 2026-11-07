@@ -1,0 +1,552 @@
+# cfgx — Implementation brainstorm
+
+> Status: **brainstorm.** This covers how to build what
+> [interface.md](interface.md) describes. Decisions are marked **[decided]**,
+> recommendations **[proposed]**, and unknowns that need a spike **[spike]**.
+> The resulting plan is in [roadmap.md](roadmap.md).
+
+---
+
+## 1. Big picture
+
+```
+ schema/schema.go ──(1) load──▶ temp main ──(2) go run──▶ IR (JSON)
+                                                          │
+            settings/*.go (hand-written) ─(3) type check─▶│
+                                                          ▼
+                                                 (4) check & resolve
+                                                          │
+             ┌───────────────┬──────────────┬─────────────┼──────────────┐
+             ▼               ▼              ▼             ▼              ▼
+     zz_settings.go   config.example.yaml  .env.example  config.schema.json
+     (tables + types)   docs/CONFIG.md     cfgx.lock.json
+             │
+             ▼   at runtime
+       cfgx engine  ◀── flags (pflag) · env · file (node tree) · defaults · [store]
+```
+
+There are two halves, connected by one contract, the **IR**:
+
+- **Generate time:** the `dsl` package records declarations, and `cmd/cfgx` turns
+  them into code and artifacts.
+- **Runtime:** the generated code consists of **tables** plus thin typed
+  wrappers. One generic **engine** in package `cfgx` does all the work.
+
+---
+
+## 2. Generate time
+
+### 2.1 Loading the schema **[proposed]**
+
+1. `dsl.App`, `dsl.Command`, `dsl.Group` and `dsl.Tag` register themselves in
+   package `dsl` when the schema package initializes. The generator doesn't need
+   the schema's variable names, so it doesn't need `go/packages` to find them.
+2. The generator builds a tiny `main` package that blank-imports the schema and
+   prints the IR:
+
+   ```go
+   package main
+   import ("os"; "github.com/epistemer/cfgx/dsl"; _ "zp/internal/settings/schema")
+   func main() { dsl.Export(os.Stdout) }
+   ```
+
+3. It runs that program with `go run`, inheriting the user's `GOFLAGS`,
+   `go.work` and vendor mode, and reads the IR from stdout.
+4. If the schema panics or doesn't compile, the generator reports the error at
+   the user's `schema.go` location.
+
+Where the temporary `main` lives is part of **[spike S1]**. It must be inside the
+module, for `internal/` imports, and `cfgx gen --check` must not modify the
+working tree. Candidates, in order of preference:
+- `go run -overlay` with a virtual file, so nothing touches the disk
+- a directory that `./...` skips, if the go command accepts it when named
+  explicitly (import path elements can't start with a dot, so `.` prefixes may
+  fail; S1 checks `_` too)
+- a plainly named temporary directory, removed on exit and on signals
+
+S1 also measures cold and warm `go run` time, with `go.work`, `-mod=vendor` and
+a schema that imports `internal/` packages. Target: warm under 2 s.
+
+### 2.2 What `dsl` records
+
+Each constructor captures:
+- `runtime.Caller` (file:line), so every generate-time error points at the
+  user's schema line
+- the typed value, as Go data
+
+`dsl.Export` serializes everything to the IR:
+
+| Concept | How it's captured |
+|---------|-------------------|
+| Key type | `reflect.Type` → import path + name (`models.ZpTaskExecutionMode`, `time.Duration`) |
+| Default | literal (int, bool, float), canonical text (Duration, Enum, `Text` types via `MarshalText`), or a function reference |
+| `Validate(f)`, `DefaultFunc(f)`, `Complete(f)` | `runtime.FuncForPC(...).Name()` → package path + function name, under the rules below |
+| Enum values | canonical text of each value + Go type |
+| Rules | key identities (pointer identity of the `*KeyDef` → stable path) |
+| Tags, groups, commands | identities resolved to names |
+
+**Function references [proposed, S3].** A function is accepted only if:
+- it's top-level and exported: after the package path, its symbol contains no
+  further dot. That rejects closures (`F.func1`), method values (`T.M-fm`) and
+  method expressions (`T.M`, `(*T).M`)
+- it isn't a generic instance (no `[` in the name)
+- its package isn't the schema package and doesn't import `cfgx/dsl`, because
+  generated code must never import either
+
+The package path ends at the first `.` after the last `/`. Go is expected to
+escape dots in the last path element of symbol names as `%2e`
+(`gopkg.in/yaml%2ev3.F`), which keeps that split unambiguous; the generator
+unescapes them. Rejections point at the schema line.
+
+**[spike S3]** Confirm all of this across Go versions, including generic
+functions, `internal/` packages and ABI wrapper names, and that every emitted
+reference is importable from the generated package.
+
+### 2.3 Computed methods: a type-checking pass
+
+`Group.Computed("DSN")` declares that a hand-written method belongs to the
+group's interface. Its signature has to be exact, so the generator type-checks
+rather than copying source text (A8):
+1. Emit `zz_settings.go` with the computed methods left out of the interfaces.
+2. Type-check the package with `go/packages` (`NeedTypes`).
+3. Find each declared method on the group's receiver type (naming rule in
+   interface §5.3) and render its signature with `types.TypeString` and an
+   import-tracking qualifier, so package names, `/v2` paths and aliases come
+   out right.
+4. Emit the final file.
+
+Any method without parameters is allowed, e.g. `DSN() string` or
+`RetryPolicy() (types.RetryPolicy, error)`. A missing method, a wrong receiver
+or parameters are generate-time errors.
+
+### 2.4 Checks **[decided by interface]**
+
+These all run on the IR before anything is written:
+- name collisions on every surface: file key, env, flag, short flag, getter,
+  interface name, tag vs group name
+- an empty description
+- a default outside its constraints (range, enum, pattern)
+- a `Global` group that is also listed explicitly in a command's `Uses`
+  (warning)
+- `Args` colliding with group flags
+- keys in `AtMostOne`, `ExactlyOne` or `AllOrNone` with a non-zero default
+  (rules are value-based, A4)
+- a `Validate`, `DefaultFunc` or `Complete` function that isn't an accepted
+  reference (§2.2)
+- `.Mutable()` or `.Epoch()` on a `Secret` or `SecretFile` key (A10)
+- the `App.Store` key must be a static `Path` key, and no mutable key may
+  configure the store
+
+### 2.5 Emitting
+
+- **[proposed]** Use `text/template`, `go/format` and
+  `golang.org/x/tools/imports`. A code-builder library (jennifer) isn't worth the
+  dependency for this amount of code.
+- Output must be deterministic: sorted, stable names, no timestamps. Both
+  `--check` and `cfgx.lock.json` diffs depend on it.
+- `cfgx.lock.json` is the IR minus source positions. `cfgx diff` compares two
+  lock files.
+- The JSON Schema targets draft 2020-12, for yaml-language-server and VS Code.
+- `zz_settings.go` embeds what the binary needs at run time: the example config
+  and the JSON Schema as string constants (for `config init` and
+  `config schema`), and per-key metadata (description, type, default text, enum
+  values, tags, JSON Schema fragment, mutable, epoch) for `explain` and
+  `Store.Keys()`.
+
+---
+
+## 3. Runtime
+
+### 3.1 Generated code is table-driven **[proposed]**
+
+The alternative, fully unrolled code per key, produces enormous files and
+duplicates logic that can only be tested through generated output. Instead, the
+generator emits **data and tiny closures**, and the engine is tested once:
+
+```go
+// zz_settings.go (sketch; generics here are internal, never user-facing)
+type values struct {
+	DBHost string
+	DBPort int
+	DBPassword cfgx.Secret
+	SchedulerExecMode models.ZpTaskExecutionMode
+	// ...
+}
+
+var keys = [...]engine.Key[values]{
+	{
+		Path: "database.port", Env: "ZP_DATABASE_PORT", Flag: "database-port",
+		Type: "int", Desc: "Database server port", DefaultText: "5432",
+		Schema:  `{"type":"integer","minimum":1,"maximum":65535}`,
+		Set:     func(v *values, r engine.Raw) error { return engine.Int(r, &v.DBPort) },
+		Format:  func(v *values) string { return strconv.Itoa(v.DBPort) },
+		Default: func(v *values) { v.DBPort = 5432 },
+		Check:   func(v *values) error { return engine.Range(v.DBPort, 1, 65535) },
+		IsSet:   func(v *values) bool { return v.DBPort != 0 },
+		// also: Enum, Tags, Mutable, Epoch, RelevantIf condition
+	},
+	// ...
+}
+
+var serveKeys = []int{0, 1, 2, 5, 9 /* ... */} // which keys the Serve command loads
+```
+
+Getters are the only per-key code in the generated output:
+
+```go
+func (g *dbGroup) DBPort() int { return g.r.cur.Load().DBPort }
+```
+
+A command type embeds the types of the groups it uses whole, so their getters
+and computed methods are promoted. For a group it reaches only through a tag,
+the generator writes forwarding getters for just the tagged keys on the command
+type, and no computed methods. Either way, a command type has getters only for
+keys it loads (A5).
+
+### 3.2 Values and snapshots **[proposed]**
+
+- One `values` struct per app. **Every getter reads through an
+  `atomic.Pointer[values]`**, whether the key is static, reloadable or mutable.
+  - Cost: one atomic load per getter call, which is negligible.
+  - Gain: one code path. A reload or store update builds a new `values`,
+    validates it as a whole, and swaps the pointer. That gives the
+    all-or-nothing rule in interface §7.2 for free.
+- Command types embed the types of the groups they use whole (§3.1); all of
+  them share the same root pointer. `Snapshot()` gives a consistent read across
+  several keys.
+- The engine also keeps the **bootstrap snapshot**: values and provenance from
+  default, file, env and flag, before the store. Store writes compute the new
+  snapshot as bootstrap plus stored records, which is how `ResetX` brings the
+  bootstrap value back.
+
+### 3.3 Loading pipeline (per command)
+
+```
+keys := the command's keys + Global keys + the store key (if it has the store)
+for k in keys:
+    apply default
+    for layer in [file, env, flag]:          # lowest to highest
+        if layer has k: Set(v, raw); append provenance(k, layer, where)
+bootstrap := v                                # kept for Reset and explain
+if the command has the store: open it; layer stored records over mutable keys
+skip keys whose RelevantIf condition isn't set (no file reads, no checks)
+read SecretFile / File contents for the remaining keys
+collect parse errors
+per-key Check()  →  Validate funcs  →  Required  →  Rules
+if errors: return engine.Errors (all problems, sorted by key)
+publish snapshot
+```
+
+**Rules are value-based [decided, A4].** A key is *set* when its effective
+value is non-zero; a Bool is set when it's true. Each key's `IsSet` closure
+answers that from the merged value, so provenance plays no part. An env var
+that exists but is empty provides the empty value, which is how an operator
+clears a file value. `Required` uses the same test.
+
+Loading per command fixes a real bug in the old `zp` design: `migrate` must not
+fail because the JWT key files are missing. Required checks, `SecretFile` reads
+and validation only run for the command's own keys. Unknown-key detection still
+uses the whole app's key set, so another command's keys are never reported as
+unknown.
+
+### 3.4 Sources
+
+**Flags.**
+- The engine registers a custom `pflag.Value` per key that stores raw text. Its
+  `Type()` returns `int`, `duration`, etc. for help, and `DefValue` holds the
+  schema default for display only.
+- A flag counts **only if `Changed`**. This avoids viper's classic bug, where a
+  flag's default overrides the env var and the file.
+- Bool flags set `NoOptDefVal = "true"`.
+- Slice and map keys append on every occurrence, because pflag calls `Set` once
+  per `--tag a --tag b`. Their values implement `pflag.SliceValue`.
+- `Global` keys are registered as persistent flags on the root by `BindRoot`.
+- **[spike S2]** Confirm that cobra merges persistent flags into the child's
+  `Flags()` before `RunE`, that completion works with the custom values, and that
+  `--help` shows defaults correctly.
+
+**Env.**
+- `os.LookupEnv` is called only for known names, plus the `_FILE` variants for
+  secrets.
+- At the end, the engine scans `os.Environ()` for unknown `ZP_*` names and warns
+  about likely typos.
+- A variable that exists but is empty provides the empty value.
+- Secrets read from `_FILE` lose one trailing `\n` or `\r\n`. `SecretFile`
+  keeps the bytes exactly. Setting both `ZP_X` and `ZP_X_FILE` is an error.
+- On Windows, env names are case-insensitive, so the unknown-name scan compares
+  upper-cased names.
+
+**File.**
+- The file is parsed into an internal node tree `{Kind, Scalar, Map, List, Pos}`,
+  and keys are matched case-sensitively.
+- Unknown keys get Levenshtein "did you mean" suggestions.
+- Relative paths in `Path`, `SecretFile` and `File` values from a config file
+  are resolved against that file's directory (A11).
+- File-backed values (`SecretFile`, `File`, `_FILE`) must be regular files, so a
+  FIFO or device can't hang startup, and are capped at 1 MiB for secrets and
+  16 MiB for `File`.
+- **[proposed]** Parse JSON with the YAML parser too, since JSON is valid
+  YAML 1.2. That gives one node builder and line numbers for both formats.
+  Duplicate-key handling must be strict.
+- **[spike S4]** Choose the YAML library. `gopkg.in/yaml.v3` was archived as
+  unmaintained in 2025. Candidates: the YAML organization's maintained fork, and
+  `goccy/go-yaml`. Criteria: node positions, duplicate-key errors, maintenance,
+  dependency weight.
+
+**Config file discovery.**
+1. `--config` (persistent flag, added by `BindRoot`)
+2. `ZP_CONFIG`
+3. the search paths from `App.ConfigFile`, in order. `$VAR`s are expanded, and a
+   path whose variable is unset or empty is skipped (`$HOME` comes from
+   `os.UserHomeDir`). In each directory, `<basename>.yaml`, `.yml` and `.json`
+   are tried; more than one match is an error.
+
+An explicit path (1 or 2) that doesn't exist is an error. If the search paths
+find nothing, that's fine. A file that exists but is invalid is always an
+error.
+
+### 3.5 Errors and provenance
+
+- `engine.Errors` holds a slice of `Problem{Key, Message, Source}`, where
+  `Source` is a flag name, an env var, `file:line:col`, `default` or `store`.
+- Provenance is kept per key in the snapshot, as the list of every layer that
+  provided a value, lowest to highest. `config explain`, shadow warnings and
+  `Store.List()` use it. Rules don't: they're value-based (§3.3).
+- **Warnings [decided, A2]** go to a `*slog.Logger`. The default is a small cfgx
+  handler that prints `warning: <message>` lines, without timestamps, on the
+  command's stderr (`cmd.ErrOrStderr()`, so tests can capture them).
+  `cfgx.WithLogger` replaces it. cfgx has no logrus dependency; apps bridge it.
+- Errors and warnings never include a secret's value: a problem on a `Secret` or
+  `SecretFile` key names the key and the rule (A10).
+
+### 3.6 `cfgx.Secret`
+
+```go
+type Secret struct{ reveal func() string } // a closure: reflection can't read it without unsafe
+```
+
+- `String`, `GoString`, `Format` (all verbs), `MarshalJSON`, `MarshalText`,
+  `MarshalYAML` and `LogValue` all return the mask.
+- `Equal` uses `crypto/subtle`. A `Secret` isn't comparable with `==`, since it
+  holds a func.
+- In an unexported field of a printed struct, `fmt` can't call these methods and
+  prints the field as an address (`{reveal:0x4f2a80}`). The secret isn't shown,
+  and reflection-based dumpers can't reach it without `unsafe`. Interface §7.1
+  says so (A10).
+- **[spike S5]** Write leak tests: every `fmt` verb, `%+v` and `%#v` on parent
+  structs with exported and unexported Secret fields, `json.Marshal`, `slog`
+  text and JSON handlers, `errors.New(fmt.Sprint(...))`, and reflection dumpers
+  (`spew`, `go-cmp`).
+
+### 3.7 Reloadable keys (after v0.1.0)
+
+- `fsnotify` watches the config file's **directory**, not the file. Editors save
+  by atomic rename, and Kubernetes ConfigMaps swap a `..data` symlink. Watch
+  events are debounced.
+- On a change, the engine re-runs the pipeline with flag, env and store layers
+  unchanged. Only `Reloadable` keys take the new values. A changed non-reloadable
+  key gets the warning "requires restart".
+- A `SecretFile`/`File` key marked `Reloadable` also watches its referenced file
+  (certificate rotation).
+- `OnChange` subscribers receive the set of keys whose values changed. Callbacks
+  run serially, after the snapshot swap.
+
+### 3.8 Mutable keys and the store (v1, bbolt built in)
+
+**Decided:**
+- bbolt is a built-in dependency, and the app reaches the store through an
+  injected `Store()` (amendment A1, interface §7.3).
+- The store wins over flag, env, file and default (interface §4).
+- An invalid stored value is ignored with a warning, and its record is kept.
+- An env-var reset escape hatch (`ZP_SETTINGS_RESET=...`) was rejected on
+  2026-11-07. Recovery from a bad stored value goes through the application
+  (`ResetX()` or `Store.Reset`), or through a release that bumps the key's epoch.
+
+**Packages.**
+- `cfgx/store` holds the bbolt-backed `Store` and its admin API. Generated code
+  imports it only when the schema declares `App.Store`, so programs without
+  mutable settings don't link bbolt.
+- `cfgx/internal/storage` is a small internal seam: load records, apply a batch,
+  read history. `cfgx/store` implements it with bbolt. It isn't public; it only
+  keeps a later shared backend possible.
+
+**Lifecycle, per command that has the store:**
+1. Load the static layers (default, file, env, flag), including the `App.Store`
+   key, which every command with the store loads (A7).
+2. Open the file named by the `App.Store` key with mode `0600` and
+   `bbolt.Options{Timeout: ...}` (default 1 s).
+3. Read the records for the command's mutable keys, apply epochs, decode and
+   validate them, and layer them on top.
+4. Call `run`. When it returns, the binder closes the store.
+
+**On-disk layout:** one top-level bucket, `cfgx` (what `Bucket()` returns), with
+nested buckets:
+- `settings`: key → current record
+- `history`: one nested bucket per key, with entries keyed by an 8-byte
+  big-endian `NextSequence()`, so there are no timestamp collisions or prefix
+  clashes between keys like `auth.otp` and `auth.otp.length`. The last 1000
+  entries per key are kept.
+- `meta`: format version, schema hash
+
+Records are JSON (raw text, epoch, `updated_at`, `updated_by`, reason), so the
+file stays inspectable with ordinary bbolt tools.
+
+**Write pipeline**, shared by typed writes (`SetX`/`ResetX`) and dynamic ones
+(`Store.Update`/`Store.Reset` with text values). One mutex per process is held
+from step 1 to step 4, so concurrent writers can't lose each other's changes:
+1. Build the candidate: the bootstrap snapshot (§3.2) plus the stored records as
+   they will be after this change, parsed by the generated per-key parsers. A
+   reset removes the key's record, so its bootstrap value comes back.
+2. Validate the whole candidate: per-key checks, `Validate` functions, and rules
+   across static and mutable keys.
+3. In one bbolt transaction, append a history entry for every changed key,
+   resets included, with who, when and why; then write or delete the records.
+4. Swap the snapshot pointer.
+
+After the mutex is released, `OnChange` callbacks run one at a time, in commit
+order. A failure before step 3 commits leaves both the store and the snapshot
+unchanged. Stored values are limited to 64 KiB each.
+
+**Shadow warnings.** At startup, every stored value that hides a flag or env
+value produces a log line:
+`auth.otp.length: stored value 8 (admin@zp, 2026-11-02) overrides env ZP_AUTH_OTP_LENGTH=6`.
+`config explain` and `Store.List()` show both values.
+
+**Sharing the file.** The app uses `Store().DB()` for its own buckets; zp keeps
+its existing data in the same file. The app must not write inside the `cfgx`
+bucket. Nothing can enforce that, but a record that fails to decode is ignored
+with a warning.
+
+**Other processes.** bbolt locks the file per process. `config init`, `schema`
+and `env` never open the store. `config print`, `explain` and `validate` skip it
+if the file doesn't exist (they never create it), and otherwise open it
+read-only. A CLI command run while the server holds the file waits for the
+timeout, then:
+- `config print`, `explain` and `validate` carry on without stored values and
+  say so
+- anything that needs the store fails with "store is held by a running process;
+  change settings through the application"
+
+**Limits.**
+- Each replica has its own file, so runtime settings are per instance. A shared
+  store (e.g. Postgres with `LISTEN/NOTIFY`) is post-v1 work behind
+  `internal/storage`.
+- No secrets in the store in v1, since bbolt doesn't encrypt.
+
+### 3.9 Cobra integration
+
+- `ServeCommand(cmd, run)` registers the command's flags and completions. It
+  sets `RunE` to: load the config from `cmd.Flags()`, then
+  `run(cmd.Context(), cfg)`. It also sets `SilenceUsage` for config errors, so a
+  validation failure doesn't print the usage text.
+- Completion: enums use `RegisterFlagCompletionFunc`; `dsl.Files` uses
+  `MarkFlagFilename`; `dsl.Dirs` uses `MarkFlagDirname`.
+- `BindRoot` records its options, such as the logger, in an internal registry
+  keyed by the root command. Binders and the `config` subcommand look them up at
+  run time through `cmd.Root()`, so there is no user-visible global and several
+  roots can coexist in tests.
+- Each binder tags its command with `Annotations["cfgx.profile"]`. The `config`
+  subcommand walks `cmd.Root()` to map command names, as typed, to profiles.
+- The `config` subcommand is generic engine code driven by the tables. It sees
+  default, file, env and store values, never other commands' flags, and never
+  checks command-only `Args` (A9).
+
+---
+
+## 4. The cfgx repository
+
+```
+cfgx/                  runtime: Secret, Option, Errors, public helpers
+cfgx/engine/           generic engine used by generated code (exported, not for humans)
+cfgx/dsl/              schema vocabulary + Export
+cfgx/store/            built-in bbolt store + admin API (linked only when a schema declares a store)
+cfgx/internal/storage/ backend seam for a future shared store (not public)
+cfgx/cfgxtest/         test helpers: AssertGenerated, leak checks
+cfgx/cmd/cfgx/         generator CLI: gen, gen --check, diff, init
+cfgx/internal/ir/      IR types (shared by dsl and the generator)
+cfgx/internal/gen/     templates + emitters
+cfgx/internal/node/    format-agnostic node tree + YAML/JSON builders
+cfgx/examples/zp/      the zp schema from interface.md, an end-to-end acceptance test
+```
+
+**[proposed]** Use a single Go module for now. Programs link only the packages
+they import, so an app never links the generator's dependencies (`x/tools`).
+Those dependencies do appear in the app's `go.mod` and `go.sum`, but apps add
+`cmd/cfgx` as a `tool` anyway, so a separate module would save little. (An
+earlier version of this note credited module graph pruning; that was wrong.)
+
+Runtime dependencies:
+- `spf13/cobra`
+- `spf13/pflag`
+- a YAML library
+- `go.etcd.io/bbolt`, linked only into programs whose schema declares a store
+  (it lives in `cfgx/store`)
+- later: `fsnotify` (reload)
+
+---
+
+## 5. Testing strategy
+
+| Layer | How |
+|-------|-----|
+| DSL → IR | unit tests on `dsl.Export` output |
+| IR checks | table tests: one bad schema per error, asserting message and schema line |
+| Generator | golden files under `testdata/` (`-update` flag) |
+| Generated code | the e2e module in `examples/zp` runs `go generate`, `go vet` and `go test`, and `cfgx gen --check` must be clean |
+| Engine | unit tests with hand-written tables; precedence matrix (every pair of layers); value-based rule tests; fuzzing for Duration, ByteSize, lists, maps and `k=v` parsing |
+| Secret | leak test suite (S5) |
+| Store | temp-file bbolt tests: locked file, read-only opens, missing file never created, per-key history sequences, concurrent writers under the race detector |
+| CLI behaviour | `testscript` (`rogpeppe/go-internal`) scripts: run the binary with env, flags and files, and assert stdout/stderr, covering `config explain` and error output |
+| Performance | benchmark the example's startup time against a viper equivalent, to check the startup-speed claim honestly |
+
+---
+
+## 6. Spikes (do these first, in a day or two each)
+
+| ID | Question | Kill criterion |
+|----|----------|----------------|
+| S1 | Does the temp-main + `go run` pipeline work with `internal/`, `go.work` and vendor, how fast is it, and where can the temporary `main` live without touching the working tree (`-overlay`, `_` or `.` directories)? | warm run > 5 s, or vendor/work modes impossible → fall back to static AST evaluation of a restricted DSL |
+| S2 | Do pflag custom values, `Changed` semantics, cobra persistent flags and completion compose? | precedence can't be made correct → rethink flag binding |
+| S3 | Are `FuncForPC` names reliably convertible to importable references, including `%2e`-escaped paths, method expressions and ABI wrappers? | no → validators must be referenced by `dsl.Func("pkg.Name")` |
+| S4 | Which YAML library: node positions, duplicate keys, JSON parsing? | none acceptable → separate JSON path with `encoding/json/jsontext` offsets |
+| S5 | Can Secret masking hold under all `fmt`, json, slog and reflection-dumper paths? | a leak path we can't close → document it and add the vet analyzer earlier |
+
+---
+
+## 7. Open questions resolved in this brainstorm
+
+| # | Question (interface §11) | Proposal |
+|---|--------------------------|----------|
+| 1 | Mutable precedence | **[decided]** The store wins over everything. Mitigated by shadow warnings and `explain`; recovery through `ResetX()` or an epoch bump (§3.8) |
+| 2 | Invalid stored value at startup | **[decided]** Fall back, warn, and keep the record |
+| 3 | Epochs vs migrations | **Epochs only** at first. Numbered migrations only if a real type or unit change requires one |
+| 4 | Lists of objects | Generated read-only item types with getters (`[]settings.Upstream`), file-only. Deferred past v1 |
+| 5 | File layering | **First found wins** in v1. Repeated `--config` overlays later |
+| 6 | TOML in v1 | **No.** YAML and JSON only |
+| 7 | Module path and name | **[decided]** `github.com/epistemer/cfgx` |
+| 8 | Test helper scope | One `Test(...) *All` |
+
+## 8. v1 scope [decided]
+
+The first usable release has:
+- **The static core:**
+  - the DSL (all key kinds except lists of objects), groups, tags, rules and
+    commands
+  - flags, env, and YAML/JSON files
+  - generated getters, interfaces, command binders and test helpers
+  - errors with provenance
+  - example files, JSON Schema, `docs/CONFIG.md` and the lock file
+  - the `config` subcommand
+  - `gen --check` and `diff`
+- **`cfgx init` scaffolding.**
+- **Mutable keys** with epochs, audit history, the generated `Update` API, the
+  built-in **bbolt** store, and the dynamic admin API for dashboards (A1).
+
+After v1:
+- Reloadable keys
+- a shared store for multiple replicas (e.g. Postgres)
+- lists of objects
+- TOML
+- config overlays
+- grouped `--help` output
+- the vet analyzer for `Reveal()` leaks
