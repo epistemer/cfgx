@@ -40,9 +40,10 @@ type GroupModel struct {
 
 // CommandModel is one command profile.
 type CommandModel struct {
-	Name, Lower string
-	Groups      []*GroupModel
-	KeyIdx      []int
+	Name    string
+	KeysVar string // the generated slice of the command's key indexes
+	Groups  []*GroupModel
+	KeyIdx  []int
 }
 
 // Problem is a schema error found at generate time.
@@ -62,7 +63,8 @@ func (ps Problems) Error() string {
 	return strings.Join(lines, "\n")
 }
 
-var nameRE = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+// nameRE matches a name segment: lower-case words joined by single underscores.
+var nameRE = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 
 // initialisms are written in capitals in Go names (D4).
 var initialisms = map[string]string{
@@ -89,26 +91,15 @@ func pascal(s string) string {
 	return b.String()
 }
 
-// lowerFirstWord lower-cases a Go name's first word: DB → db,
-// SMTPHost → smtpHost, Database → database (interface §5.3).
-func lowerFirstWord(s string) string {
-	r := []rune(s)
-	n := 0
-	for n < len(r) && unicode.IsUpper(r[n]) {
-		n++
+// lowerCamel turns a schema name into an unexported Go name: the first word
+// lower-cased, the rest as in pascal. smtp_tls → smtpTLS, db_1 → db1
+// (interface §5.3).
+func lowerCamel(s string) string {
+	ws := words(s)
+	if len(ws) == 0 {
+		return ""
 	}
-	switch {
-	case n == 0:
-	case n == 1 || n == len(r):
-		for i := 0; i < n; i++ {
-			r[i] = unicode.ToLower(r[i])
-		}
-	default: // an initialism followed by a word: keep the word's capital
-		for i := 0; i < n-1; i++ {
-			r[i] = unicode.ToLower(r[i])
-		}
-	}
-	return string(r)
+	return ws[0] + pascal(strings.Join(ws[1:], "_"))
 }
 
 func envPrefix(app *ir.App) string {
@@ -137,8 +128,15 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		bad(app.Pos, "the app needs a description")
 	}
 	prefix := envPrefix(app)
-	if prefix != "" && !regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`).MatchString(prefix) {
-		bad(app.Pos, "env prefix %q must be upper-case letters, digits and underscores", prefix)
+	if !regexp.MustCompile(`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`).MatchString(prefix) {
+		if app.EnvPrefix == "" {
+			bad(app.Pos, "the env prefix derived from the app name %q is %q, which isn't valid; set one with .EnvPrefix, starting with A-Z and using only A-Z, 0-9 and single underscores", app.Name, prefix)
+		} else {
+			bad(app.Pos, "env prefix %q must start with A-Z and use only A-Z, 0-9 and single underscores", prefix)
+		}
+	}
+	if !token.IsIdentifier(pkg) || token.IsKeyword(pkg) || pkg == "_" {
+		bad(app.Pos, "the generated code's package name %q isn't a valid Go package name", pkg)
 	}
 
 	m := &Model{Package: pkg}
@@ -166,8 +164,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		if strings.TrimSpace(g.Desc) == "" {
 			bad(g.Pos, "group %q needs a description", g.Name)
 		}
-		gm := &GroupModel{Name: g.Name, Desc: g.Desc, Iface: pascal(g.Name)}
-		gm.Type = lowerFirstWord(gm.Iface) + "Group"
+		gm := &GroupModel{Name: g.Name, Desc: g.Desc, Iface: pascal(g.Name), Type: lowerCamel(g.Name) + "Group"}
 		claim(gm.Iface, g.Pos, "group interface")
 		claim(gm.Type, g.Pos, "group type")
 		groups[g.Name] = gm
@@ -222,11 +219,14 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			continue
 		}
 		cmdNames[c.Name] = true
-		cm := &CommandModel{Name: c.Name, Lower: lowerFirstWord(c.Name)}
+		cm := &CommandModel{Name: c.Name, KeysVar: "keys" + c.Name}
 		claim(cm.Name, c.Pos, "command type")
 		claim(cm.Name+"Command", c.Pos, "command binder")
-		claim(cm.Lower+"Keys", c.Pos, "command key list")
+		claim(cm.KeysVar, c.Pos, "command key list")
 		claim("new"+cm.Name, c.Pos, "command constructor")
+		for _, o := range c.Orphans {
+			bad(c.Pos, "command %s uses group %q (declared at %s), which isn't passed to dsl.App", c.Name, o.Name, o.Pos)
+		}
 		used := map[string]bool{}
 		for _, u := range c.Uses {
 			gm, ok := groups[u]
@@ -266,17 +266,21 @@ func kindInfo(km *KeyModel, k ir.Key) error {
 	case ir.KindInt:
 		km.GoType, km.FlagType, km.Parse = "int", "int", "ParseInt"
 		if km.HasDefault {
-			if _, err := strconv.Atoi(km.DefaultText); err != nil {
+			n, err := strconv.ParseInt(km.DefaultText, 10, 64)
+			if err != nil {
 				return fmt.Errorf("default %q of %s isn't an int", km.DefaultText, km.Path)
 			}
+			km.DefaultText = strconv.FormatInt(n, 10) // canonical form
 		}
 		km.DefaultLit = km.DefaultText
 	case ir.KindBool:
 		km.GoType, km.FlagType, km.Parse, km.Bool = "bool", "bool", "ParseBool", true
 		if km.HasDefault {
-			if _, err := strconv.ParseBool(km.DefaultText); err != nil {
+			b, err := strconv.ParseBool(km.DefaultText)
+			if err != nil {
 				return fmt.Errorf("default %q of %s isn't a bool", km.DefaultText, km.Path)
 			}
+			km.DefaultText = strconv.FormatBool(b) // canonical form
 		}
 		km.DefaultLit = km.DefaultText
 	default:

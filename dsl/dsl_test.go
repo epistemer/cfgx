@@ -59,3 +59,25 @@ func TestExportNeedsExactlyOneApp(t *testing.T) {
 		t.Errorf("two apps: %v", err)
 	}
 }
+
+// A command must use the very group passed to dsl.App, not another group
+// that happens to have the same name.
+func TestUsesNeedsTheAppsGroup(t *testing.T) {
+	reset()
+	inApp := Group("database", "Database", String("host", "Host"))
+	lookalike := Group("database", "Database", String("host", "Host"))
+	App("demo", "Demo", inApp)
+	Command("Serve").Uses(lookalike)
+	var buf bytes.Buffer
+	if err := Export(&buf); err != nil {
+		t.Fatal(err)
+	}
+	a, err := ir.Decode(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := a.Commands[0]
+	if len(c.Uses) != 0 || len(c.Orphans) != 1 || c.Orphans[0].Name != "database" {
+		t.Fatalf("the lookalike must be an orphan, got %+v", c)
+	}
+}

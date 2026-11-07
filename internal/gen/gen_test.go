@@ -2,6 +2,8 @@ package gen
 
 import (
 	"bytes"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -61,9 +63,9 @@ func TestNames(t *testing.T) {
 			t.Errorf("pascal(%q) = %q, want %q", in, got, want)
 		}
 	}
-	for in, want := range map[string]string{"DB": "db", "SMTPHost": "smtpHost", "Database": "database", "SchedulerRetry": "schedulerRetry", "X": "x"} {
-		if got := lowerFirstWord(in); got != want {
-			t.Errorf("lowerFirstWord(%q) = %q, want %q", in, got, want)
+	for in, want := range map[string]string{"database": "database", "db": "db", "smtp_tls": "smtpTLS", "db_1": "db1", "http_api": "httpAPI", "scheduler_retry": "schedulerRetry", "a_db": "aDB"} {
+		if got := lowerCamel(in); got != want {
+			t.Errorf("lowerCamel(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -87,6 +89,12 @@ func TestChecks(t *testing.T) {
 		{"command collides with group", func(a *ir.App) { a.Commands[0].Name = "Database" }, "collides"},
 		{"bad int default", func(a *ir.App) { a.Groups[0].Keys[1].Default = str("x") }, "isn't an int"},
 		{"bad env prefix", func(a *ir.App) { a.EnvPrefix = "demo" }, "env prefix"},
+		{"orphan group", func(a *ir.App) {
+			a.Commands[0].Orphans = []ir.Ref{{Name: "extra", Pos: ir.Pos{File: "schema.go", Line: 9}}}
+		}, `uses group "extra" (declared at schema.go:9), which isn't passed to dsl.App`},
+		{"bad derived env prefix", func(a *ir.App) { a.EnvPrefix = ""; a.Name = "123app" }, "derived from the app name"},
+		{"trailing underscore", func(a *ir.App) { a.Groups[0].Keys[0].Name = "host_" }, `key name "host_"`},
+		{"double underscore", func(a *ir.App) { a.Groups[0].Keys[0].Name = "a__b" }, `key name "a__b"`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -110,5 +118,73 @@ func TestDefaultEnvPrefix(t *testing.T) {
 	}
 	if got := m.Keys[0].Env; got != "MY_APP_DATABASE_HOST" {
 		t.Errorf("env = %q", got)
+	}
+}
+
+func TestBadPackageName(t *testing.T) {
+	for _, pkg := range []string{"", "type", "_", "../x"} {
+		if _, err := Build(sample(), pkg); err == nil || !strings.Contains(err.Error(), "package name") {
+			t.Errorf("package %q: got %v", pkg, err)
+		}
+	}
+}
+
+func TestDefaultsAreCanonical(t *testing.T) {
+	a := sample()
+	a.Groups[0].Keys[1].Default = str("+007")
+	a.Groups[2].Keys[0].Default = str("TRUE")
+	m, err := Build(a, "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Keys[1].DefaultLit != "7" || m.Keys[3].DefaultLit != "true" {
+		t.Errorf("defaults not canonical: %q, %q", m.Keys[1].DefaultLit, m.Keys[3].DefaultLit)
+	}
+}
+
+// TestGeneratedCodeCompiles vets the generated code for schemas at the edges:
+// no commands, no groups, an empty group, a command without groups, and
+// names made of initialisms and digits.
+func TestGeneratedCodeCompiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs the go command")
+	}
+	cases := map[string]func(a *ir.App){
+		"sample":      func(a *ir.App) {},
+		"no commands": func(a *ir.App) { a.Commands = nil },
+		"no groups":   func(a *ir.App) { a.Groups = nil; a.Commands = []ir.Command{{Name: "Version", Uses: []string{}}} },
+		"empty group": func(a *ir.App) { a.Groups = append(a.Groups, ir.Group{Name: "empty", Desc: "Nothing yet"}) },
+		"initialisms and digits": func(a *ir.App) {
+			a.Groups = append(a.Groups,
+				ir.Group{Name: "smtp_tls", Desc: "x", Keys: []ir.Key{{Name: "ca_url", Desc: "x", Kind: ir.KindString}}},
+				ir.Group{Name: "db_1", Desc: "x", Keys: []ir.Key{{Name: "id", Desc: "x", Kind: ir.KindInt}}})
+			a.Commands = append(a.Commands, ir.Command{Name: "HTTP2", Uses: []string{"smtp_tls", "db_1"}})
+		},
+	}
+	for name, edit := range cases {
+		t.Run(name, func(t *testing.T) {
+			a := sample()
+			edit(a)
+			m, err := Build(a, "settings")
+			if err != nil {
+				t.Fatal(err)
+			}
+			src, err := Render(m)
+			if err != nil {
+				t.Fatalf("%v\n%s", err, src)
+			}
+			// Inside this module, so the generated code can import cfgx.
+			dir, err := os.MkdirTemp(".", "zzcompile")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { os.RemoveAll(dir) })
+			if err := os.WriteFile(filepath.Join(dir, "zz_settings.go"), src, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if out, err := exec.Command("go", "vet", "./"+filepath.Base(dir)).CombinedOutput(); err != nil {
+				t.Fatalf("generated code doesn't vet: %v\n%s\n%s", err, out, src)
+			}
+		})
 	}
 }

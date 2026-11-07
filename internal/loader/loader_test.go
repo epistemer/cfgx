@@ -1,34 +1,20 @@
 package loader
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
-func TestMergeOverlay(t *testing.T) {
-	user := filepath.Join(t.TempDir(), "user.json")
-	if err := os.WriteFile(user, []byte(`{"Replace":{"/a.go":"/b.go"}}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	for _, goflags := range []string{"-mod=mod -overlay=" + user + " -trimpath", "-mod=mod --overlay " + user + " -trimpath"} {
-		kept, data, err := mergeOverlay(goflags, "/v/main.go", "/tmp/main.go")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if kept != "-mod=mod -trimpath" {
-			t.Errorf("GOFLAGS kept = %q", kept)
-		}
-		var got struct{ Replace map[string]string }
-		if err := json.Unmarshal(data, &got); err != nil {
-			t.Fatal(err)
-		}
-		if got.Replace["/a.go"] != "/b.go" || got.Replace["/v/main.go"] != "/tmp/main.go" {
-			t.Errorf("overlay = %v", got.Replace)
+func TestSplitOverlayFlag(t *testing.T) {
+	for _, in := range []string{"-mod=mod -overlay=/o.json -trimpath", "-mod=mod --overlay /o.json -trimpath"} {
+		rest, ov, err := splitOverlayFlag(in)
+		if err != nil || rest != "-mod=mod -trimpath" || ov != "/o.json" {
+			t.Errorf("%q: rest=%q overlay=%q err=%v", in, rest, ov, err)
 		}
 	}
-	if _, _, err := mergeOverlay("-overlay", "/v", "/r"); err == nil {
+	if rest, ov, err := splitOverlayFlag("-mod=vendor"); err != nil || rest != "-mod=vendor" || ov != "" {
+		t.Errorf("no overlay: rest=%q overlay=%q err=%v", rest, ov, err)
+	}
+	if _, _, err := splitOverlayFlag("-overlay"); err == nil {
 		t.Error("want an error for -overlay without a file")
 	}
 }

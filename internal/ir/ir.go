@@ -67,7 +67,16 @@ type Key struct {
 type Command struct {
 	Name string   `json:"name"`
 	Uses []string `json:"uses"`
-	Pos  Pos      `json:"pos"`
+	// Orphans are groups the command uses that weren't passed to dsl.App.
+	// The generator reports them along with every other problem.
+	Orphans []Ref `json:"orphans,omitempty"`
+	Pos     Pos   `json:"pos"`
+}
+
+// Ref names a declaration and where it is.
+type Ref struct {
+	Name string `json:"name"`
+	Pos  Pos    `json:"pos"`
 }
 
 // Encode writes a as indented JSON.

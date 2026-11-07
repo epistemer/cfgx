@@ -8,13 +8,10 @@ import (
 	"time"
 )
 
-// prepare runs the command in its own process group. On timeout the whole
-// group gets SIGQUIT, so the schema program dumps its goroutine stacks, which
-// show the init that hung; anything still running is killed shortly after.
+// prepare makes a timeout send SIGQUIT to the schema program, which then
+// dumps its goroutine stacks: they show the init that hung. If it is still
+// running after WaitDelay, os/exec kills it.
 func prepare(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error {
-		return syscall.Kill(-cmd.Process.Pid, syscall.SIGQUIT)
-	}
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGQUIT) }
 	cmd.WaitDelay = 5 * time.Second
 }

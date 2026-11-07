@@ -94,7 +94,7 @@ type Serve struct {
 	*logGroup
 }
 
-var serveKeys = []int{0, 1, 2, 3}
+var keysServe = []int{0, 1, 2, 3}
 
 func newServe(v *values) *Serve {
 	r := &root{}
@@ -109,7 +109,7 @@ func newServe(v *values) *Serve {
 // ServeCommand binds the Serve configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *cobra.Command {
-	return engine.Command(cmd, keys[:], serveKeys, newServe, run)
+	return engine.Command(cmd, keys[:], keysServe, newServe, run)
 }
 
 // Migrate is the configuration of the Migrate command.
@@ -117,7 +117,7 @@ type Migrate struct {
 	*databaseGroup
 }
 
-var migrateKeys = []int{0, 1}
+var keysMigrate = []int{0, 1}
 
 func newMigrate(v *values) *Migrate {
 	r := &root{}
@@ -130,14 +130,14 @@ func newMigrate(v *values) *Migrate {
 // MigrateCommand binds the Migrate configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) error) *cobra.Command {
-	return engine.Command(cmd, keys[:], migrateKeys, newMigrate, run)
+	return engine.Command(cmd, keys[:], keysMigrate, newMigrate, run)
 }
 
 // Version is the configuration of the Version command.
 type Version struct {
 }
 
-var versionKeys = []int{}
+var keysVersion = []int{}
 
 func newVersion(v *values) *Version {
 	_ = v
@@ -147,5 +147,5 @@ func newVersion(v *values) *Version {
 // VersionCommand binds the Version configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func VersionCommand(cmd *cobra.Command, run func(context.Context, *Version) error) *cobra.Command {
-	return engine.Command(cmd, keys[:], versionKeys, newVersion, run)
+	return engine.Command(cmd, keys[:], keysVersion, newVersion, run)
 }

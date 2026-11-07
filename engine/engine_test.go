@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/epistemer/cfgx"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -67,17 +68,41 @@ func TestPrecedence(t *testing.T) {
 }
 
 func TestAllProblemsAtOnce(t *testing.T) {
-	_, err := load(t, map[string]string{"T_SERVER_PORT": "abc", "T_LOG_DEBUG": "maybe"}, "--server-port", "99999999999999999999")
-	var errs Errors
+	_, err := load(t, map[string]string{"T_SERVER_HOST": "ok", "T_LOG_DEBUG": "maybe"}, "--server-port", "99999999999999999999")
+	var errs cfgx.Errors
 	if !errors.As(err, &errs) {
-		t.Fatalf("want Errors, got %v", err)
+		t.Fatalf("want cfgx.Errors, got %v", err)
 	}
-	want := `invalid configuration (3 problems)
+	want := `invalid configuration (2 problems)
   log.debug: "maybe" is not a boolean; use true or false (env T_LOG_DEBUG)
-  server.port: "abc" is not an integer (env T_SERVER_PORT)
   server.port: "99999999999999999999" is out of range for an integer (flag --server-port)`
 	if err.Error() != want {
 		t.Errorf("got:\n%s\nwant:\n%s", err, want)
+	}
+}
+
+// A bad value in a lower layer is ignored when a higher layer overrides it.
+func TestOverriddenBadValueIsIgnored(t *testing.T) {
+	got, err := load(t, map[string]string{"T_SERVER_PORT": "notanint"}, "--server-port", "8080")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Port != 8080 {
+		t.Errorf("port = %d", got.Port)
+	}
+}
+
+func TestKeyWithoutFlag(t *testing.T) {
+	keys := []Key[vals]{{Path: "x.host", Env: "T_X", Type: "string", Desc: "no flag",
+		Set: func(v *vals, r string) error { return ParseString(r, &v.Host) }}}
+	fs := pflag.NewFlagSet("t", pflag.ContinueOnError)
+	BindFlags(fs, keys, []int{0})
+	if fs.HasFlags() {
+		t.Error("a key without a flag name must not register a flag")
+	}
+	got, err := Load(fs, keys, []int{0}, Options{LookupEnv: func(string) (string, bool) { return "h", true }})
+	if err != nil || got.Host != "h" {
+		t.Errorf("got %+v, %v", got, err)
 	}
 }
 

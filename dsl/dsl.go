@@ -156,10 +156,12 @@ func Export(w io.Writer) error {
 	}
 	a := apps[0]
 	out := &ir.App{Version: ir.Version, Name: a.name, Desc: a.desc, EnvPrefix: a.envPrefix, Pos: a.pos}
+	inApp := map[*GroupDef]bool{}
 	for _, g := range a.groups {
 		if g == nil {
 			return fmt.Errorf("%s: dsl.App lists a nil group", a.pos)
 		}
+		inApp[g] = true
 		ig := ir.Group{Name: g.name, Desc: g.desc, Pos: g.pos}
 		for _, kd := range g.keys {
 			if kd == nil {
@@ -173,10 +175,15 @@ func Export(w io.Writer) error {
 	for _, c := range commands {
 		ic := ir.Command{Name: c.name, Pos: c.pos, Uses: []string{}}
 		for _, u := range c.uses {
-			if u == nil {
+			g, ok := u.(*GroupDef)
+			if !ok || g == nil {
 				return fmt.Errorf("%s: command %s uses a nil group", c.pos, c.name)
 			}
-			ic.Uses = append(ic.Uses, u.usableName())
+			if !inApp[g] {
+				ic.Orphans = append(ic.Orphans, ir.Ref{Name: g.name, Pos: g.pos})
+				continue
+			}
+			ic.Uses = append(ic.Uses, g.usableName())
 		}
 		out.Commands = append(out.Commands, ic)
 	}

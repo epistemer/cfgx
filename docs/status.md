@@ -4,6 +4,24 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-08: M2 walking skeleton done
+
+- **Landed:** M2 through a PR. The first real code: IR, DSL, engine, generator,
+  loader and `cfgx gen`, plus `examples/mini` and end-to-end scripts. A schema
+  becomes generated code and a running binary, with default < env < flag.
+- **Reviewed:** Claude reviewed Gemini's M2.6 work and fixed the harness's
+  hard-coded dependency versions. Gemini found 13 problems in Claude's code, all
+  fixed ([review 0003](reviews/0003-gemini-m2-review.md)). The biggest: a bad
+  env var failed startup even when a flag overrode it, and a schema without
+  commands generated code that didn't compile.
+- **Decided for you:** the temporary `main` now lives in the working directory
+  and is built, then run (ADR 0002, revision). A warm `cfgx gen` takes about
+  0.9 s. Gemini models: Argon High for this milestone's delegation and reviews.
+- **Next:** M3, config files, errors and provenance; in parallel, M4.3 (the
+  `Secret` type) and M5.
+- **Waiting on you:** one API decision: how a command's run function gets its
+  positional arguments. A recommendation is in the conversation.
+
 ## 2026-11-08: full ownership
 
 - **Changed:** you gave Claude full ownership. Only API design decisions and

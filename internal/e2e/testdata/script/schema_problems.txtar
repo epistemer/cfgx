@@ -1,7 +1,7 @@
 # Schema-level problems report schema.go:LINE and report all problems in a single run.
 ! go generate ./...
 stderr 'schema\.go:6: key server\.host needs a description'
-stderr 'schema\.go:15: command Serve uses group "extra", which isn''t in the dsl\.App'
+stderr 'schema\.go:15: command Serve uses group "extra" \(declared at .*schema\.go:9\), which isn''t passed to dsl\.App'
 ! exists internal/settings/zz_settings.go
 ! exists internal/settings/schema/zz_cfgx_gen_main
 

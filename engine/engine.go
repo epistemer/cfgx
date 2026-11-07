@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/epistemer/cfgx"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -45,29 +46,6 @@ func (s *Snapshot[V]) Load() *V { return s.p.Load() }
 // Store replaces the current values.
 func (s *Snapshot[V]) Store(v *V) { s.p.Store(v) }
 
-// Problem is one thing wrong with the configuration.
-type Problem struct {
-	Key     string
-	Message string
-	Source  string // "env ZP_DATABASE_PORT", "flag --port", ...
-}
-
-// Errors is every problem found while loading, sorted by key.
-type Errors []Problem
-
-func (e Errors) Error() string {
-	var b strings.Builder
-	if len(e) == 1 {
-		b.WriteString("invalid configuration (1 problem)")
-	} else {
-		fmt.Fprintf(&b, "invalid configuration (%d problems)", len(e))
-	}
-	for _, p := range e {
-		fmt.Fprintf(&b, "\n  %s: %s (%s)", p.Key, p.Message, p.Source)
-	}
-	return b.String()
-}
-
 // rawValue is the pflag.Value of every flag: it records the text and nothing
 // else. pflag never applies a default and never rejects a value (ADR 0003).
 type rawValue struct{ typ, raw string }
@@ -81,6 +59,9 @@ func (v *rawValue) Type() string       { return v.typ }
 func BindFlags[V any](fs *pflag.FlagSet, keys []Key[V], idx []int) {
 	for _, i := range idx {
 		k := &keys[i]
+		if k.Flag == "" {
+			continue
+		}
 		usage := k.Desc
 		if d := k.DefaultText; d != "" && !(k.Bool && d == "false") {
 			if k.Quote {
@@ -101,33 +82,37 @@ type Options struct {
 	LookupEnv func(string) (string, bool)
 }
 
-// Load resolves the keys at idx, lowest precedence first: default, env, then
-// flags that were passed. Every problem is reported at once.
+// Load resolves the keys at idx. For each key the highest layer present
+// wins: a flag that was passed, then an env var, then the default. Only the
+// winning value is parsed, so a bad value that is overridden doesn't matter.
+// Every problem is reported at once, as cfgx.Errors.
 func Load[V any](fs *pflag.FlagSet, keys []Key[V], idx []int, opts Options) (*V, error) {
 	lookup := opts.LookupEnv
 	if lookup == nil {
 		lookup = os.LookupEnv
 	}
 	v := new(V)
-	var errs Errors
-	set := func(k *Key[V], raw, source string) {
-		if err := k.Set(v, raw); err != nil {
-			errs = append(errs, Problem{Key: k.Path, Message: err.Error(), Source: source})
-		}
-	}
+	var errs cfgx.Errors
 	for _, i := range idx {
 		k := &keys[i]
 		if k.Default != nil {
 			k.Default(v)
 		}
+		var raw, source string
+		var found bool
 		if k.Env != "" {
-			if raw, ok := lookup(k.Env); ok {
-				set(k, raw, "env "+k.Env)
+			if r, ok := lookup(k.Env); ok {
+				raw, source, found = r, "env "+k.Env, true
 			}
 		}
-		if fs != nil {
+		if fs != nil && k.Flag != "" {
 			if f := fs.Lookup(k.Flag); f != nil && f.Changed {
-				set(k, f.Value.String(), "flag --"+k.Flag)
+				raw, source, found = f.Value.String(), "flag --"+k.Flag, true
+			}
+		}
+		if found {
+			if err := k.Set(v, raw); err != nil {
+				errs = append(errs, cfgx.Problem{Key: k.Path, Message: err.Error(), Source: source})
 			}
 		}
 	}
