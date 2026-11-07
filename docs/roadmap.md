@@ -406,7 +406,7 @@ walks into dot-directories and would see them.
 |--------|---------|------|
 | Claude (this or a new Claude Code session) | Cross-cutting design, the engine and generator core | Owner until `v1.0.0` ([ownership.md](ownership.md)): planning, design-heavy items, integrating and merging, reviewing Gemini's work |
 | agy → Gemini 4 Argon | Well-specified items with a crisp done-when; web research | Leaf items: parsers, emitters, test suites, templates, research |
-| You | Judgement calls | Releases, changes to D1–D11, anything outside this repository, the decisions reserved for you below, M6.7 (a manual check) |
+| You | API design and permissions | API design decisions, anything Claude lacks permission for (ownership.md), M6.7 (a manual check) |
 
 Suggested split. The lanes in [Parallel work](#parallel-work) still decide who
 may touch which files at a given time.
@@ -423,6 +423,14 @@ may touch which files at a given time.
 | M7 | M7.1–M7.7 | M7.8, M7.9 (from Claude's spec) |
 | M8 | M8.1 | M8.2, M8.3 |
 | M9 | M9.3, M9.5 | M9.1, M9.2, M9.4 |
+
+How Claude picks Gemini's model and effort for each task:
+
+| Task | Model and effort |
+|------|------------------|
+| Implementation that needs judgement, spikes, adversarial reviews | Gemini 4 Argon (High), the default |
+| Well-specified implementation with tests to meet | Gemini 4 Argon (Medium) |
+| Mechanical edits, test tables, web and doc lookups | Gemini 3.8 Flash (High) |
 
 Rules:
 1. **One brief per work item:** its ID, its done-when, the doc sections it
@@ -452,7 +460,7 @@ you can review a few PRs a day.
 | Warning output | **`log/slog`**, replaceable at startup (amendment A2) |
 | Keys covered by the `config` subcommand | **Whole app**, with an optional command argument (A3) |
 | How an app declares and reaches its store | **`App.Store(pathKey)`** plus an injected `Store()` (A1) |
-| Default agent model | **Gemini 4 Argon (High)** via agy |
+| Default agent model | **Gemini 4 Argon (High)** via agy; Claude picks a model and effort per task (below) |
 | Project owner until `v1.0.0` | **Claude**, acting for you ([ownership.md](ownership.md)) |
-| `cfgx init` skeleton contents | Open, needed by M8.1 (the proposal there now uses logrus) |
+| `cfgx init` skeleton contents | Claude decides at M8.1 (the proposal there uses logrus) |
 | Which zp settings become mutable | Open, needed by M10.3 |

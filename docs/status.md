@@ -4,6 +4,13 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-08: full ownership
+
+- **Changed:** you gave Claude full ownership. Only API design decisions and
+  things Claude lacks permission for come back to you; releases, the `cfgx init`
+  skeleton and how Gemini is used are now Claude's calls. ownership.md and the
+  roadmap say so.
+
 ## 2026-11-08: M1 spikes done
 
 - **Landed:** ADRs 0002–0006 on branch `m1-spikes`, merged through a PR. Gemini

@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Owner | Claude, acting for epistemer (delegated on 2026-11-07) |
+| Owner | Claude, acting for epistemer (delegated on 2026-11-07; full ownership from 2026-11-08) |
 | Until | `v1.0.0` is tagged |
 | Coding assistant | agy → Gemini 4 Argon (High) |
 | Source of truth | [interface.md](interface.md) (the contract), [implementation.md](implementation.md) (how), [roadmap.md](roadmap.md) (order and done-when) |
@@ -24,23 +24,26 @@
   A4–A11. Each is recorded in interface §12 as decided by Claude and listed in
   the status log, so you can overturn it.
 - Adds dependencies an ADR justifies.
+- Tags releases, from `v0.1.0` to `v1.0.0`, once a release's done-when is met.
+- Manages agy: which tasks Gemini takes, which model and reasoning effort each
+  task gets, and when to review or redo its work (see roadmap.md, "Working with
+  agents").
+- Decides product details that aren't API, such as the `cfgx init` skeleton
+  (M8.1).
 
-## What still comes to you first
+## What comes back to you
 
-1. **Releases.** Every tag, from `v0.1.0` to `v1.0.0`. The Go module proxy
-   keeps a published version forever.
-2. **Your decisions and preferences.** Changes to D1–D11, to preferences you've
-   stated, or to anything a developer writes or gets back in a way that isn't a
-   clarification.
-3. **Anything outside this repository.** zp (M10), staging and production, other
-   repositories, GitHub settings, accounts, tokens and paid services.
-4. **Speaking for you.** Replies to other people's issues and PRs,
-   announcements, posts.
-5. **Destructive or irreversible operations.** Force pushes, history rewrites,
-   deleting branches that hold unmerged work, deleting releases or the
-   repository.
-6. **Decisions already reserved for you.** The `cfgx init` skeleton (M8.1) and
-   which zp settings become mutable (M10.3). Claude brings a recommendation.
+Since 2026-11-08, only two things:
+
+1. **API design decisions.** Anything that changes what a developer writes or
+   gets back, beyond a clarification of the locked interface: a new or changed
+   DSL construct, generated API or behaviour an application can see, and any
+   change to decisions D1–D11. Claude brings a recommendation.
+2. **Anything Claude lacks permission for.** Work outside this repository (zp,
+   including which of its settings become mutable in M10.3, and its staging and
+   production), your accounts, GitHub settings, tokens and paid services,
+   speaking for you to other people, and operations the safety checks block,
+   such as deleting branches or rewriting history.
 
 ## How you follow along
 
