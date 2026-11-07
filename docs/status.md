@@ -4,11 +4,15 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
-## 2026-11-07: M1 spikes done
+## 2026-11-08: M1 spikes done
 
 - **Landed:** ADRs 0002–0006 on branch `m1-spikes`, merged through a PR. Gemini
   ran S4 and S5; Claude ran S1–S3, reviewed Gemini's work, and re-checked the
   claims the decisions rest on.
+- **Reviewed:** Gemini reviewed Claude's ADRs and found 12 problems, all fixed
+  before merge ([review 0002](reviews/0002-gemini-m1-review.md)). The biggest:
+  pflag could reject a slice flag before cfgx saw it, and the planned JSON
+  surrogate rewrite would have corrupted escaped backslashes.
 - **Decided for you:**
   - The generator pipeline stays. Its temporary `main` runs through
     `go run -overlay`, so `cfgx gen` never writes to your tree (ADR 0002).

@@ -55,16 +55,24 @@ Observations:
 ## Decision
 
 Keep `FuncForPC`; the kill criterion didn't fire. A function is accepted only
-if, after its package path, the symbol is a single exported identifier, and the
-package is neither `main` nor the schema package. Generated code imports every
-referenced package under a generated alias.
+if:
+- after its package path, the symbol is a single exported identifier
+  (`token.IsIdentifier` and `token.IsExported`)
+- its package isn't `main` or the schema package
+- the generated package can import it under Go's `internal/` rule, checked
+  against the generated package's own path
+
+A function in the generated package itself is referenced without an import,
+which would otherwise be an import cycle. Every other referenced package is
+imported under a generated alias. (The last two rules come from review 0002,
+F02.)
 
 ## Consequences
 
 - [implementation.md §2.2](../implementation.md) records the rules; M4.8
   implements them.
 - Packages that import `cfgx/dsl` must also be rejected, because generated code
-  must never import the DSL. The generator checks this with `go list -deps`, one
-  call per referenced package; the spike didn't need to test it.
+  must never import the DSL. One batched `go list -deps` call checks every
+  referenced package (review 0002, F11); the spike didn't test it.
 - Rejections point at the schema line where the function was passed, which the
   DSL already records.

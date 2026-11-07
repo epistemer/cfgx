@@ -28,10 +28,12 @@ There was one design to test, so this records what it does:
   `Type()` gives the help label (`int`, `string`, `bool`, `duration`,
   `stringSlice`).
 - `Flag.DefValue` holds the schema default for display only; pflag never
-  applies it.
+  applies it. (The decision below moves the displayed default into the usage
+  text instead.)
 - Bool flags set `NoOptDefVal = "true"`.
-- Repeatable keys use a value that implements `pflag.SliceValue` and appends on
-  every occurrence.
+- Repeatable keys use a value that implements `pflag.SliceValue` and records
+  every occurrence. (The spike split commas inside `Set`, which lets pflag
+  reject malformed input; the decision below moves splitting into the engine.)
 - The engine resolves precedence itself and reads a flag only if `Changed`.
 
 All of these pass on Go 1.27.3 and 1.26.0:
@@ -67,5 +69,14 @@ never forces the v1.1.0 help rendering on applications.
   decision; M2.4 implements it, and M4.6 implements the slice value.
 - pflag never rejects a value, so every parse error comes from cfgx's own
   parsers with one message format and the flag named as its source.
+- **Slices are split by the engine, not by pflag.** `Set` only appends the raw
+  occurrence, so malformed input such as `--tag '"unclosed'` reaches cfgx's
+  error report with the flag as its source. An explicitly empty occurrence
+  (`--tag ""`) provides an empty list, as A4 requires (review 0002, F01).
+- **cfgx writes `(default …)` into the usage text itself and leaves `DefValue`
+  empty.** For value types it doesn't know, pflag decides whether a default is
+  "zero" from its text. It would hide a string default of `0` or `false`, and
+  show `(default 0s)` for an unset duration. Type labels are chosen to read well
+  in help: `strings`, `ints`, `durations` (F09).
 - If an application raises pflag to v1.1.0 for its own reasons, cobra's help
   flag renders oddly; cfgx can't prevent that, and it's cosmetic.

@@ -6,6 +6,7 @@
 package secret
 
 import (
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding"
 	"encoding/json"
@@ -72,13 +73,21 @@ func (s Secret) IsSet() bool {
 	return s.reveal != nil && s.reveal() != ""
 }
 
-// Equal reports whether the Secret is set and matches v in constant time.
-// An unset Secret always returns false, even when compared against "".
+// Equal reports whether the Secret is set and matches v. It compares SHA-256
+// digests in constant time and has no early return, so timing reveals neither
+// the secret's length nor whether it is set. An unset Secret equals nothing,
+// not even "".
 func (s Secret) Equal(v string) bool {
-	if !s.IsSet() {
-		return false
+	var have string
+	if s.reveal != nil {
+		have = s.reveal()
 	}
-	return subtle.ConstantTimeCompare([]byte(s.reveal()), []byte(v)) == 1
+	set := 0
+	if have != "" {
+		set = 1
+	}
+	a, b := sha256.Sum256([]byte(have)), sha256.Sum256([]byte(v))
+	return subtle.ConstantTimeCompare(a[:], b[:])&set == 1
 }
 
 // String returns the fixed mask "******".

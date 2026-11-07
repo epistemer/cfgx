@@ -58,9 +58,18 @@ There are two halves, connected by one contract, the **IR**:
 **Placement [decided, ADR 0002]:** `go run -overlay`, at a stable virtual path
 inside the schema package's directory (`zz_cfgx_gen_main/main.go`, which must not
 exist on disk), with deterministic content. Nothing is written to the working
-tree, `--check` included, and warm runs hit the go command's executable cache:
-about 0.1–0.3 s warm, about 10 s on an empty cache. Module, workspace and vendor
-modes and `go generate` all work.
+tree, `--check` included, and warm runs hit the go command's executable cache.
+It takes about 0.1–0.3 s when nothing changed, about 0.3–0.5 s after a schema
+edit, and about 10 s on an empty cache. Module, workspace and vendor modes and
+`go generate` all work.
+
+The temporary `main` writes the IR to a file the generator names rather than to
+stdout, so output from an `init` can't corrupt it. The generator resolves its
+argument with `go list -e`, so a broken schema reaches the user as a compile
+error from `go run`. It also merges any `-overlay` already in `GOFLAGS`,
+canonicalizes paths with `filepath.EvalSymlinks`, and runs the program with a
+timeout. On Unix the timeout dumps goroutine stacks (SIGQUIT), which show the
+`init` that hung (ADR 0002).
 
 ### 2.2 What `dsl` records
 
@@ -81,12 +90,15 @@ Each constructor captures:
 | Tags, groups, commands | identities resolved to names |
 
 **Function references [decided, ADR 0004].** A function is accepted only if:
-- it's top-level and exported: after the package path, its symbol contains no
-  further dot. That rejects closures (`F.func1`), method values (`T.M-fm`) and
+- it's top-level and exported: after the package path, its symbol is a single
+  identifier (`token.IsIdentifier` and `token.IsExported`), with no further dot. That rejects closures (`F.func1`), method values (`T.M-fm`) and
   method expressions (`T.M`, `(*T).M`)
 - it isn't a generic instance (no `[` in the name)
-- its package isn't the schema package and doesn't import `cfgx/dsl`, because
-  generated code must never import either
+- its package isn't `main` or the schema package, and doesn't import `cfgx/dsl`,
+  because generated code must never import them. One batched `go list -deps`
+  call checks every referenced package
+- the generated package can import it under Go's `internal/` rule. A function in
+  the generated package itself is referenced without an import
 
 The package path ends at the first `.` after the last `/`. Go escapes dots in the last path element of symbol names as `%2e`
 (`gopkg.in/yaml%2ev3.F`), which keeps that split unambiguous; the generator
@@ -103,8 +115,11 @@ from its last path element.
 `Group.Computed("DSN")` declares that a hand-written method belongs to the
 group's interface. Its signature has to be exact, so the generator type-checks
 rather than copying source text (A8):
-1. Emit `zz_settings.go` with the computed methods left out of the interfaces.
-2. Type-check the package with `go/packages` (`NeedTypes`).
+1. Build `zz_settings.go` with the computed methods left out of the interfaces,
+   in memory.
+2. Type-check the package with `go/packages` (`NeedTypes`), passing that stub
+   through `packages.Config.Overlay`, so nothing is written yet (review 0002,
+   F06).
 3. Find each declared method on the group's receiver type (naming rule in
    interface §5.3) and render its signature with `types.TypeString` and an
    import-tracking qualifier, so package names, `/v2` paths and aliases come
@@ -249,13 +264,17 @@ unknown.
 
 **Flags.**
 - The engine registers a custom `pflag.Value` per key that stores raw text. Its
-  `Type()` returns `int`, `duration`, etc. for help, and `DefValue` holds the
-  schema default for display only.
+  `Type()` gives the help label (`int`, `duration`, `strings`, …). cfgx writes
+  `(default …)` into the usage text itself and leaves `DefValue` empty, because
+  pflag decides whether an unknown type's default is "zero" from its text and
+  would hide a string default of `0` or `false` (ADR 0003).
 - A flag counts **only if `Changed`**. This avoids viper's classic bug, where a
   flag's default overrides the env var and the file.
 - Bool flags set `NoOptDefVal = "true"`.
-- Slice and map keys append on every occurrence, because pflag calls `Set` once
-  per `--tag a --tag b`. Their values implement `pflag.SliceValue`.
+- Slice and map keys record each occurrence's raw text, because pflag calls
+  `Set` once per `--tag a --tag b`. The engine splits and validates them, so
+  pflag never rejects a value (ADR 0003). An explicitly empty occurrence provides
+  an empty list.
 - `Global` keys are registered as persistent flags on the root by `BindRoot`.
 - **[decided, ADR 0003]** Confirmed on cobra v1.10.2: persistent flags are
   visible through the child's `Flags()` in `RunE`, completion works with the
@@ -290,10 +309,13 @@ unknown.
   - rejects duplicate keys itself, naming both positions, since the library
     doesn't when loading into a `Node`
   - rejects anchors, aliases and merge keys in v0.1.0 (a backlog item)
-  - treats an empty or comment-only file as an empty map
-  - for `.json` files, first rewrites UTF-16 surrogate-pair escapes to `\U`
-    escapes, because YAML rejects them but JSON tools such as Python's
-    `json.dumps` write them
+  - treats an empty or comment-only file (the loader's `io.EOF`) and a null root
+    as an empty map
+  - for `.json` files, first rewrites surrogate escapes with a string-aware
+    scanner, because YAML rejects them but JSON tools such as Python's
+    `json.dumps` write them. A pair becomes one `\U` escape, padded with spaces
+    after the closing quote so columns stay exact; a lone surrogate becomes
+    `\uFFFD` (ADR 0005)
 - `.json` files accept YAML's superset syntax (comments, trailing commas). The
   leniency is documented rather than enforced against.
 
@@ -331,8 +353,9 @@ type Secret struct{ reveal func() string } // a closure: reflection can't read i
 
 - `String`, `GoString`, `Format` (all verbs), `MarshalJSON`, `MarshalText`,
   `MarshalYAML` and `LogValue` all return the mask.
-- `Equal` compares SHA-256 digests with `crypto/subtle` (ADR 0006), so timing
-  doesn't reveal the secret's length. A `Secret` isn't comparable with `==`,
+- `Equal` compares SHA-256 digests with `crypto/subtle`, without an early
+  return (ADR 0006), so timing reveals neither the secret's length nor whether
+  it's set. A `Secret` isn't comparable with `==`,
   since it holds a func.
 - In an unexported field of a printed struct, `fmt` can't call these methods and
   prints the field as an address (`{reveal:0x4f2a80}`). The secret isn't shown,

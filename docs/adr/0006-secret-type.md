@@ -44,8 +44,10 @@ type Secret struct {
     (`append([]byte(nil), v...)`) so mutating the slice cannot affect the
     `Secret` or subsequent calls.
   - `IsSet() bool` reports `s.reveal != nil && s.reveal() != ""`.
-  - `Equal(v string) bool` returns `false` when unset (even if `v == ""`), and
-    otherwise compares bytes with `crypto/subtle.ConstantTimeCompare`.
+  - `Equal(v string) bool` returns `false` when unset (even if `v == ""`). The
+    spike first compared raw bytes with `crypto/subtle.ConstantTimeCompare`;
+    review changed that to SHA-256 digests compared without an early return
+    (see Consequences).
   - Because `Secret` holds a `func() string` field, the type is incomparable
     (`==` and `map[Secret]T` are compile errors, and
     `reflect.TypeFor[Secret]().Comparable()` is `false`).
@@ -201,14 +203,17 @@ and `UnmarshalText`.
   unzeroable Go strings in memory alongside `Reveal()`, `unsafe`, and core
   dumps.
 - **Roadmap item M4.3 (`cfgx.Secret`):** Implements `Secret` and `NewSecret` in
-  package `cfgx` with the exact methods from `spikes/s5-secret/secret.go`
+  package `cfgx` with the methods from `spikes/s5-secret/secret.go`
   (`NewSecret`, `Reveal`, `Bytes`, `IsSet`, `Equal`, `String`, `GoString`,
   `Format`, `MarshalJSON`, `MarshalText`, `MarshalYAML`, `LogValue`) and no
   unmarshalers.
-- **`Equal` without a length leak (added in review):** `subtle.ConstantTimeCompare`
+- **`Equal` without timing leaks (added in review):** `subtle.ConstantTimeCompare`
   returns early when the lengths differ, so timing reveals whether a guess has the
-  secret's length. M4.3 compares SHA-256 digests of both values instead, which
-  are always 32 bytes.
+  secret's length, and an early `false` for an unset secret reveals whether it's
+  set. `Equal` therefore hashes both values with SHA-256 (an unset secret hashes
+  the empty string), compares the 32-byte digests in constant time, and combines
+  that with set-ness without branching. `spikes/s5-secret/secret.go` does this
+  (review 0002, F10).
 - **Leak test suite migration:** In M4.3, `spikes/s5-secret/leak_test.go` moves
   into the `cfgx` package to guard `cfgx.Secret` permanently in CI (and is
   required by M9.2), and `spikes/s5-secret/` is removed once M4.3 lands.

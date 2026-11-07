@@ -56,13 +56,20 @@ Results, Linux, Go 1.27.3 and 1.26.0 (times are the inner `go run` only):
 
 Observations:
 
-- **Every placement works in every mode.** The F10 worry about `.`-prefixed
-  directories doesn't hold for `go run ./.dir` or for file arguments. Those
-  placements still write to the tree while they run, though.
+- **Every placement that was tried worked.** All six ran in module mode;
+  overlay, overlay-file, underscore and plain also ran in workspace and vendor
+  modes; overlay and plain ran inside `go generate`. The F10 worry about
+  `.`-prefixed directories doesn't hold for `go run ./.dir` or for file
+  arguments, though those placements write to the tree while they run.
 - **The overlay is the fastest when warm.** Since Go 1.24 the go command caches
   the executables `go run` builds. A stable virtual path with identical source
   hits that cache, while a freshly named directory is a new package path every
-  time, so the link step reruns.
+  time, so the link step reruns. The cache only helps when nothing changed:
+  editing the schema rebuilds the schema package and the executable. The
+  realistic cost after an edit is the first-run figure (220–330 ms) plus the
+  `go list` lookup (about 60–100 ms), which the stand-in generator didn't time.
+  Section 1 also ran on a fresh copy, so later sections were partly faster
+  because they reused its cache (review 0002, F07).
 - **Cold runs take about 10 s**, which is compiling the standard library into an
   empty cache. Any first Go build pays it; CI keeps its cache between runs.
 - **Self-registration works.** Each constructor records `runtime.Caller` and
@@ -89,3 +96,16 @@ temporary directory removed on exit and on signals.
   temporary `main` with a timeout.
 - The first `go generate` on a fresh machine or CI cache takes about 10 s; later
   runs take well under a second.
+- The generator resolves its argument (`./schema`) with
+  `go list -e -f '{{.ImportPath}} {{.Dir}}'`. Thanks to `-e`, a schema with a
+  syntax error doesn't fail inside `go list`, and the compiler's error reaches
+  the user from `go run`. The spike skipped this by passing an import path
+  (review 0002, F03).
+- The temporary `main` writes the IR to a file the generator names, not to
+  stdout, so a package whose `init` prints can't corrupt it (F08).
+- If the user's `GOFLAGS` already has `-overlay`, the generator merges that file
+  into its own overlay. It canonicalizes the schema directory with
+  `filepath.EvalSymlinks`, so overlay paths match what the go command sees when
+  temp or home directories are symlinks (F08).
+- The computed-method pass (implementation §2.3) also works through an overlay,
+  so `cfgx gen` writes nothing but its final outputs (F06).
