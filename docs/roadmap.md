@@ -112,19 +112,20 @@ graph LR
 **Goal:** an empty repository where CI, linting and the end-to-end test harness
 already work, so every later PR is tested the same way.
 
-**Status (2026-11-07):** M0.1–M0.4 are done on branch `m0-foundation`. They pass
-every check on Linux with Go 1.27.3: gofmt, vet, staticcheck v0.8.2, actionlint,
-and the race-enabled tests. Gemini wrote M0.2 and M0.3 and Claude reviewed them;
-Gemini reviewed M0.1 and M0.4, and its seven findings are fixed. Two things are
-left before the boxes can be ticked: the first CI run on GitHub, which needs the
-repository to exist and a push, and your merge into `main`.
+**Status (2026-11-07):** done on branch `m0-foundation`, and complete once it's
+merged into `main`. The
+[first CI run](https://github.com/epistemer/cfgx/actions/runs/42413478830) passed
+all six jobs, and the e2e script really ran on every OS (1.1–1.7 s per job, not
+a skip). Gemini wrote M0.2 and M0.3 and Claude reviewed them; Gemini reviewed
+M0.1 and M0.4, and its seven findings are fixed. The boxes are ticked on this
+branch, so they become true on `main` exactly when it's merged.
 
 | ✓ | ID | Item | Size | Done when |
 |---|----|------|------|-----------|
-| ☐ | M0.1 | `git init`. Module `github.com/epistemer/cfgx` with a `go 1.26` directive (support the two latest Go releases). Package directories from [implementation.md §4](implementation.md), each with a `doc.go`. MIT LICENSE and a README stub. | S | `go build ./...` passes; layout matches §4 |
-| ☐ | M0.2 | CI (GitHub Actions): Go {1.26, 1.27} × {linux, macOS, windows}. Runs `gofmt` check, `go vet`, `staticcheck`, `go test -race`. Windows is in the matrix from day one because env var names are case-insensitive there and paths differ. | S | CI green on all six jobs |
-| ☐ | M0.3 | Test harness. A `testscript` runner in `internal/e2e` whose setup creates a temporary module containing `replace github.com/epistemer/cfgx => <repo>`. A golden-file helper with an `-update` flag. | M | A trivial script (`go build` inside a temp module) passes on all three OSes |
-| ☐ | M0.4 | `docs/adr/` with a template, plus ADR-0001 recording decisions D1–D11 by linking interface.md §0. | S | Merged |
+| ☑ | M0.1 | `git init`. Module `github.com/epistemer/cfgx` with a `go 1.26` directive (support the two latest Go releases). Package directories from [implementation.md §4](implementation.md), each with a `doc.go`. MIT LICENSE and a README stub. | S | `go build ./...` passes; layout matches §4 |
+| ☑ | M0.2 | CI (GitHub Actions): Go {1.26, 1.27} × {linux, macOS, windows}. Runs `gofmt` check, `go vet`, `staticcheck`, `go test -race`. Windows is in the matrix from day one because env var names are case-insensitive there and paths differ. | S | CI green on all six jobs |
+| ☑ | M0.3 | Test harness. A `testscript` runner in `internal/e2e` whose setup creates a temporary module containing `replace github.com/epistemer/cfgx => <repo>`. A golden-file helper with an `-update` flag. | M | A trivial script (`go build` inside a temp module) passes on all three OSes |
+| ☑ | M0.4 | `docs/adr/` with a template, plus ADR-0001 recording decisions D1–D11 by linking interface.md §0. | S | Merged |
 | ☑ | M0.5 | Cross-model review: agy's adversarial review (Gemini 4 Argon) of the three docs. Every finding becomes an amendment, a roadmap change, or a recorded rejection. Done on 2026-11-07: [review 0001](reviews/0001-gemini-doc-review.md). | S | Triage list merged (it lands with M0.1's first commit) |
 
 **Exit:** CI is green on empty packages, and the e2e harness runs everywhere.
