@@ -1,0 +1,100 @@
+# Walking skeleton end-to-end: generate, build, precedence, bool flags, empty env, --help, and error output.
+go generate ./...
+exists internal/settings/zz_settings.go
+! exists internal/settings/schema/zz_cfgx_gen_main
+
+go build -o app$exe .
+
+# 1. Defaults when no env or flags are set.
+exec ./app$exe serve
+stdout '^host="localhost" port=8080 debug=false\r?\n$'
+! stderr .
+
+# 2. A short-flag-free bool flag --x sets true and --x=false sets false.
+exec ./app$exe serve --log-debug
+stdout '^host="localhost" port=8080 debug=true\r?\n$'
+exec ./app$exe serve --log-debug=false
+stdout '^host="localhost" port=8080 debug=false\r?\n$'
+
+# 3. serve --help shows (default ...) for set defaults and nothing for a false bool.
+exec ./app$exe serve --help
+stdout '--server-host string\s+Listen host \(default "localhost"\)'
+stdout '--server-port int\s+Listen port \(default 8080\)'
+stdout '--log-debug\s+Enable debug logging'
+! stdout 'default false'
+
+# 4. Env beats default.
+env APP_SERVER_HOST=0.0.0.0
+env APP_SERVER_PORT=9090
+env APP_LOG_DEBUG=true
+exec ./app$exe serve
+stdout '^host="0.0.0.0" port=9090 debug=true\r?\n$'
+
+# 5. Flag beats env.
+exec ./app$exe serve --server-host 127.0.0.1 --server-port 3000 --log-debug=false
+stdout '^host="127.0.0.1" port=3000 debug=false\r?\n$'
+
+# 6. An empty env var clears a value (string to "", int to 0).
+env APP_SERVER_HOST=
+env APP_SERVER_PORT=
+env APP_LOG_DEBUG=
+exec ./app$exe serve
+stdout '^host="" port=0 debug=false\r?\n$'
+
+# 7. An invalid int from env prints the invalid configuration error naming the env var
+# and exits non-zero without printing usage text.
+env APP_SERVER_PORT=notanint
+! exec ./app$exe serve
+stderr 'invalid configuration \(1 problem\)'
+stderr 'server\.port: "notanint" is not an integer \(env APP_SERVER_PORT\)'
+! stderr 'Usage:'
+! stdout 'Usage:'
+
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app", Short: "Test app"}
+	settings.BindRoot(root)
+	root.AddCommand(
+		settings.ServeCommand(&cobra.Command{Use: "serve", Short: "Run server"},
+			func(_ context.Context, s *settings.Serve) error {
+				fmt.Printf("host=%q port=%d debug=%t\n", s.ServerHost(), s.ServerPort(), s.LogDebug())
+				return nil
+			}),
+	)
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var Server = dsl.Group("server", "HTTP server",
+	dsl.String("host", "Listen host").Default("localhost"),
+	dsl.Int("port", "Listen port").Default(8080),
+)
+
+var Log = dsl.Group("log", "Logging",
+	dsl.Bool("debug", "Enable debug logging").Default(false),
+)
+
+var App = dsl.App("app", "Test application", Server, Log).EnvPrefix("APP")
+
+var Serve = dsl.Command("Serve").Uses(Server, Log)

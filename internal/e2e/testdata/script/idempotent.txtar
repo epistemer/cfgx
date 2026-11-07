@@ -1,0 +1,33 @@
+# Running go generate twice leaves zz_settings.go byte-identical and leaves no extra files in ./schema.
+go generate ./...
+exists internal/settings/zz_settings.go
+! exists internal/settings/schema/zz_cfgx_gen_main
+cp internal/settings/zz_settings.go zz_settings.first
+
+go generate ./...
+cmp internal/settings/zz_settings.go zz_settings.first
+! exists internal/settings/schema/zz_cfgx_gen_main
+
+rm internal/settings/zz_settings.go
+go generate ./...
+cmp internal/settings/zz_settings.go zz_settings.first
+! exists internal/settings/schema/zz_cfgx_gen_main
+
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var Server = dsl.Group("server", "HTTP server",
+	dsl.String("host", "Listen host").Default("localhost"),
+	dsl.Int("port", "Listen port").Default(8080),
+	dsl.Bool("tls", "Enable TLS"),
+)
+
+var App = dsl.App("app", "Test application", Server).EnvPrefix("APP")
+
+var Serve = dsl.Command("Serve").Uses(Server)

@@ -1,0 +1,18 @@
+# A schema with a compile error makes go generate fail and names schema.go and the line.
+! go generate ./...
+stderr 'schema\.go:6:'
+! exists internal/settings/zz_settings.go
+! exists internal/settings/schema/zz_cfgx_gen_main
+
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var App = dsl.App("broken", "Broken schema",
+	undefinedGroup,
+)

@@ -75,6 +75,15 @@ func TestScript(t *testing.T) {
 		t.Fatalf("query go env: %v", err)
 	}
 
+	gosum, err := os.ReadFile(filepath.Join(repoRoot, "go.sum"))
+	if err != nil {
+		t.Fatalf("read repo go.sum: %v", err)
+	}
+	reqs, err := moduleRequirements(repoRoot)
+	if err != nil {
+		t.Fatalf("list the repository's modules: %v", err)
+	}
+
 	testscript.Run(t, testscript.Params{
 		Dir: filepath.Join("testdata", "script"),
 		Cmds: map[string]func(ts *testscript.TestScript, neg bool, args []string){
@@ -82,8 +91,12 @@ func TestScript(t *testing.T) {
 		},
 		Setup: func(e *testscript.Env) error {
 			passEnv(e, goEnv)
-			gomod := formatGoMod(repoRoot)
-			return os.WriteFile(filepath.Join(e.WorkDir, "go.mod"), []byte(gomod), 0o644)
+			e.Setenv("CFGX_ROOT", repoRoot)
+			gomod := formatGoMod(repoRoot, reqs)
+			if err := os.WriteFile(filepath.Join(e.WorkDir, "go.mod"), []byte(gomod), 0o644); err != nil {
+				return err
+			}
+			return os.WriteFile(filepath.Join(e.WorkDir, "go.sum"), gosum, 0o644)
 		},
 	})
 }
@@ -184,14 +197,39 @@ func declaresModule(gomodContent, wantModule string) bool {
 	return false
 }
 
+// moduleRequirements lists every module in the repository's build list
+// except cfgx itself, as "path version" lines. Scripts require all of them,
+// so their go.mod never drifts from the repository's dependencies; the
+// repository's go.sum, copied next to it, covers every entry.
+func moduleRequirements(repoRoot string) ([]string, error) {
+	cmd := exec.Command("go", "list", "-m", "-f", "{{if not .Main}}{{.Path}} {{.Version}}{{end}}", "all")
+	cmd.Dir = repoRoot
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var reqs []string
+	for _, line := range strings.Split(string(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			reqs = append(reqs, line)
+		}
+	}
+	return reqs, nil
+}
+
 // formatGoMod returns the go.mod contents for an e2e script's working directory.
-func formatGoMod(repoRoot string) string {
-	return fmt.Sprintf(
-		"module example.com/e2e\n\ngo 1.26.0\n\nrequire %s v0.0.0\n\nreplace %s => %s\n",
-		cfgxModulePath,
-		cfgxModulePath,
-		quoteGoModToken(repoRoot),
-	)
+func formatGoMod(repoRoot string, reqs []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "module example.com/e2e\n\ngo 1.26.0\n\nrequire %s v0.0.0\n", cfgxModulePath)
+	if len(reqs) > 0 {
+		b.WriteString("\nrequire (\n")
+		for _, r := range reqs {
+			fmt.Fprintf(&b, "\t%s // indirect\n", r)
+		}
+		b.WriteString(")\n")
+	}
+	fmt.Fprintf(&b, "\nreplace %s => %s\n", cfgxModulePath, quoteGoModToken(repoRoot))
+	return b.String()
 }
 
 // quoteGoModToken quotes s for go.mod if it contains whitespace or special
