@@ -1,0 +1,7 @@
+# Git worktrees for delegated work (docs/roadmap.md, "Working with agents")
+/.worktrees/
+
+# Build and test output
+/bin/
+*.test
+/coverage.out

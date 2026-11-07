@@ -1,0 +1,3 @@
+# Check out text files with LF endings on every OS, so gofmt and golden files
+# behave the same on Windows.
+* text=auto eol=lf
