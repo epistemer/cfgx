@@ -55,13 +55,13 @@ There are two halves, connected by one contract, the **IR**:
 4. If the schema panics or doesn't compile, the generator reports the error at
    the user's `schema.go` location.
 
-**Placement [decided, ADR 0002]:** `go run -overlay`, at a stable virtual path
-inside the schema package's directory (`zz_cfgx_gen_main/main.go`, which must not
-exist on disk), with deterministic content. Nothing is written to the working
-tree, `--check` included, and warm runs hit the go command's executable cache.
-It takes about 0.1–0.3 s when nothing changed, about 0.3–0.5 s after a schema
-edit, and about 10 s on an empty cache. Module, workspace and vendor modes and
-`go generate` all work.
+**Placement [decided, ADR 0002, revised in M2.3]:** the temporary `main` sits
+at a virtual path in the working directory (`zz_cfgx_gen_main/main.go`, which
+must not exist on disk), inside the caller's own module. It's built with
+`go build -overlay` and the binary is run directly. Nothing is written to the
+working tree, `--check` included. A warm `cfgx gen` takes about 0.9 s on the
+walking skeleton, and about 10 s on an empty cache. Module, workspace and
+vendor modes and `go generate` all work.
 
 The temporary `main` writes the IR to a file the generator names rather than to
 stdout, so output from an `init` can't corrupt it. The generator resolves its

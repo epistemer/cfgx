@@ -1,0 +1,30 @@
+# The schema argument must name exactly one importable package.
+cd internal/settings
+
+# Go files instead of a package directory.
+! go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema/schema.go
+stderr 'names Go files; name the schema''s package directory instead'
+
+# A directory that doesn't exist.
+! go run github.com/epistemer/cfgx/cmd/cfgx gen ./nope
+stderr 'can''t find the schema package ./nope'
+
+# A main package.
+! go run github.com/epistemer/cfgx/cmd/cfgx gen ./mainschema
+stderr 'is a main package; a schema must be an importable package'
+
+! exists zz_settings.go
+! exists zz_cfgx_gen_main
+
+-- internal/settings/settings.go --
+package settings
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var App = dsl.App("app", "Test app")
+-- internal/settings/mainschema/main.go --
+package main
+
+func main() {}

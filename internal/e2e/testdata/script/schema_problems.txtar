@@ -1,0 +1,27 @@
+# Schema-level problems report schema.go:LINE and report all problems in a single run.
+! go generate ./...
+stderr 'schema\.go:6: key server\.host needs a description'
+stderr 'schema\.go:15: command Serve uses group "extra" \(declared at .*schema\.go:9\), which isn''t passed to dsl\.App'
+! exists internal/settings/zz_settings.go
+! exists internal/settings/schema/zz_cfgx_gen_main
+
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var Server = dsl.Group("server", "HTTP server",
+	dsl.String("host", ""),
+)
+
+var Extra = dsl.Group("extra", "Extra group not registered in App",
+	dsl.Int("port", "Port"),
+)
+
+var App = dsl.App("app", "Test app", Server)
+
+var Serve = dsl.Command("Serve").Uses(Server, Extra)

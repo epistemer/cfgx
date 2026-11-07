@@ -169,14 +169,21 @@ it gets wide.
 **Scope:** `String`, `Int`, `Bool`; one level of `Group`; `App` with
 `EnvPrefix`; `Command(...).Uses(...)`; `Default`. No config files yet.
 
+**Status (2026-11-08):** done. The pipeline runs end to end: a schema becomes
+generated code and a running binary. CI is green on all six jobs, and a warm
+`cfgx gen` takes about 0.9 s. Gemini wrote M2.6 and Claude reviewed it; Gemini
+reviewed M2.1–M2.5 and its 13 findings are fixed
+([review 0003](reviews/0003-gemini-m2-review.md)). The temporary `main` moved
+to the working directory and is built, then run (ADR 0002, revision).
+
 | ✓ | ID | Item | Size | Done when |
 |---|----|------|------|-----------|
-| ☐ | M2.1 | `internal/ir` v0: App, Group, Key, Command types; JSON encoding; a `Version` field; source positions | S | Round-trip tests pass |
-| ☐ | M2.2 | `dsl` v0: the constructors in scope, `runtime.Caller` capture, `dsl.Export` | M | `Export` output is golden-tested |
-| ☐ | M2.3 | `cfgx gen` loader (ADR 0002): DSL self-registration; the argument resolved with `go list -e`; the temporary `main` run through `go run -overlay`, writing its IR to a file; any `-overlay` in `GOFLAGS` merged; paths canonicalized; a timeout that dumps stacks on Unix; compile errors and panics mapped back to `schema.go` lines | M | testscript: a good schema produces IR; a broken schema reports `schema.go:LINE`; a schema whose `init` prints to stdout still works; a hung `init` times out; the schema directory is unchanged afterwards |
-| ☐ | M2.4 | `engine` v0: the `Key[V]` table type; default, env and flag layers; flag values that count only when `Changed`, with cfgx writing `(default …)` into the usage text itself (ADR 0003); loading only a command's own keys; the `atomic.Pointer` snapshot; basic `Errors` | L | Unit tests with hand-written tables; full default/env/flag precedence matrix |
-| ☐ | M2.5 | `internal/gen` v0 templates: the values struct, key table, group types and getters, group interfaces, command types, `XCommand` binders, `BindRoot`. Name derivation for file key, env, flag and getter, with collision checks for this subset. `go/format` plus `imports`. A **version guard**: generated code references `engine.GeneratedV1`, so a generator/runtime mismatch is a compile error. | L | Golden tests; output byte-identical across two runs; a test asserts no import of `cfgx/dsl` |
-| ☐ | M2.6 | `examples/mini` plus e2e: generate, build and run the binary. The example module declares `tool github.com/epistemer/cfgx/cmd/cfgx`, and the e2e `Setup` runs `go mod tidy` once cfgx has dependencies | M | testscript asserts flag > env > default, and that `--help` shows defaults, on all OSes |
+| ☑ | M2.1 | `internal/ir` v0: App, Group, Key, Command types; JSON encoding; a `Version` field; source positions | S | Round-trip tests pass |
+| ☑ | M2.2 | `dsl` v0: the constructors in scope, `runtime.Caller` capture, `dsl.Export` | M | `Export` output is golden-tested |
+| ☑ | M2.3 | `cfgx gen` loader (ADR 0002): DSL self-registration; the argument resolved with `go list -e`; the temporary `main` built with `go build -overlay` and run directly, writing its IR to a file; any `-overlay` in `GOFLAGS` merged; paths canonicalized; a timeout that dumps stacks on Unix; compile errors and panics mapped back to `schema.go` lines | M | testscript: a good schema produces IR; a broken schema reports `schema.go:LINE`; a schema whose `init` prints to stdout still works; a hung `init` times out; the schema directory is unchanged afterwards |
+| ☑ | M2.4 | `engine` v0: the `Key[V]` table type; default, env and flag layers; flag values that count only when `Changed`, with cfgx writing `(default …)` into the usage text itself (ADR 0003); loading only a command's own keys; the `atomic.Pointer` snapshot; basic `Errors` | L | Unit tests with hand-written tables; full default/env/flag precedence matrix |
+| ☑ | M2.5 | `internal/gen` v0 templates: the values struct, key table, group types and getters, group interfaces, command types, `XCommand` binders, `BindRoot`. Name derivation for file key, env, flag and getter, with collision checks for this subset. `go/format` plus `imports`. A **version guard**: generated code references `engine.GeneratedV1`, so a generator/runtime mismatch is a compile error. | L | Golden tests; output byte-identical across two runs; a test asserts no import of `cfgx/dsl` |
+| ☑ | M2.6 | `examples/mini` plus e2e: generate, build and run the binary. The example module declares `tool github.com/epistemer/cfgx/cmd/cfgx`, and the e2e `Setup` runs `go mod tidy` once cfgx has dependencies | M | testscript asserts flag > env > default, and that `--help` shows defaults, on all OSes |
 
 **Exit:** the walking skeleton runs on CI, and the generate time is recorded in
 the S1 ADR.

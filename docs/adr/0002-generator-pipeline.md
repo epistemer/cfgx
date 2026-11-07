@@ -109,3 +109,26 @@ temporary directory removed on exit and on signals.
   temp or home directories are symlinks (F08).
 - The computed-method pass (implementation §2.3) also works through an overlay,
   so `cfgx gen` writes nothing but its final outputs (F06).
+
+## Revision (M2.3, 2026-11-08)
+
+Building M2.3 and its review ([review 0003](../reviews/0003-gemini-m2-review.md),
+F04 and F06) changed two details. The decision itself (an overlay, nothing
+written to the tree) stands.
+
+- **The temporary `main` lives in the working directory**, the package that
+  holds the generated code, not in the schema's directory. That keeps the
+  caller's own module in charge: its go.mod, replace directives, vendor
+  directory and `internal/` visibility. Compile errors are also reported
+  relative to where `go generate` runs.
+- **It's built with `go build -overlay` and then run directly**, instead of
+  `go run`. Only the schema program gets SIGQUIT on a timeout, so its stacks
+  aren't buried under the go command's, and a compile error is reported
+  separately from a failure while running.
+
+Measured on the walking skeleton (Linux, Go 1.27.3, warm cache): about 0.9 s per
+`cfgx gen`. That's `go list` (0.28 s) in parallel with `go env GOFLAGS`
+(0.17 s), then `go build` (0.33–0.65 s; `go run` measured about the same here),
+then the run itself (under 10 ms). It's slower than the spike's estimate, still
+under the 2 s target, and the build step is where to look if it needs to be
+faster.
