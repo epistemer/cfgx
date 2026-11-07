@@ -187,7 +187,7 @@ func declaresModule(gomodContent, wantModule string) bool {
 // formatGoMod returns the go.mod contents for an e2e script's working directory.
 func formatGoMod(repoRoot string) string {
 	return fmt.Sprintf(
-		"module example.com/e2e\n\ngo 1.26\n\nrequire %s v0.0.0\n\nreplace %s => %s\n",
+		"module example.com/e2e\n\ngo 1.26.0\n\nrequire %s v0.0.0\n\nreplace %s => %s\n",
 		cfgxModulePath,
 		cfgxModulePath,
 		quoteGoModToken(repoRoot),

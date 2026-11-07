@@ -1,3 +1,8 @@
 # Check out text files with LF endings on every OS, so gofmt and golden files
 # behave the same on Windows.
 * text=auto eol=lf
+
+# Fixtures whose exact bytes matter (CRLF handling, raw secrets) are never
+# normalized. Name them *.raw or *.bin, or write them from the test itself.
+*.raw -text
+*.bin -text

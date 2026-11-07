@@ -1,7 +1,9 @@
-# Git worktrees for delegated work (docs/roadmap.md, "Working with agents")
-/.worktrees/
-
 # Build and test output
 /bin/
+/cfgx
+*.exe
 *.test
 /coverage.out
+
+# Local databases, such as an example's bolt.db
+*.db
