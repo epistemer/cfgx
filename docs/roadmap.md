@@ -10,6 +10,9 @@
 
 ## How to use this document
 
+- **Ownership.** Until `v1.0.0`, Claude owns the project for epistemer. The
+  terms are in [ownership.md](ownership.md); every session is logged in
+  [status.md](status.md).
 - **IDs.** Every work item has an ID (`M3.2`), and each item is sized to fit one
   PR or one focused working session. Branch names, PR titles and commit
   subjects start with the ID: `M3.2: file discovery`.
@@ -112,13 +115,11 @@ graph LR
 **Goal:** an empty repository where CI, linting and the end-to-end test harness
 already work, so every later PR is tested the same way.
 
-**Status (2026-11-07):** done on branch `m0-foundation`, and complete once it's
-merged into `main`. The
+**Status (2026-11-07):** complete and merged into `main`. The
 [first CI run](https://github.com/epistemer/cfgx/actions/runs/42413478830) passed
 all six jobs, and the e2e script really ran on every OS (1.1–1.7 s per job, not
 a skip). Gemini wrote M0.2 and M0.3 and Claude reviewed them; Gemini reviewed
-M0.1 and M0.4, and its seven findings are fixed. The boxes are ticked on this
-branch, so they become true on `main` exactly when it's merged.
+M0.1 and M0.4, and its seven findings are fixed.
 
 | ✓ | ID | Item | Size | Done when |
 |---|----|------|------|-----------|
@@ -396,9 +397,9 @@ walks into dot-directories and would see them.
 
 | Worker | Best at | Owns |
 |--------|---------|------|
-| Claude (this or a new Claude Code session) | Cross-cutting design, the engine and generator core | Design-heavy items, integrating every branch, reviewing Gemini's work |
+| Claude (this or a new Claude Code session) | Cross-cutting design, the engine and generator core | Owner until `v1.0.0` ([ownership.md](ownership.md)): planning, design-heavy items, integrating and merging, reviewing Gemini's work |
 | agy → Gemini 4 Argon | Well-specified items with a crisp done-when; web research | Leaf items: parsers, emitters, test suites, templates, research |
-| You | Judgement calls | Amendments, milestone exits, merges, the open decisions below, M6.7 (a manual check) |
+| You | Judgement calls | Releases, changes to D1–D11, anything outside this repository, the decisions reserved for you below, M6.7 (a manual check) |
 
 Suggested split. The lanes in [Parallel work](#parallel-work) still decide who
 may touch which files at a given time.
@@ -422,10 +423,11 @@ Rules:
 2. **One worktree and branch per writing task**, and one writer per set of files
    at a time.
 3. **Cross-model review before merge.** Claude's PRs get agy's adversarial
-   review; Gemini's PRs get Claude's review. You merge.
+   review; Gemini's PRs get Claude's review. Claude merges once CI is green.
 4. **Agents don't change the interface.** If an item needs an amendment, the
    agent stops and reports it.
-5. **Spikes report; you decide.** An agent drafts the ADR, and you accept it.
+5. **Spikes report; the owner decides.** An agent may draft the ADR; Claude
+   accepts it, unless it touches D1–D11, which goes to you.
 
 **Effect on the schedule.** The developer-day sizes still show how big items are
 relative to each other, but no longer how long they take. With agents writing
@@ -444,5 +446,6 @@ you can review a few PRs a day.
 | Keys covered by the `config` subcommand | **Whole app**, with an optional command argument (A3) |
 | How an app declares and reaches its store | **`App.Store(pathKey)`** plus an injected `Store()` (A1) |
 | Default agent model | **Gemini 4 Argon (High)** via agy |
+| Project owner until `v1.0.0` | **Claude**, acting for you ([ownership.md](ownership.md)) |
 | `cfgx init` skeleton contents | Open, needed by M8.1 (the proposal there now uses logrus) |
 | Which zp settings become mutable | Open, needed by M10.3 |
