@@ -435,9 +435,23 @@ How Claude picks Gemini's model and effort for each task:
 
 | Task | Model and effort |
 |------|------------------|
-| Implementation that needs judgement, spikes, adversarial reviews | Gemini 4 Argon (High), the default |
-| Well-specified implementation with tests to meet | Gemini 4 Argon (Medium) |
-| Mechanical edits, test tables, web and doc lookups | Gemini 3.8 Flash (High) |
+| The one pre-merge review per milestone, spikes, design critiques | Gemini 4 Argon (High) |
+| Well-specified implementation with tests to meet; reviews of small changes such as one amendment | Gemini 4 Argon (Medium), or Gemini 3.8 Flash (High) for a small package |
+| Mechanical edits, small leaf packages, test tables | Gemini 3.8 Flash (Medium) |
+| Web and doc lookups | Gemini 3.8 Flash (Low) |
+
+Token budget (added 2026-11-08, after Argon ran out of quota for six days
+mid-M3):
+- Every agy call names its model. The saved default puts Argon (High) ahead
+  of every tool, so a call without a model silently uses it.
+- Argon (High) is rationed to about one run per milestone, normally the
+  pre-merge review.
+- A review gets the diff only, plus the interface sections it is judged
+  against, pasted as short excerpts. It doesn't get whole docs, or the full
+  files behind the diff as well.
+- Briefs name repo files by path instead of pasting them.
+- Each milestone's status entry says which model did what, and roughly what it
+  cost.
 
 Rules:
 1. **One brief per work item:** its ID, its done-when, the doc sections it
