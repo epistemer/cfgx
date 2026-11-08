@@ -172,7 +172,8 @@ func TestNestedGolden(t *testing.T) {
 }
 
 func TestLowerGo(t *testing.T) {
-	for in, want := range map[string]string{"DB": "db", "HTTPServer": "httpServer", "Mail": "mail", "MyDB": "myDB", "X": "x"} {
+	for in, want := range map[string]string{"DB": "db", "HTTPServer": "httpServer", "Mail": "mail", "MyDB": "myDB", "X": "x",
+		"DB1": "db1", "HTTP2": "http2", "HTTP2Server": "http2Server", "S3Bucket": "s3Bucket"} {
 		if got := lowerGo(in); got != want {
 			t.Errorf("lowerGo(%q) = %q, want %q", in, got, want)
 		}
@@ -258,6 +259,8 @@ func TestChecks(t *testing.T) {
 			a.Tags = []ir.Tag{{Name: "Mailer", Desc: "x"}, {Name: "Mailer", Desc: "y"}}
 			a.Groups[1].Tags = []string{"Mailer"}
 		}, "tag Mailer is declared twice"},
+		{"key with an undeclared tag", func(a *ir.App) { a.Groups[0].Keys[0].Tags = []string{"Mailr"} }, "key database.host has tag Mailr, which isn't declared"},
+		{"group with an undeclared tag", func(a *ir.App) { a.Groups[0].Tags = []string{"Mailr"} }, "group database has tag Mailr, which isn't declared"},
 		{"command uses an unknown tag", func(a *ir.App) { a.Commands[0].Tags = []string{"Nope"} }, "uses tag Nope, which isn't declared"},
 		{"global unknown", func(a *ir.App) { a.Global = append(a.Global, "nope") }, `Global lists group "nope"`},
 		{"global twice", func(a *ir.App) { a.Global = append(a.Global, "log") }, `Global lists group "log" twice`},

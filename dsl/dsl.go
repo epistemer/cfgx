@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"runtime"
 	"strconv"
 
@@ -117,8 +118,11 @@ func Group(name, desc string, members ...Member) *GroupDef {
 	for _, m := range members {
 		switch m := m.(type) {
 		case *GroupDef:
-			g.groups = append(g.groups, m)
+			g.groups = append(g.groups, m) // a nil *GroupDef is reported by Export
 		case KeyDef:
+			if v := reflect.ValueOf(m); v.Kind() == reflect.Pointer && v.IsNil() {
+				m = nil // a nil *StringKey would panic in base(); report it instead
+			}
 			g.keys = append(g.keys, m)
 		default:
 			// A nil key or group: Export reports it with the group's position.

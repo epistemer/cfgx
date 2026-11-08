@@ -4,6 +4,36 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-08: M4.3, M5.1 and M5.2
+
+- **Landed:** through a PR:
+  - `cfgx.Secret` is in package `cfgx` (ADR 0006), and its leak suite now runs
+    in CI.
+  - Nested groups produce embedded interfaces (`Scheduler` embeds
+    `SchedulerRetry`).
+  - Dotted key names nest the file key without adding an interface.
+  - `Group.GoName`, `Group.FlagPrefix` and `App.Initialisms` work.
+  - Tags work: `dsl.Tag`, `.Tags` on keys and groups, and `Uses(tag)`. A
+    command that uses only `Mailer` gets exactly the tagged getters (A5).
+- **Reviewed:** Gemini 3.8 Flash (High) reviewed the diff for about 150k
+  tokens, a third of M3's review. 3 of its 5 findings were real and are fixed
+  ([review 0005](reviews/0005-gemini-m4.3-m5.2-review.md)): a nil key
+  panicked instead of being reported, `GoName("DB1")` gave `dB1Group`, and an
+  undeclared tag was ignored. The other 2 were false positives, already
+  covered by tests.
+- **Decided for you:** the structure rules in implementation.md §2.3a. Among
+  them: a group has one place in the tree; nested groups inherit their
+  parent's flag prefix; a tag on no key is an error. Gemini did no
+  implementation this round, because M4.3 was a move and M5.1 and M5.2 touch
+  the same files; briefing it would have cost more than doing the work.
+- **Noticed:** interface §3.1's key `emailfrom` derives `AuthEmailfrom()`,
+  while §5.1 shows `AuthEmailFrom()`. M5.8's example needs `email_from` or a
+  key `GoName` (M4.9); noted in the roadmap.
+- **Next:** M5.3 (rules), M5.4 and M5.5 (to Gemini, Flash or Argon Medium),
+  M5.6 (computed methods) and M5.7 (checks); the Argon High second review of
+  M3 once its quota resets.
+- **Waiting on you:** nothing.
+
 ## 2026-11-08: M3 config files, errors and provenance
 
 - **Landed:** M3 through a PR. Config files are the lowest explicit layer

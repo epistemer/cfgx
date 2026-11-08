@@ -157,14 +157,14 @@ func (n *namer) lowerCamel(s string) string {
 // HTTPServer → httpServer, Mail → mail.
 func lowerGo(s string) string {
 	r := []rune(s)
-	n := 0
-	for n < len(r) && unicode.IsUpper(r[n]) {
+	n := 0 // the leading run of capitals, digits included after the first
+	for n < len(r) && (unicode.IsUpper(r[n]) || n > 0 && unicode.IsDigit(r[n])) {
 		n++
 	}
-	switch {
-	case n == len(r):
-		return strings.ToLower(s)
-	case n > 1:
+	if n == len(r) {
+		return strings.ToLower(s) // DB, DB1
+	}
+	if n > 1 && unicode.IsLower(r[n]) {
 		n-- // HTTPServer: keep the S of Server
 	}
 	return strings.ToLower(string(r[:n])) + string(r[n:])
@@ -268,6 +268,11 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 
 	var walk func(g ir.Group, parent *GroupModel, inherited []string) *GroupModel
 	walk = func(g ir.Group, parent *GroupModel, inherited []string) *GroupModel {
+		for _, t := range g.Tags {
+			if _, ok := tagSet[t]; !ok {
+				bad(g.Pos, "group %s has tag %s, which isn't declared", g.Name, t)
+			}
+		}
 		inherited = append(append([]string(nil), inherited...), g.Tags...)
 		if !nameRE.MatchString(g.Name) {
 			bad(g.Pos, "group name %q must start with a lower-case letter and use only a-z, 0-9 and _", g.Name)
@@ -347,6 +352,11 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				continue
 			}
 			km.Required = k.Required
+			for _, t := range k.Tags {
+				if _, ok := tagSet[t]; !ok {
+					bad(k.Pos, "key %s has tag %s, which isn't declared", km.Path, t)
+				}
+			}
 			for _, t := range append(append([]string(nil), inherited...), k.Tags...) {
 				if !slices.Contains(km.Tags, t) {
 					km.Tags = append(km.Tags, t)
