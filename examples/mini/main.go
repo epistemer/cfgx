@@ -35,13 +35,13 @@ func main() {
 }
 
 func runServe(_ context.Context, s *settings.Serve) error {
-	fmt.Printf("serve: host=%q port=%d tls=%t %s\n",
-		s.ServerHost(), s.ServerPort(), s.ServerTLS(), formatDB(s))
+	fmt.Printf("serve: host=%q port=%d tls=%t %s verbose=%t\n",
+		s.ServerHost(), s.ServerPort(), s.ServerTLS(), formatDB(s), s.LogVerbose())
 	return nil
 }
 
 func runMigrate(_ context.Context, m *settings.Migrate) error {
-	fmt.Printf("migrate: %s\n", formatDB(m))
+	fmt.Printf("migrate: %s verbose=%t\n", formatDB(m), m.LogVerbose())
 	return nil
 }
 

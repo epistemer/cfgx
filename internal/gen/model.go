@@ -14,10 +14,15 @@ import (
 
 // Model is the IR plus every derived name, ready to render.
 type Model struct {
-	Package  string
-	Keys     []*KeyModel
-	Groups   []*GroupModel
-	Commands []*CommandModel
+	Package     string
+	EnvPrefix   string
+	ConfigFile  string
+	SearchPaths []string
+	Formats     []string
+	GlobalIdx   []int // indexes of the keys in Global groups
+	Keys        []*KeyModel
+	Groups      []*GroupModel
+	Commands    []*CommandModel
 }
 
 // KeyModel is one key with its derived names.
@@ -26,9 +31,11 @@ type KeyModel struct {
 	Path, Desc               string
 	Field, Getter, Flag, Env string
 	GoType, FlagType, Parse  string
+	IsSet                    string // Go expression on v: is the value non-zero?
 	HasDefault               bool
 	DefaultText, DefaultLit  string
 	Quote, Bool              bool
+	Required, Global         bool
 }
 
 // GroupModel is one group: its interface and the type that implements it.
@@ -144,9 +151,10 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		bad(app.Pos, "the generated code's package name %q isn't a valid Go package name", pkg)
 	}
 
-	m := &Model{Package: pkg}
+	m := &Model{Package: pkg, EnvPrefix: prefix, ConfigFile: app.ConfigFile, SearchPaths: app.SearchPaths, Formats: app.Formats}
+	checkConfigFile(app, bad)
 	// Every generated identifier, to catch collisions between them.
-	idents := map[string]ir.Pos{"values": app.Pos, "keys": app.Pos, "root": app.Pos, "BindRoot": app.Pos}
+	idents := map[string]ir.Pos{"values": app.Pos, "keys": app.Pos, "root": app.Pos, "app": app.Pos, "BindRoot": app.Pos}
 	claim := func(name string, pos ir.Pos, what string) {
 		if prev, ok := idents[name]; ok {
 			bad(pos, "%s %s collides with another generated name (from %s)", what, name, prev)
@@ -201,6 +209,10 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				bad(k.Pos, "%v", err)
 				continue
 			}
+			km.Required = k.Required
+			if k.Required && km.HasDefault {
+				bad(k.Pos, "%s is Required and has a default, so Required has no effect; drop one", km.Path)
+			}
 			for _, c := range []struct {
 				seen map[string]ir.Pos
 				name string
@@ -215,6 +227,30 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			m.Keys = append(m.Keys, km)
 		}
 	}
+
+	var globals []*GroupModel
+	isGlobal := map[string]bool{}
+	for _, o := range app.GlobalOrphans {
+		bad(app.Pos, "Global lists group %q (declared at %s), which isn't passed to dsl.App", o.Name, o.Pos)
+	}
+	for _, name := range app.Global {
+		gm, ok := groups[name]
+		if !ok {
+			bad(app.Pos, "Global lists group %q, which isn't in the dsl.App", name)
+			continue
+		}
+		if isGlobal[name] {
+			bad(app.Pos, "Global lists group %q twice", name)
+			continue
+		}
+		isGlobal[name] = true
+		globals = append(globals, gm)
+		for _, k := range gm.Keys {
+			k.Global = true
+			m.GlobalIdx = append(m.GlobalIdx, k.Index)
+		}
+	}
+	sort.Ints(m.GlobalIdx)
 
 	cmdNames := map[string]bool{}
 	for _, c := range app.Commands {
@@ -235,11 +271,23 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		for _, o := range c.Orphans {
 			bad(c.Pos, "command %s uses group %q (declared at %s), which isn't passed to dsl.App", c.Name, o.Name, o.Pos)
 		}
+		// Every command gets the Global groups; using one explicitly as well
+		// is harmless.
 		used := map[string]bool{}
+		for _, gm := range globals {
+			used[gm.Name] = true
+			cm.Groups = append(cm.Groups, gm)
+			for _, k := range gm.Keys {
+				cm.KeyIdx = append(cm.KeyIdx, k.Index)
+			}
+		}
 		for _, u := range c.Uses {
 			gm, ok := groups[u]
 			if !ok {
 				bad(c.Pos, "command %s uses group %q, which isn't in the dsl.App", c.Name, u)
+				continue
+			}
+			if isGlobal[u] {
 				continue
 			}
 			if used[u] {
@@ -262,6 +310,41 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	return m, nil
 }
 
+// checkConfigFile checks App.ConfigFile and App.Formats.
+func checkConfigFile(app *ir.App, bad func(ir.Pos, string, ...any)) {
+	base := app.ConfigFile
+	if base == "" {
+		if len(app.SearchPaths) > 0 {
+			bad(app.Pos, "ConfigFile needs a basename, such as \"config\"")
+		}
+		if len(app.Formats) > 0 {
+			bad(app.Pos, "Formats has no effect without ConfigFile")
+		}
+		return
+	}
+	switch {
+	case base == "." || base == ".." || strings.ContainsAny(base, `/\`):
+		bad(app.Pos, "ConfigFile basename %q must be a file name without a directory; put directories in the search paths", base)
+	case strings.HasSuffix(base, ".yaml") || strings.HasSuffix(base, ".yml") || strings.HasSuffix(base, ".json"):
+		bad(app.Pos, "ConfigFile basename %q must not have an extension: cfgx tries .yaml, .yml and .json", base)
+	}
+	for _, p := range app.SearchPaths {
+		if strings.TrimSpace(p) == "" {
+			bad(app.Pos, "ConfigFile has an empty search path; use \".\" for the working directory")
+		}
+	}
+	seen := map[string]bool{}
+	for _, f := range app.Formats {
+		if f != "yaml" && f != "json" {
+			bad(app.Pos, "unknown config file format %q; use dsl.YAML or dsl.JSON", f)
+		}
+		if seen[f] {
+			bad(app.Pos, "Formats lists %s twice", f)
+		}
+		seen[f] = true
+	}
+}
+
 func kindInfo(km *KeyModel, k ir.Key) error {
 	km.HasDefault = k.Default != nil
 	if km.HasDefault {
@@ -270,9 +353,11 @@ func kindInfo(km *KeyModel, k ir.Key) error {
 	switch k.Kind {
 	case ir.KindString:
 		km.GoType, km.FlagType, km.Parse, km.Quote = "string", "string", "ParseString", true
+		km.IsSet = "v." + km.Field + ` != ""`
 		km.DefaultLit = strconv.Quote(km.DefaultText)
 	case ir.KindInt:
 		km.GoType, km.FlagType, km.Parse = "int", "int", "ParseInt"
+		km.IsSet = "v." + km.Field + " != 0"
 		if km.HasDefault {
 			n, err := strconv.ParseInt(km.DefaultText, 10, 64)
 			if err != nil {
@@ -283,6 +368,7 @@ func kindInfo(km *KeyModel, k ir.Key) error {
 		km.DefaultLit = km.DefaultText
 	case ir.KindBool:
 		km.GoType, km.FlagType, km.Parse, km.Bool = "bool", "bool", "ParseBool", true
+		km.IsSet = "v." + km.Field
 		if km.HasDefault {
 			b, err := strconv.ParseBool(km.DefaultText)
 			if err != nil {

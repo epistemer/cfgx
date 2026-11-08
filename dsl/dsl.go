@@ -29,6 +29,10 @@ func caller(skip int) ir.Pos {
 type AppDef struct {
 	name, desc, envPrefix string
 	groups                []*GroupDef
+	configFile            string
+	searchPaths           []string
+	formats               []Format
+	global                []*GroupDef
 	pos                   ir.Pos
 }
 
@@ -43,6 +47,41 @@ func App(name, desc string, groups ...*GroupDef) *AppDef {
 // app name.
 func (a *AppDef) EnvPrefix(p string) *AppDef {
 	a.envPrefix = p
+	return a
+}
+
+// ConfigFile makes the app read a config file named basename plus .yaml,
+// .yml or .json. The search paths are tried in order, and the first one with
+// a match wins; $VAR and ${VAR} are expanded, and a path that uses an unset
+// or empty variable is skipped. Two matches in one directory are an error,
+// and finding nothing is fine. --config, or the env var <PREFIX>_CONFIG,
+// names the file instead, which must then exist.
+func (a *AppDef) ConfigFile(basename string, searchPaths ...string) *AppDef {
+	a.configFile = basename
+	a.searchPaths = append([]string(nil), searchPaths...)
+	return a
+}
+
+// Format is a config file format.
+type Format string
+
+// The config file formats.
+const (
+	YAML Format = "yaml" // .yaml and .yml
+	JSON Format = "json" // .json
+)
+
+// Formats restricts the accepted config file formats. The default is both.
+func (a *AppDef) Formats(formats ...Format) *AppDef {
+	a.formats = append(a.formats, formats...)
+	return a
+}
+
+// Global gives every command the keys of groups, and binds their flags as
+// persistent flags on the root command. The groups must also be passed to
+// App.
+func (a *AppDef) Global(groups ...*GroupDef) *AppDef {
+	a.global = append(a.global, groups...)
 	return a
 }
 
@@ -67,10 +106,19 @@ type keyBase struct {
 	name, desc string
 	kind       ir.Kind
 	def        *string
+	required   bool
 	pos        ir.Pos
 }
 
 func (k *keyBase) base() *keyBase { return k }
+
+// Required makes loading fail when the key isn't set: when its value is
+// empty or zero (false for a Bool) after every source is merged. Only the
+// commands that load the key check it.
+func (k *StringKey) Required() *StringKey {
+	k.required = true
+	return k
+}
 
 // StringKey is a string setting. Create it with String.
 type StringKey struct{ keyBase }
@@ -86,6 +134,14 @@ func (k *StringKey) Default(v string) *StringKey {
 	return k
 }
 
+// Required makes loading fail when the key isn't set: when its value is
+// empty or zero (false for a Bool) after every source is merged. Only the
+// commands that load the key check it.
+func (k *IntKey) Required() *IntKey {
+	k.required = true
+	return k
+}
+
 // IntKey is an int setting. Create it with Int.
 type IntKey struct{ keyBase }
 
@@ -98,6 +154,14 @@ func Int(name, desc string) *IntKey {
 func (k *IntKey) Default(v int) *IntKey {
 	s := strconv.Itoa(v)
 	k.def = &s
+	return k
+}
+
+// Required makes loading fail when the key isn't set: when its value is
+// empty or zero (false for a Bool) after every source is merged. Only the
+// commands that load the key check it.
+func (k *BoolKey) Required() *BoolKey {
+	k.required = true
 	return k
 }
 
@@ -155,7 +219,11 @@ func Export(w io.Writer) error {
 		return fmt.Errorf("the schema declares %d dsl.App values (at %s and %s); declare exactly one", len(apps), apps[0].pos, apps[1].pos)
 	}
 	a := apps[0]
-	out := &ir.App{Version: ir.Version, Name: a.name, Desc: a.desc, EnvPrefix: a.envPrefix, Pos: a.pos}
+	out := &ir.App{Version: ir.Version, Name: a.name, Desc: a.desc, EnvPrefix: a.envPrefix,
+		ConfigFile: a.configFile, SearchPaths: a.searchPaths, Pos: a.pos}
+	for _, f := range a.formats {
+		out.Formats = append(out.Formats, string(f))
+	}
 	inApp := map[*GroupDef]bool{}
 	for _, g := range a.groups {
 		if g == nil {
@@ -168,9 +236,19 @@ func Export(w io.Writer) error {
 				return fmt.Errorf("%s: group %q lists a nil key", g.pos, g.name)
 			}
 			k := kd.base()
-			ig.Keys = append(ig.Keys, ir.Key{Name: k.name, Desc: k.desc, Kind: k.kind, Default: k.def, Pos: k.pos})
+			ig.Keys = append(ig.Keys, ir.Key{Name: k.name, Desc: k.desc, Kind: k.kind, Default: k.def, Required: k.required, Pos: k.pos})
 		}
 		out.Groups = append(out.Groups, ig)
+	}
+	for _, g := range a.global {
+		if g == nil {
+			return fmt.Errorf("%s: dsl.App.Global lists a nil group", a.pos)
+		}
+		if !inApp[g] {
+			out.GlobalOrphans = append(out.GlobalOrphans, ir.Ref{Name: g.name, Pos: g.pos})
+			continue
+		}
+		out.Global = append(out.Global, g.name)
 	}
 	for _, c := range commands {
 		ic := ir.Command{Name: c.name, Pos: c.pos, Uses: []string{}}

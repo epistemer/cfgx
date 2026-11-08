@@ -17,11 +17,22 @@ var Database = dsl.Group("database", "Database connection",
 	dsl.Bool("debug", "Log SQL queries").Default(false),
 )
 
-// App is the root schema declaration for mini.
+// Log settings are global: every command gets them, and their flags are
+// persistent flags on the root command.
+var Log = dsl.Group("log", "Logging",
+	dsl.Bool("verbose", "Log more"),
+)
+
+// App is the root schema declaration for mini. It reads mini.yaml, mini.yml
+// or mini.json from the working directory or ~/.config/mini, unless --config
+// or MINI_CONFIG names a file.
 var App = dsl.App("mini", "Minimal cfgx example",
 	Server,
 	Database,
-).EnvPrefix("MINI")
+	Log,
+).EnvPrefix("MINI").
+	ConfigFile("mini", ".", "$HOME/.config/mini").
+	Global(Log)
 
 // Commands declare which groups each CLI command uses.
 var (

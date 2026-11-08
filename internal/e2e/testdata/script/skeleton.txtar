@@ -45,7 +45,8 @@ stdout '^host="" port=0 debug=false\r?\n$'
 # and exits non-zero without printing usage text.
 env APP_SERVER_PORT=notanint
 ! exec ./app$exe serve
-stderr 'invalid configuration \(1 problem\)'
+stderr '^app: invalid configuration \(1 problem\)\r?$'
+! stderr 'Error:'
 stderr 'server\.port: "notanint" is not an integer \(env APP_SERVER_PORT\)'
 ! stderr 'Usage:'
 ! stdout 'Usage:'

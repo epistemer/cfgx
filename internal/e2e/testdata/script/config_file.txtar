@@ -1,0 +1,226 @@
+# M3: config files, warnings, Required, Global groups and the binder.
+# testscript can't unset a variable, so the steps that set env vars come last.
+go generate ./...
+go build -o app$exe .
+mkdir work
+cd work
+
+# Required is checked only for the command's own keys: migrate doesn't load
+# smtp.host, so it runs without one; serve fails, with no usage text and no
+# cobra "Error:" line, and exits non-zero. Run functions get cmd.Context().
+exec ../app$exe migrate
+stdout '^migrate: db=localhost:5432 debug=false ctx=from-main\r?\n$'
+! stderr .
+! exec ../app$exe serve
+cmp stderr ../want/required.txt
+! stdout .
+
+# The config file in the working directory is found. The global flag works
+# before and after the subcommand.
+cp ../files/app.yaml app.yaml
+exec ../app$exe serve
+stdout '^serve: db=db.internal:6432 smtp=mail.internal debug=false\r?\n$'
+! stderr .
+exec ../app$exe serve --log-debug
+stdout '^serve: db=db.internal:6432 smtp=mail.internal debug=true\r?\n$'
+exec ../app$exe --log-debug migrate
+stdout 'debug=true'
+
+# Typos in the file are warnings with suggestions.
+cp ../files/typos.yaml app.yaml
+exec ../app$exe migrate
+cmp stderr ../want/typos.txt
+
+# cfgx.WithLogger sends warnings to the app's logger instead of stderr.
+env LOGGER_JSON=1
+exec ../app$exe migrate
+! stderr .
+stdout '"level":"WARN","msg":"unknown key \\"databse\\" in app.yaml:1:1; did you mean \\"database\\"\?","key":"databse","source":"app.yaml:1:1"'
+env LOGGER_JSON=
+
+# With an error, the problems come first and then the warnings.
+cp ../files/bad.yaml app.yaml
+! exec ../app$exe migrate
+cmp stderr ../want/bad.txt
+
+# A file that isn't valid is an error with its position.
+cp ../files/dup.yaml app.yaml
+! exec ../app$exe migrate
+stderr '^app: the config file is invalid: app.yaml:3:3: duplicate key "port" \(first at 2:3\)\r?$'
+
+# Two matches in one directory is an error.
+cp ../files/app.yaml app.yaml
+cp ../files/app.json app.json
+! exec ../app$exe migrate
+stderr '^app: found more than one config file: app.yaml and app.json; keep one\r?$'
+rm app.yaml
+
+# JSON works the same way, through the same parser.
+exec ../app$exe migrate
+stdout '^migrate: db=json.internal:5432 '
+rm app.json
+
+# A search path whose variable is unset or empty is skipped; once set, it is
+# searched.
+exec ../app$exe migrate
+stdout 'db=localhost:5432 '
+mkdir ../etc
+cp ../files/app.yaml ../etc/app.yaml
+env APPDIR=$WORK${/}etc
+exec ../app$exe migrate
+stdout 'db=db.internal:6432 '
+env APPDIR=
+exec ../app$exe migrate
+stdout 'db=localhost:5432 '
+
+# --config and APP_CONFIG name a file, which must exist; --config wins.
+cp ../files/app.json ../other.json
+exec ../app$exe migrate --config ../other.json
+stdout 'db=json.internal:5432 '
+env APP_CONFIG=../etc/app.yaml
+exec ../app$exe migrate
+stdout 'db=db.internal:6432 '
+exec ../app$exe migrate --config ../other.json
+stdout 'db=json.internal:5432 '
+! exec ../app$exe migrate --config ../missing.yaml
+stderr '^app: the config file ../missing.yaml \(from --config\) doesn''t exist\r?$'
+env APP_CONFIG=../missing.yaml
+! exec ../app$exe migrate
+stderr '^app: the config file ../missing.yaml \(from APP_CONFIG\) doesn''t exist\r?$'
+env APP_CONFIG=
+
+# --help shows the global flags and where the config file is looked for.
+exec ../app$exe serve --help
+stdout 'Global Flags:'
+stdout '--config path\s+config file; overrides APP_CONFIG \(default: app.yaml, .yml or .json in . or \$APPDIR\)'
+stdout '--log-debug\s+Debug logging'
+
+# Env beats the file, and a flag beats env.
+cp ../files/app.yaml app.yaml
+env APP_DATABASE_PORT=7000
+exec ../app$exe serve
+stdout 'db=db.internal:7000 '
+exec ../app$exe serve --database-port 7001
+stdout 'db=db.internal:7001 '
+
+# An empty env var clears the file's value, so the required key is missing.
+env APP_SMTP_HOST=
+! exec ../app$exe serve
+stderr '^  smtp.host: is required, but is empty \(env APP_SMTP_HOST\)\r?$'
+
+# An env var with the app's prefix that matches no key is a warning.
+env APP_DATABSE_HOST=x
+exec ../app$exe migrate
+cmp stderr ../want/env.txt
+
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"os"
+
+	"github.com/epistemer/cfgx"
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+type ctxKey struct{}
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	var opts []cfgx.Option
+	if os.Getenv("LOGGER_JSON") != "" {
+		opts = append(opts, cfgx.WithLogger(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+				if a.Key == slog.TimeKey {
+					return slog.Attr{}
+				}
+				return a
+			},
+		}))))
+	}
+	settings.BindRoot(root, opts...)
+	root.AddCommand(
+		settings.ServeCommand(&cobra.Command{Use: "serve"},
+			func(_ context.Context, s *settings.Serve) error {
+				fmt.Printf("serve: db=%s:%d smtp=%s debug=%t\n", s.DatabaseHost(), s.DatabasePort(), s.SMTPHost(), s.LogDebug())
+				return nil
+			}),
+		settings.MigrateCommand(&cobra.Command{Use: "migrate"},
+			func(ctx context.Context, m *settings.Migrate) error {
+				fmt.Printf("migrate: db=%s:%d debug=%t ctx=%v\n", m.DatabaseHost(), m.DatabasePort(), m.LogDebug(), ctx.Value(ctxKey{}))
+				return nil
+			}),
+	)
+	ctx := context.WithValue(context.Background(), ctxKey{}, "from-main")
+	if err := root.ExecuteContext(ctx); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var Database = dsl.Group("database", "Database connection",
+	dsl.String("host", "Database host").Default("localhost"),
+	dsl.Int("port", "Database port").Default(5432),
+)
+
+var SMTP = dsl.Group("smtp", "Outgoing mail",
+	dsl.String("host", "SMTP host").Required(),
+)
+
+var Log = dsl.Group("log", "Logging",
+	dsl.Bool("debug", "Debug logging"),
+)
+
+var App = dsl.App("app", "Test app", Database, SMTP, Log).
+	ConfigFile("app", ".", "$APPDIR").
+	Global(Log)
+
+var (
+	Serve   = dsl.Command("Serve").Uses(Database, SMTP)
+	Migrate = dsl.Command("Migrate").Uses(Database)
+)
+-- files/app.yaml --
+database:
+  host: db.internal
+  port: 6432
+smtp:
+  host: mail.internal
+-- files/app.json --
+{"database": {"host": "json.internal"}}
+-- files/typos.yaml --
+databse:
+  host: x
+database:
+  prot: 1
+-- files/bad.yaml --
+database:
+  port: many
+  hots: x
+-- files/dup.yaml --
+database:
+  port: 1
+  port: 2
+-- want/required.txt --
+app: invalid configuration (1 problem)
+  smtp.host: is required; set --smtp-host, APP_SMTP_HOST or smtp.host in the config file
+-- want/typos.txt --
+warning: unknown key "databse" in app.yaml:1:1; did you mean "database"?
+warning: unknown key "database.prot" in app.yaml:4:3; did you mean "database.port"?
+-- want/env.txt --
+warning: unknown environment variable APP_DATABSE_HOST; did you mean APP_DATABASE_HOST?
+-- want/bad.txt --
+app: invalid configuration (1 problem)
+  database.port: "many" is not an integer (app.yaml:2:9)
+warning: unknown key "database.hots" in app.yaml:3:3; did you mean "database.host"?
