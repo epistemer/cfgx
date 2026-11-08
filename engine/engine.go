@@ -124,16 +124,17 @@ func Load[V any](fs *pflag.FlagSet, keys []Key[V], idx []int, opts Options) (*V,
 }
 
 // Command binds the keys at idx to cmd and sets its RunE: load, build the
-// command's configuration, run. Configuration errors don't print the usage.
-func Command[V, C any](cmd *cobra.Command, keys []Key[V], idx []int, build func(*V) *C, run func(context.Context, *C) error) *cobra.Command {
+// command's configuration with the positional arguments, run. Configuration
+// errors don't print the usage.
+func Command[V, C any](cmd *cobra.Command, keys []Key[V], idx []int, build func(*V, []string) *C, run func(context.Context, *C) error) *cobra.Command {
 	BindFlags(cmd.Flags(), keys, idx)
-	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		v, err := Load(cmd.Flags(), keys, idx, Options{})
 		if err != nil {
 			cmd.SilenceUsage = true
 			return err
 		}
-		return run(cmd.Context(), build(v))
+		return run(cmd.Context(), build(v, args))
 	}
 	return cmd
 }

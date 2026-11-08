@@ -28,6 +28,7 @@ package {{.Package}}
 import (
 {{- if .Commands}}
 	"context"
+	"slices"
 {{end}}
 	"github.com/epistemer/cfgx/engine"
 	"github.com/spf13/cobra"
@@ -85,11 +86,16 @@ type {{.Name}} struct {
 {{- range .Groups}}
 	*{{.Type}}
 {{- end}}
+	args []string
 }
+
+// Args returns the {{.Name}} command's positional arguments, as cobra parsed
+// them. The slice is a copy.
+func (c *{{.Name}}) Args() []string { return slices.Clone(c.args) }
 
 var {{.KeysVar}} = []int{ {{- range $i, $k := .KeyIdx}}{{if $i}}, {{end}}{{$k}}{{end -}} }
 
-func new{{.Name}}(v *values) *{{.Name}} {
+func new{{.Name}}(v *values, args []string) *{{.Name}} {
 	{{- if .Groups}}
 	r := &root{}
 	r.cur.Store(v)
@@ -97,10 +103,11 @@ func new{{.Name}}(v *values) *{{.Name}} {
 	{{- range .Groups}}
 		{{.Type}}: &{{.Type}}{r: r},
 	{{- end}}
+		args: slices.Clone(args),
 	}
 	{{- else}}
 	_ = v
-	return &{{.Name}}{}
+	return &{{.Name}}{args: slices.Clone(args)}
 	{{- end}}
 }
 

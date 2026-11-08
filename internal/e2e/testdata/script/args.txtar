@@ -1,0 +1,80 @@
+# Run functions read positional arguments through the generated Args() method
+# (amendment A12), and cobra's argument rules still apply.
+go generate ./...
+go build -o app$exe .
+
+exec ./app$exe greet bob --greeting-loud
+stdout '^HELLO bob \[bob\]\r?\n$'
+
+exec ./app$exe greet alice
+stdout '^hello alice \[alice\]\r?\n$'
+
+# cobra.ExactArgs(1) still rejects the wrong count before run is called.
+! exec ./app$exe greet
+stderr 'accepts 1 arg\(s\), received 0'
+
+# A command with no groups still gets its arguments, and no arguments are an
+# empty, non-nil slice.
+exec ./app$exe echo x y
+stdout '^\[x y\] false\r?\n$'
+exec ./app$exe echo
+stdout '^\[\] false\r?\n$'
+
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(
+		settings.GreetCommand(&cobra.Command{Use: "greet NAME", Args: cobra.ExactArgs(1)},
+			func(_ context.Context, g *settings.Greet) error {
+				word := "hello"
+				if g.GreetingLoud() {
+					word = strings.ToUpper(word)
+				}
+				args := g.Args()
+				args[0] = "mutated" // a copy: must not affect a second call
+				fmt.Printf("%s %s %v\n", word, g.Args()[0], g.Args())
+				return nil
+			}),
+		settings.EchoCommand(&cobra.Command{Use: "echo"},
+			func(_ context.Context, e *settings.Echo) error {
+				fmt.Println(e.Args(), e.Args() == nil)
+				return nil
+			}),
+	)
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var Greeting = dsl.Group("greeting", "Greeting",
+	dsl.Bool("loud", "Shout the greeting"),
+)
+
+var App = dsl.App("app", "Test app", Greeting)
+
+var (
+	GreetCmd = dsl.Command("Greet").Uses(Greeting)
+	EchoCmd  = dsl.Command("Echo")
+)
