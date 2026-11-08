@@ -1,0 +1,132 @@
+# M5.3: value-based rules (A4), through the DSL, the file, env and flags.
+go generate ./...
+go build -o app$exe .
+
+exec ./app$exe serve
+stdout '^serve: token="" keys="" tls=false cert="ssl/cert.pem"\r?\n$'
+
+# AtMostOne: both set is a problem naming each source; the file's value
+# can be cleared with an empty env var.
+cp files/keys.yaml app.yaml
+env APP_AUTH_TOKEN=t
+! exec ./app$exe serve
+stderr '^  auth: token and keys are mutually exclusive \(token: env APP_AUTH_TOKEN, keys: app.yaml:2:9\)\r?$'
+env APP_AUTH_KEYS=
+exec ./app$exe serve
+stdout 'token="t" keys=""'
+rm app.yaml
+
+# RelevantIf: with TLS off the cert keeps its default and isn't checked, even
+# though it is Required and an empty value is passed. An empty value doesn't
+# count as setting it; a real one warns.
+exec ./app$exe serve --tls-cert=
+stdout 'tls=false cert="ssl/cert.pem"'
+! stderr .
+exec ./app$exe serve --tls-cert=other.pem
+stdout 'tls=false cert="ssl/cert.pem"'
+stderr '^warning: server.tls.cert is set \(flag --tls-cert\) but ignored: it only matters when server.tls.enabled is set\r?$'
+exec ./app$exe serve --tls-enabled=false --tls-cert=
+stdout 'tls=false'
+! exec ./app$exe serve --tls-enabled --tls-cert=
+stderr '^  server.tls.cert: is required, but is empty \(flag --tls-cert\)\r?$'
+exec ./app$exe serve --tls-enabled
+stdout 'tls=true cert="ssl/cert.pem"'
+
+# migrate loads only auth, so the server flags don't exist there.
+! exec ./app$exe migrate --tls-enabled
+stderr 'unknown flag: --tls-enabled'
+
+# ExactlyOne, AllOrNone and Requires.
+! exec ./app$exe alert
+stderr '^  notify: one of email and sms must be set\r?$'
+! exec ./app$exe alert --notify-email a --notify-sms b
+stderr '^  notify: only one of email and sms may be set \(email: flag --notify-email, sms: flag --notify-sms\)\r?$'
+! exec ./app$exe alert --notify-email a --notify-retry-max 3
+stderr '^  notify: retry.max and retry.delay must be set together or not at all; retry.delay isn''t set \(retry.max: flag --notify-retry-max\)\r?$'
+! exec ./app$exe alert --notify-email a --notify-urgent
+stderr '^  notify: urgent requires sms \(urgent: flag --notify-urgent\)\r?$'
+exec ./app$exe alert --notify-sms 555 --notify-urgent --notify-retry-max 3 --notify-retry-delay 10
+stdout '^alert ok\r?\n$'
+
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(
+		settings.ServeCommand(&cobra.Command{Use: "serve"},
+			func(_ context.Context, s *settings.Serve) error {
+				fmt.Printf("serve: token=%q keys=%q tls=%t cert=%q\n", s.AuthToken(), s.AuthKeys(), s.ServerTLSEnabled(), s.ServerTLSCert())
+				return nil
+			}),
+		settings.MigrateCommand(&cobra.Command{Use: "migrate"},
+			func(context.Context, *settings.Migrate) error { return nil }),
+		settings.AlertCommand(&cobra.Command{Use: "alert"},
+			func(context.Context, *settings.Alert) error { fmt.Println("alert ok"); return nil }),
+	)
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var (
+	token = dsl.String("token", "Static API token")
+	keys  = dsl.String("keys", "API keys file")
+)
+
+var Auth = dsl.Group("auth", "Authentication", token, keys).
+	Rules(dsl.AtMostOne(token, keys))
+
+var (
+	tlsEnabled = dsl.Bool("tls.enabled", "Serve HTTPS")
+	tlsCert    = dsl.String("tls.cert", "TLS certificate").Default("ssl/cert.pem").Required()
+)
+
+var Server = dsl.Group("server", "HTTP server", tlsEnabled, tlsCert).
+	FlagPrefix("").
+	Rules(dsl.RelevantIf(tlsCert, tlsEnabled))
+
+var (
+	email      = dsl.String("email", "Email address")
+	sms        = dsl.String("sms", "Phone number")
+	urgent     = dsl.Bool("urgent", "Page as well")
+	retryMax   = dsl.Int("retry.max", "Retries")
+	retryDelay = dsl.Int("retry.delay", "Seconds between retries")
+)
+
+var Notify = dsl.Group("notify", "Notifications", email, sms, urgent, retryMax, retryDelay).
+	Rules(
+		dsl.ExactlyOne(email, sms),
+		dsl.AllOrNone(retryMax, retryDelay),
+		dsl.Requires(urgent, sms),
+	)
+
+var App = dsl.App("app", "Test app", Auth, Server, Notify).ConfigFile("app", ".")
+
+var (
+	Serve   = dsl.Command("Serve").Uses(Auth, Server)
+	Migrate = dsl.Command("Migrate").Uses(Auth)
+	Alert   = dsl.Command("Alert").Uses(Notify)
+)
+-- files/keys.yaml --
+auth:
+  keys: keys.csv

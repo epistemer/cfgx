@@ -59,6 +59,7 @@ var keys = [...]engine.Key[values]{
 		{{- if .Bool}} Bool: true,{{end}}
 		{{- if .Required}} Required: true,{{end}}
 		{{- if .Global}} Global: true,{{end}}
+		{{- if .RelevantIf}} RelevantIf: []int{ {{- range $i, $c := .RelevantIf}}{{if $i}}, {{end}}{{$c}}{{end -}} },{{end}}
 		Set: func(v *values, raw string) error { return engine.{{.Parse}}(raw, &v.{{.Field}}) },
 		IsSet: func(v *values) bool { return {{.IsSet}} },
 		{{- if .HasDefault}}
@@ -81,6 +82,13 @@ var app = engine.App[values]{
 	{{- end}}
 	{{- end}}
 	Keys: keys[:],
+	{{- if .Rules}}
+	Rules: []engine.Rule{
+	{{- range .Rules}}
+		{Kind: engine.{{.Kind}}, Group: {{printf "%q" .Group}}, Keys: []int{ {{- range $i, $k := .Keys}}{{if $i}}, {{end}}{{$k}}{{end -}} }},
+	{{- end}}
+	},
+	{{- end}}
 	{{- if .GlobalIdx}}
 	Global: []int{ {{- range $i, $k := .GlobalIdx}}{{if $i}}, {{end}}{{$k}}{{end -}} },
 	{{- end}}

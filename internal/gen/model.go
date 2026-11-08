@@ -24,7 +24,15 @@ type Model struct {
 	Keys        []*KeyModel
 	Groups      []*GroupModel
 	Tags        []*TagModel
+	Rules       []*RuleModel
 	Commands    []*CommandModel
+}
+
+// RuleModel is a cross-key rule, by key index.
+type RuleModel struct {
+	Kind  string // the engine constant: AtMostOne, ...
+	Group string
+	Keys  []int
 }
 
 // TagModel is one tag: an interface over keys from any group.
@@ -45,6 +53,21 @@ type KeyModel struct {
 	Quote, Bool              bool
 	Required, Global         bool
 	Tags                     []string
+	RelevantIf               []int // keys that must be set for this one to matter
+}
+
+// nonZeroDefault reports whether the key's default counts as set (A4).
+func (k *KeyModel) nonZeroDefault() bool {
+	if !k.HasDefault {
+		return false
+	}
+	switch k.GoType {
+	case "int":
+		return k.DefaultText != "0"
+	case "bool":
+		return k.DefaultText == "true"
+	}
+	return k.DefaultText != ""
 }
 
 // GroupModel is one group: its interface and the type that implements it.
@@ -420,6 +443,8 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		}
 	}
 
+	checkRules(app, m, bad)
+
 	var globals []*GroupModel
 	isGlobal := map[string]bool{}
 	for _, o := range app.GlobalOrphans {
@@ -533,6 +558,101 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		return nil, probs
 	}
 	return m, nil
+}
+
+// checkRules resolves the rules' keys and checks them: the right number of
+// distinct keys, no non-zero defaults on exclusive rules (A4), and no cycles
+// of RelevantIf.
+func checkRules(app *ir.App, m *Model, bad func(ir.Pos, string, ...any)) {
+	byPath := map[string]*KeyModel{}
+	for _, k := range m.Keys {
+		byPath[k.Path] = k
+	}
+	for _, r := range app.Rules {
+		var keys []*KeyModel
+		seen := map[string]bool{}
+		ok := true
+		for _, p := range r.Keys {
+			k := byPath[p]
+			if k == nil {
+				bad(r.Pos, "%s refers to key %s, which doesn't exist", r.Kind, p)
+				ok = false
+				continue
+			}
+			if seen[p] {
+				bad(r.Pos, "%s lists %s twice", r.Kind, p)
+				ok = false
+				continue
+			}
+			seen[p] = true
+			keys = append(keys, k)
+		}
+		if !ok {
+			continue
+		}
+		switch r.Kind {
+		case ir.RuleAtMostOne, ir.RuleExactlyOne, ir.RuleAllOrNone:
+			if len(keys) < 2 {
+				bad(r.Pos, "%s needs at least two keys", r.Kind)
+				continue
+			}
+			for _, k := range keys {
+				if k.nonZeroDefault() {
+					bad(r.Pos, "%s can't include %s, whose default %s counts as set; rules are value-based (A4), so drop the default", r.Kind, k.Path, k.DefaultText)
+				}
+			}
+		case ir.RuleRequires, ir.RuleRelevantIf:
+			if len(keys) != 2 {
+				bad(r.Pos, "%s takes two keys", r.Kind)
+				continue
+			}
+			if r.Kind == ir.RuleRelevantIf {
+				keys[0].RelevantIf = append(keys[0].RelevantIf, keys[1].Index)
+				continue // not a rule the engine checks: it decides loading
+			}
+		default:
+			bad(r.Pos, "unknown rule %q", r.Kind)
+			continue
+		}
+		rm := &RuleModel{Kind: string(r.Kind), Group: r.Group}
+		for _, k := range keys {
+			rm.Keys = append(rm.Keys, k.Index)
+		}
+		m.Rules = append(m.Rules, rm)
+	}
+	// RelevantIf must not loop: a matters if b is set, b if a is set.
+	state := map[int]int{} // 1 visiting, 2 done
+	onCycle := -1          // a key on the cycle found
+	var visit func(i int) bool
+	visit = func(i int) bool {
+		switch state[i] {
+		case 1:
+			onCycle = i
+			return false
+		case 2:
+			return true
+		}
+		state[i] = 1
+		for _, c := range m.Keys[i].RelevantIf {
+			if !visit(c) {
+				return false
+			}
+		}
+		state[i] = 2
+		return true
+	}
+	for _, k := range m.Keys {
+		if !visit(k.Index) {
+			p := m.Keys[onCycle].Path
+			for _, r := range app.Rules {
+				if r.Kind == ir.RuleRelevantIf && len(r.Keys) == 2 && r.Keys[0] == p {
+					bad(r.Pos, "RelevantIf rules on %s form a cycle", p)
+					break
+				}
+			}
+			return
+		}
+	}
 }
 
 func hasUsedAncestor(g *GroupModel, used map[string]bool) bool {

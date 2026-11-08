@@ -56,7 +56,7 @@ func orList(s []string) string {
 // usage text, and RunE returns the error, so Execute does too.
 func Command[V, C any](cmd *cobra.Command, a *App[V], idx []int, build func(*V, []string) *C, run func(context.Context, *C) error) *cobra.Command {
 	var local []int
-	for _, i := range idx {
+	for _, i := range append(append([]int(nil), idx...), conditions(a, idx)...) {
 		if !a.Keys[i].Global {
 			local = append(local, i)
 		}

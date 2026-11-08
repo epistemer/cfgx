@@ -103,6 +103,7 @@ type GroupDef struct {
 	goName     string
 	flagPrefix *string
 	tags       []*TagDef
+	rules      []*RuleDef
 	pos        ir.Pos
 }
 
@@ -120,7 +121,7 @@ func Group(name, desc string, members ...Member) *GroupDef {
 		case *GroupDef:
 			g.groups = append(g.groups, m) // a nil *GroupDef is reported by Export
 		case KeyDef:
-			if v := reflect.ValueOf(m); v.Kind() == reflect.Pointer && v.IsNil() {
+			if isNil(m) {
 				m = nil // a nil *StringKey would panic in base(); report it instead
 			}
 			g.keys = append(g.keys, m)
@@ -156,6 +157,46 @@ func (g *GroupDef) Tags(tags ...*TagDef) *GroupDef {
 	g.tags = append(g.tags, tags...)
 	return g
 }
+
+// Rules adds cross-key constraints. They are value-based (A4): a key is set
+// when its value is non-zero, and a Bool when it is true. A command checks a
+// rule only if it loads every key in it.
+func (g *GroupDef) Rules(rules ...*RuleDef) *GroupDef {
+	g.rules = append(g.rules, rules...)
+	return g
+}
+
+// RuleDef is a cross-key constraint. Create it with AtMostOne, ExactlyOne,
+// AllOrNone, Requires or RelevantIf, and add it with Group.Rules.
+type RuleDef struct {
+	kind ir.RuleKind
+	keys []KeyDef
+	pos  ir.Pos
+}
+
+func rule(kind ir.RuleKind, keys ...KeyDef) *RuleDef {
+	return &RuleDef{kind: kind, keys: keys, pos: caller(2)}
+}
+
+// AtMostOne allows at most one of keys to be set. Its keys can't have
+// non-zero defaults.
+func AtMostOne(keys ...KeyDef) *RuleDef { return rule(ir.RuleAtMostOne, keys...) }
+
+// ExactlyOne requires exactly one of keys to be set. Its keys can't have
+// non-zero defaults.
+func ExactlyOne(keys ...KeyDef) *RuleDef { return rule(ir.RuleExactlyOne, keys...) }
+
+// AllOrNone requires keys to be set together or not at all. Its keys can't
+// have non-zero defaults.
+func AllOrNone(keys ...KeyDef) *RuleDef { return rule(ir.RuleAllOrNone, keys...) }
+
+// Requires makes b required when a is set.
+func Requires(a, b KeyDef) *RuleDef { return rule(ir.RuleRequires, a, b) }
+
+// RelevantIf makes a matter only when b is set. When b isn't, a is neither
+// loaded nor validated, and setting it warns. Every command that loads a
+// also loads b.
+func RelevantIf(a, b KeyDef) *RuleDef { return rule(ir.RuleRelevantIf, a, b) }
 
 // TagDef is a cross-cutting set of keys. Create it with Tag.
 type TagDef struct {
@@ -325,6 +366,12 @@ func Export(w io.Writer) error {
 	out.Initialisms = a.initialisms
 	// paths maps every group reachable from the App to its dotted path.
 	paths := map[*GroupDef]string{}
+	keyPaths := map[*keyBase]string{}
+	type pending struct {
+		r     *RuleDef
+		group string
+	}
+	var rules []pending
 	var export func(g *GroupDef, parent string) (ir.Group, error)
 	export = func(g *GroupDef, parent string) (ir.Group, error) {
 		path := g.name
@@ -345,11 +392,18 @@ func Export(w io.Writer) error {
 				return ir.Group{}, fmt.Errorf("%s: group %q lists a nil key or group", g.pos, g.name)
 			}
 			k := kd.base()
+			keyPaths[k] = path + "." + k.name
 			kt, err := tagNames(k.tags, k.pos)
 			if err != nil {
 				return ir.Group{}, err
 			}
 			ig.Keys = append(ig.Keys, ir.Key{Name: k.name, Desc: k.desc, Kind: k.kind, Default: k.def, Required: k.required, Tags: kt, Pos: k.pos})
+		}
+		for _, r := range g.rules {
+			if r == nil {
+				return ir.Group{}, fmt.Errorf("%s: group %q lists a nil rule", g.pos, g.name)
+			}
+			rules = append(rules, pending{r, path})
 		}
 		for _, c := range g.groups {
 			if c == nil {
@@ -372,6 +426,20 @@ func Export(w io.Writer) error {
 			return err
 		}
 		out.Groups = append(out.Groups, ig)
+	}
+	for _, p := range rules {
+		rl := ir.Rule{Kind: p.r.kind, Group: p.group, Pos: p.r.pos}
+		for _, kd := range p.r.keys {
+			if isNil(kd) {
+				return fmt.Errorf("%s: %s lists a nil key", p.r.pos, p.r.kind)
+			}
+			path, ok := keyPaths[kd.base()]
+			if !ok {
+				return fmt.Errorf("%s: %s lists key %q, which isn't in a group passed to dsl.App", p.r.pos, p.r.kind, kd.base().name)
+			}
+			rl.Keys = append(rl.Keys, path)
+		}
+		out.Rules = append(out.Rules, rl)
 	}
 	for _, g := range a.global {
 		if g == nil {
@@ -408,6 +476,16 @@ func Export(w io.Writer) error {
 		out.Tags = append(out.Tags, ir.Tag{Name: t.name, Desc: t.desc, Pos: t.pos})
 	}
 	return ir.Encode(w, out)
+}
+
+// isNil reports whether kd is nil or holds a nil pointer, whose base()
+// would panic.
+func isNil(kd KeyDef) bool {
+	if kd == nil {
+		return true
+	}
+	v := reflect.ValueOf(kd)
+	return v.Kind() == reflect.Pointer && v.IsNil()
 }
 
 // tagNames names tags, rejecting nil ones.

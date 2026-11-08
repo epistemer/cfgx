@@ -4,6 +4,34 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-08: M5.3 rules
+
+- **Landed:**
+  - `AtMostOne`, `ExactlyOne`, `AllOrNone` and `Requires` are checked after
+    merging. They are value-based (A4): a key counts as set when it's non-zero,
+    and a Bool only when it's true.
+  - `RelevantIf` decides what loads. A key whose condition isn't set keeps its
+    default, isn't parsed or checked, and warns if it was set to a value.
+  - Rule problems follow interface §8:
+    `auth: token and keys are mutually exclusive (token: env ZP_AUTH_TOKEN,
+    keys: app.yaml:2:9)`.
+  - The PR merges itself once CI passes.
+- **Reviewed:** Gemini 3.8 Flash (High) on the non-test diff (about 90k tokens;
+  [review 0006](reviews/0006-gemini-m5.3-review.md)). Three findings fixed: a
+  command was held to `Required` on a condition it doesn't own; a `RelevantIf`
+  cycle was blamed on the wrong key; and an empty value on an irrelevant key
+  warned. One finding is deferred to M4.1, and two were false positives.
+- **Decided for you:** the rule details in implementation.md §2.3b:
+  - A command checks a rule only when it loads every key in it.
+  - The conditions of a command's `RelevantIf` keys are loaded for that
+    purpose only.
+  - Under A4, `Required` together with a non-zero default is useful, so it
+    stays allowed.
+  - The "no key file on disk" check moves to M4.4, which adds file kinds.
+- **Next:** M5.4 (`Alias`, `Deprecated`) and M5.5 (command `Args`), both
+  delegated to Gemini, then M5.6 and M5.7.
+- **Waiting on you:** nothing.
+
 ## 2026-11-08: M4.3, M5.1 and M5.2
 
 - **Landed:** through a PR:

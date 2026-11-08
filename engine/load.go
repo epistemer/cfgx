@@ -126,9 +126,40 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 	l.unknownEnv(environ())
 
 	v := new(V)
+	l.loaded = map[int]bool{}
 	for _, i := range idx {
-		l.loadKey(v, i, fs, lookup)
+		l.loaded[i] = true
 	}
+	l.state = map[int]keyState{}
+	// RelevantIf conditions the command doesn't load itself are loaded too,
+	// but only to decide relevance: they aren't checked for Required and
+	// take no part in rules.
+	conds := conditions(l.a, idx)
+	l.condOnly = map[int]bool{}
+	for _, c := range conds {
+		l.condOnly[c] = true
+	}
+	// Keys load after the keys their RelevantIf conditions name. The
+	// generator rejects cycles, so every pass makes progress.
+	pending := append(append([]int(nil), idx...), conds...)
+	for len(pending) > 0 {
+		var later []int
+		for _, i := range pending {
+			if l.waiting(i) {
+				later = append(later, i)
+				continue
+			}
+			l.loadKey(v, i, fs, lookup)
+		}
+		if len(later) == len(pending) {
+			for _, i := range later {
+				l.state[i] = irrelevant // unreachable with generated tables
+			}
+			break
+		}
+		pending = later
+	}
+	l.checkRules(v)
 	if len(l.errs) > 0 {
 		sort.SliceStable(l.errs, func(i, j int) bool { return l.errs[i].Key < l.errs[j].Key })
 		return res, l.errs
@@ -138,11 +169,71 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 }
 
 type loader[V any] struct {
-	a       *App[V]
-	res     *Result[V]
-	file    *configFile
-	errs    cfgx.Errors
-	badMaps map[string]bool // file paths already reported as not being maps
+	a        *App[V]
+	res      *Result[V]
+	file     *configFile
+	errs     cfgx.Errors
+	badMaps  map[string]bool // file paths already reported as not being maps
+	loaded   map[int]bool    // the command's keys
+	condOnly map[int]bool    // RelevantIf conditions loaded only for relevance
+	state    map[int]keyState
+}
+
+// conditions returns the RelevantIf conditions of the keys at idx, directly
+// or through other conditions, that idx doesn't contain.
+func conditions[V any](a *App[V], idx []int) []int {
+	in := map[int]bool{}
+	for _, i := range idx {
+		in[i] = true
+	}
+	var out []int
+	queue := append([]int(nil), idx...)
+	for len(queue) > 0 {
+		i := queue[0]
+		queue = queue[1:]
+		for _, c := range a.Keys[i].RelevantIf {
+			if !in[c] {
+				in[c] = true
+				out = append(out, c)
+				queue = append(queue, c)
+			}
+		}
+	}
+	return out
+}
+
+// keyState is how loading a key went.
+type keyState int
+
+const (
+	loadedOK   keyState = iota + 1
+	failed              // its value is bad; rules that use it are skipped
+	irrelevant          // a RelevantIf condition isn't set; it counts as unset
+)
+
+// waiting reports whether a condition of key i hasn't been loaded yet.
+func (l *loader[V]) waiting(i int) bool {
+	for _, c := range l.a.Keys[i].RelevantIf {
+		if l.state[c] == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// relevant reports whether every RelevantIf condition of key k is set, and
+// if not, names the first that isn't and whether it merely failed to load.
+func (l *loader[V]) relevant(v *V, k *Key[V]) (ok bool, cond string, condFailed bool) {
+	for _, c := range k.RelevantIf {
+		ck := &l.a.Keys[c]
+		switch {
+		case l.state[c] == failed:
+			return false, ck.Path, true
+		case l.state[c] != loadedOK || !ck.IsSet(v):
+			return false, ck.Path, false
+		}
+	}
+	return true, "", false
 }
 
 func (l *loader[V]) warn(msg string, attrs ...slog.Attr) {
@@ -189,6 +280,17 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 	}
 	l.res.Origins[i] = origins
 
+	if ok, cond, condFailed := l.relevant(v, k); !ok {
+		// Not loaded: the default stays, nothing is parsed or checked.
+		l.state[i] = irrelevant
+		if win != nil && !condFailed && setsValue(k, win.raw) {
+			where := win.origin.String()
+			l.warn(fmt.Sprintf("%s is set (%s) but ignored: it only matters when %s is set", k.Path, where, cond),
+				slog.String("key", k.Path), slog.String("source", where))
+		}
+		return
+	}
+	l.state[i] = failed
 	if win != nil {
 		if win.bad != nil {
 			if !l.badMaps[win.bad.Key] {
@@ -205,9 +307,105 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 			return
 		}
 	}
-	if k.Required && !k.IsSet(v) {
+	if k.Required && !k.IsSet(v) && !l.condOnly[i] {
 		l.errs = append(l.errs, l.required(k, win))
+		return
 	}
+	l.state[i] = loadedOK
+}
+
+// setsValue reports whether raw would set key k (A4): an empty value or
+// false doesn't. It parses into a scratch value, so the real one is
+// untouched; a value that doesn't parse counts as set.
+func setsValue[V any](k *Key[V], raw string) bool {
+	scratch := new(V)
+	if err := k.Set(scratch, raw); err != nil {
+		return true
+	}
+	return k.IsSet(scratch)
+}
+
+// checkRules checks every rule whose keys the command loaded, unless one of
+// them failed to load, which is already a problem. Keys that aren't
+// relevant count as unset.
+func (l *loader[V]) checkRules(v *V) {
+	for _, r := range l.a.Rules {
+		skip := false
+		var set, unset []int
+		for _, i := range r.Keys {
+			switch {
+			case !l.loaded[i] || l.state[i] == failed:
+				skip = true
+			case l.state[i] == loadedOK && l.a.Keys[i].IsSet(v):
+				set = append(set, i)
+			default:
+				unset = append(unset, i)
+			}
+		}
+		if skip {
+			continue
+		}
+		var msg string
+		switch r.Kind {
+		case AtMostOne:
+			if len(set) > 1 {
+				if len(r.Keys) == 2 {
+					msg = l.names(r, r.Keys) + " are mutually exclusive"
+				} else {
+					msg = "at most one of " + l.names(r, r.Keys) + " may be set"
+				}
+			}
+		case ExactlyOne:
+			switch {
+			case len(set) == 0:
+				msg = "one of " + l.names(r, r.Keys) + " must be set"
+			case len(set) > 1:
+				msg = "only one of " + l.names(r, r.Keys) + " may be set"
+			}
+		case AllOrNone:
+			if len(set) > 0 && len(unset) > 0 {
+				verb := " isn't set"
+				if len(unset) > 1 {
+					verb = " aren't set"
+				}
+				msg = l.names(r, r.Keys) + " must be set together or not at all; " + l.names(r, unset) + verb
+			}
+		case Requires:
+			if len(set) == 1 && set[0] == r.Keys[0] {
+				msg = l.name(r, r.Keys[0]) + " requires " + l.name(r, r.Keys[1])
+			}
+		}
+		if msg == "" {
+			continue
+		}
+		var src []string
+		for _, i := range set {
+			og := l.res.Origins[i]
+			src = append(src, l.name(r, i)+": "+og[len(og)-1].String())
+		}
+		l.errs = append(l.errs, cfgx.Problem{Key: r.Group, Message: msg, Source: strings.Join(src, ", ")})
+	}
+}
+
+// name is key i's path relative to the rule's group.
+func (l *loader[V]) name(r Rule, i int) string {
+	p := l.a.Keys[i].Path
+	if strings.HasPrefix(p, r.Group+".") {
+		return p[len(r.Group)+1:]
+	}
+	return p
+}
+
+// names lists keys as "a and b" or "a, b and c".
+func (l *loader[V]) names(r Rule, keys []int) string {
+	ns := make([]string, len(keys))
+	for j, i := range keys {
+		ns[j] = l.name(r, i)
+	}
+	if len(ns) == 1 {
+		return ns[0]
+	}
+	return strings.Join(ns[:len(ns)-1], ", ") + " and " + ns[len(ns)-1]
 }
 
 // required is the problem for a required key that isn't set.
