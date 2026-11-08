@@ -197,13 +197,13 @@ reported at once with where it came from, and per-command loading is complete.
 
 | ✓ | ID | Item | Size | Done when |
 |---|----|------|------|-----------|
-| ☐ | M3.1 | `internal/node`: the tree type and a builder on `go.yaml.in/yaml/v4` (ADR 0005) for YAML and JSON; positions; duplicate keys checked by the walker; anchors, aliases and merge keys rejected; surrogate-pair escapes rewritten for `.json`; empty files as empty maps; `App.Formats` | M | Parser tests, including JSON read by the YAML path and JSON with surrogate pairs |
-| ☐ | M3.2 | File discovery (A11): `--config` (a persistent flag added by `BindRoot`) and `ZP_CONFIG` must exist; the `App.ConfigFile` search paths expand `$VAR`s and skip unset ones; `.yaml`, `.yml`, `.json` in order, and two matches is an error; nothing found is fine; an invalid file is an error | S | testscript for each route and each error |
-| ☐ | M3.3 | The file layer: key matching; unknown keys with "did you mean" (`internal/suggest`); a scan of the environment for unknown `ZP_*` names, case-insensitive on Windows; an env var that is present but empty provides the empty value | M | Typos in a file and in env produce warnings with suggestions; an empty env var clears a file value |
-| ☐ | M3.4 | Provenance per key, as the list of every layer that provided a value. `Problem{Key, Message, Source}`. `Errors` formatted exactly as in [interface.md §8](interface.md): sorted, counted, everything at once, never containing a secret's value. | M | Snapshot tests of the error output |
-| ☐ | M3.5 | Warning output through `*slog.Logger` (A2): by default a small cfgx handler printing `warning: <message>` lines on `cmd.ErrOrStderr()`; `BindRoot(root, cfgx.WithLogger(l))` replaces it, found at run time through a registry keyed by the root command | S | Warnings match interface.md §8 exactly; a custom logger receives them |
-| ☐ | M3.6 | `Required`, checked only for the command's own keys. `Global` groups bound as persistent flags. | M | `migrate` succeeds while a key only `serve` needs is missing |
-| ☐ | M3.7 | Binder polish: `SilenceUsage` for config errors, non-zero exit status, `cmd.Context()` passed through | S | A config error prints the problems but no usage text |
+| ☑ | M3.1 | `internal/node`: the tree type and a builder on `go.yaml.in/yaml/v4` (ADR 0005) for YAML and JSON; positions; duplicate keys checked by the walker; anchors, aliases and merge keys rejected; surrogate-pair escapes rewritten for `.json`; empty files as empty maps; `App.Formats` | M | Parser tests, including JSON read by the YAML path and JSON with surrogate pairs |
+| ☑ | M3.2 | File discovery (A11): `--config` (a persistent flag added by `BindRoot`) and `ZP_CONFIG` must exist; the `App.ConfigFile` search paths expand `$VAR`s and skip unset ones; `.yaml`, `.yml`, `.json` in order, and two matches is an error; nothing found is fine; an invalid file is an error | S | testscript for each route and each error |
+| ☑ | M3.3 | The file layer: key matching; unknown keys with "did you mean" (`internal/suggest`); a scan of the environment for unknown `ZP_*` names, case-insensitive on Windows; an env var that is present but empty provides the empty value | M | Typos in a file and in env produce warnings with suggestions; an empty env var clears a file value |
+| ☑ | M3.4 | Provenance per key, as the list of every layer that provided a value. `Problem{Key, Message, Source}`. `Errors` formatted exactly as in [interface.md §8](interface.md): sorted, counted, everything at once, never containing a secret's value. | M | Snapshot tests of the error output |
+| ☑ | M3.5 | Warning output through `*slog.Logger` (A2): by default a small cfgx handler printing `warning: <message>` lines on `cmd.ErrOrStderr()`; `BindRoot(root, cfgx.WithLogger(l))` replaces it, found at run time through a registry keyed by the root command | S | Warnings match interface.md §8 exactly; a custom logger receives them |
+| ☑ | M3.6 | `Required`, checked only for the command's own keys. `Global` groups bound as persistent flags. | M | `migrate` succeeds while a key only `serve` needs is missing |
+| ☑ | M3.7 | Binder polish: `SilenceUsage` for config errors, non-zero exit status, `cmd.Context()` passed through | S | A config error prints the problems but no usage text |
 
 **Exit:** the precedence matrix covers every pair of file, env, flag and
 default. Error and warning output match interface.md §8.
@@ -226,7 +226,7 @@ alias, deprecated) and M7 (mutable, epoch). Reloadable is after v0.1.0.
 | ☐ | M4.6 | `Strings`, `Ints`, `Durations`, `StringMap`: flags repeatable or comma-separated, recording raw occurrences that the engine splits (ADR 0003); env comma-separated or `k=v`; file nodes | M | e2e tests, including `--tag a --tag b`, `--tag ""`, and malformed CSV reported by cfgx rather than pflag; fuzzers for the list and map parsers |
 | ☐ | M4.7 | `Text(name, desc, zero T)`: check at generate time that `*T` implements `TextUnmarshaler`; default stored through `MarshalText` | S | A `netip.Prefix` key works end to end |
 | ☐ | M4.8 | Constraints: `Range`, `Min`, `Max`, `Len`, `Pattern` (the regex is compiled at generate time); `Validate(f)` and `DefaultFunc(f)` under ADR 0004's rules (exported top-level functions the generated package can import; none from `main`, the schema package, or packages importing `cfgx/dsl`, checked with one `go list -deps` call; functions in the generated package referenced without an import) | M | Failing values are reported with their source, never a secret's value; closures, method expressions and schema-package functions are rejected with the schema line |
-| ☐ | M4.9 | Naming and source modifiers: `Short`, `Flag`, `Env`, `Key`, `GoName`, `Sources`, `Hidden`, `Example` | S | Golden tests; collision checks cover the overrides |
+| ☐ | M4.9 | Naming and source modifiers: `Short`, `Flag`, `Env`, `Key`, `GoName`, `Sources`, `Hidden`, `Example` | S | Golden tests; collision checks cover the overrides, and the names cfgx reserves: the `--config` flag and the `<PREFIX>_CONFIG` env var when the app has a config file (M3.2) |
 | ☐ | M4.10 | Completion: `Complete(Files/Dirs/func)`, with `func` under ADR 0004's rules, and enums complete automatically | S | testscript runs `__complete` and checks the candidates |
 
 **Exit:** every row of interface.md §3.2–3.3 in M4's scope has golden and e2e
@@ -242,7 +242,7 @@ check.
 
 | ✓ | ID | Item | Size | Done when |
 |---|----|------|------|-----------|
-| ☐ | M5.1 | Nested groups produce embedded interfaces; dotted names are path-only; `FlagPrefix`; group `GoName`; initialisms (built-in list plus `App.Initialisms`) | M | Golden tests of interface output |
+| ☐ | M5.1 | Nested groups produce embedded interfaces; dotted names are path-only; `FlagPrefix` (whose `""` can produce `--config`, reserved since M3.2); group `GoName`; initialisms (built-in list plus `App.Initialisms`) | M | Golden tests of interface output |
 | ☐ | M5.2 | Tags produce tag interfaces; `Uses(tag)`; a tag on a group applies to its keys; a group reached only through a tag gets forwarding getters instead of being embedded (A5) | M | The `Mailer` interface from interface.md §5.1 is generated exactly; `TestEmail` has only its own getters |
 | ☐ | M5.3 | Value-based rules (A4): `AtMostOne`, `ExactlyOne`, `AllOrNone`, `Requires`, and `RelevantIf`, which skips loading the dependent key when its condition isn't set; the check that exclusive keys have no non-zero defaults | M | testscript for each rule, including `--tls-enabled=false`, clearing a file value with an empty env var, and TLS off with no key file on disk |
 | ☐ | M5.4 | `Alias` and `Deprecated`: old names accepted on every surface, with warnings | M | The old name works via file, env and flag, and warns |
@@ -435,9 +435,23 @@ How Claude picks Gemini's model and effort for each task:
 
 | Task | Model and effort |
 |------|------------------|
-| Implementation that needs judgement, spikes, adversarial reviews | Gemini 4 Argon (High), the default |
-| Well-specified implementation with tests to meet | Gemini 4 Argon (Medium) |
-| Mechanical edits, test tables, web and doc lookups | Gemini 3.8 Flash (High) |
+| The one pre-merge review per milestone, spikes, design critiques | Gemini 4 Argon (High) |
+| Well-specified implementation with tests to meet; reviews of small changes such as one amendment | Gemini 4 Argon (Medium), or Gemini 3.8 Flash (High) for a small package |
+| Mechanical edits, small leaf packages, test tables | Gemini 3.8 Flash (Medium) |
+| Web and doc lookups | Gemini 3.8 Flash (Low) |
+
+Token budget (added 2026-11-08, after Argon ran out of quota for six days
+mid-M3):
+- Every agy call names its model. The saved default puts Argon (High) ahead
+  of every tool, so a call without a model silently uses it.
+- Argon (High) is rationed to about one run per milestone, normally the
+  pre-merge review.
+- A review gets the diff only, plus the interface sections it is judged
+  against, pasted as short excerpts. It doesn't get whole docs, or the full
+  files behind the diff as well.
+- Briefs name repo files by path instead of pasting them.
+- Each milestone's status entry says which model did what, and roughly what it
+  cost.
 
 Rules:
 1. **One brief per work item:** its ID, its done-when, the doc sections it

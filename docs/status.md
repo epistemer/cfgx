@@ -4,6 +4,31 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-08: M3 config files, errors and provenance
+
+- **Landed:** M3 through a PR. Config files are the lowest explicit layer
+  (default < file < env < flag), found as A11 describes, in YAML or JSON
+  through one parser. Every problem is reported at once with where it came
+  from, in interface §8's format. Unknown keys in the file and unknown `ZP_*`
+  env vars are warnings with "did you mean". Warnings go through `slog`, and
+  `cfgx.WithLogger` takes them. `Required` is checked only for the running
+  command's keys, and `Global` groups become persistent flags.
+  `examples/mini` now reads `mini.yaml`.
+- **Reviewed:** Claude reviewed Gemini's parser (M3.1) and suggestion package
+  (M3.3) and took both as written. Gemini reviewed Claude's code and found 8
+  problems; 5 led to fixes ([review 0004](reviews/0004-gemini-m3-review.md)).
+  The biggest: an empty `--config` let `ZP_CONFIG` win over a flag, and the
+  "required" message could have quoted a secret.
+- **Decided for you:** the details in implementation.md §3.4, "[decided, M3]".
+  Among them: an app without `ConfigFile` has no `--config` flag; a null value
+  in the file counts as absent; `BindRoot` must be called when the app has a
+  config file or global groups. Models: Argon High built the parser and Flash
+  High the suggestions. Argon (High and Medium) then ran out of quota for about
+  six days, so Flash High ran this review instead.
+- **Next:** an Argon High second review of M3 once its quota resets; meanwhile
+  M4.3 (the `Secret` type) and M5 in lane B, M4.4–M4.6 in lane A.
+- **Waiting on you:** nothing.
+
 ## 2026-11-08: amendment A12, positional arguments
 
 - **Landed:** you chose the `Args()` method. Every generated command type now

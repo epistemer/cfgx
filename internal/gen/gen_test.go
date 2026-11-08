@@ -17,13 +17,15 @@ func str(s string) *string { return &s }
 func sample() *ir.App {
 	return &ir.App{
 		Version: ir.Version, Name: "demo", Desc: "Demo app", EnvPrefix: "DEMO",
+		ConfigFile: "config", SearchPaths: []string{".", "$HOME/.demo"},
+		Global: []string{"log"},
 		Groups: []ir.Group{
 			{Name: "database", Desc: "Database connection", Keys: []ir.Key{
 				{Name: "host", Desc: "Database host", Kind: ir.KindString, Default: str("localhost")},
 				{Name: "port", Desc: "Database port", Kind: ir.KindInt, Default: str("5432")},
 			}},
 			{Name: "smtp", Desc: "Outgoing mail", Keys: []ir.Key{
-				{Name: "url", Desc: "Server URL", Kind: ir.KindString},
+				{Name: "url", Desc: "Server URL", Kind: ir.KindString, Required: true},
 			}},
 			{Name: "log", Desc: "Logging", Keys: []ir.Key{
 				{Name: "debug", Desc: "Debug logging", Kind: ir.KindBool, Default: str("false")},
@@ -98,6 +100,21 @@ func TestChecks(t *testing.T) {
 		{"bad derived env prefix", func(a *ir.App) { a.EnvPrefix = ""; a.Name = "123app" }, "derived from the app name"},
 		{"trailing underscore", func(a *ir.App) { a.Groups[0].Keys[0].Name = "host_" }, `key name "host_"`},
 		{"double underscore", func(a *ir.App) { a.Groups[0].Keys[0].Name = "a__b" }, `key name "a__b"`},
+		{"command named Config", func(a *ir.App) { a.Commands[0].Name = "Config" }, "command binder ConfigCommand collides"},
+		{"command named All", func(a *ir.App) { a.Commands[0].Name = "All" }, "command type All collides"},
+		{"group named values", func(a *ir.App) { a.Groups[1].Name = "values" }, "group interface Values collides"},
+		{"global orphan", func(a *ir.App) {
+			a.GlobalOrphans = []ir.Ref{{Name: "extra", Pos: ir.Pos{File: "schema.go", Line: 9}}}
+		}, `Global lists group "extra" (declared at schema.go:9), which isn't passed to dsl.App`},
+		{"global unknown", func(a *ir.App) { a.Global = append(a.Global, "nope") }, `Global lists group "nope"`},
+		{"global twice", func(a *ir.App) { a.Global = append(a.Global, "log") }, `Global lists group "log" twice`},
+		{"config file with directory", func(a *ir.App) { a.ConfigFile = "etc/config" }, "without a directory"},
+		{"config file with extension", func(a *ir.App) { a.ConfigFile = "config.yaml" }, "must not have an extension"},
+		{"search paths without basename", func(a *ir.App) { a.ConfigFile = "" }, "ConfigFile needs a basename"},
+		{"empty search path", func(a *ir.App) { a.SearchPaths = []string{""} }, "empty search path"},
+		{"unknown format", func(a *ir.App) { a.Formats = []string{"toml"} }, `unknown config file format "toml"`},
+		{"format twice", func(a *ir.App) { a.Formats = []string{"yaml", "yaml"} }, "Formats lists yaml twice"},
+		{"formats without config file", func(a *ir.App) { a.ConfigFile = ""; a.SearchPaths = nil; a.Formats = []string{"json"} }, "Formats has no effect"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -132,6 +149,30 @@ func TestBadPackageName(t *testing.T) {
 	}
 }
 
+func TestGlobalGroups(t *testing.T) {
+	m, err := Build(sample(), "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.GlobalIdx) != 1 || m.GlobalIdx[0] != 3 || !m.Keys[3].Global {
+		t.Fatalf("GlobalIdx = %v", m.GlobalIdx)
+	}
+	for _, c := range m.Commands {
+		if len(c.Groups) == 0 || c.Groups[0].Name != "log" {
+			t.Errorf("%s doesn't get the global group first: %v", c.Name, c.Groups)
+		}
+		n := 0
+		for _, g := range c.Groups {
+			if g.Name == "log" {
+				n++
+			}
+		}
+		if n != 1 {
+			t.Errorf("%s has the global group %d times", c.Name, n)
+		}
+	}
+}
+
 func TestDefaultsAreCanonical(t *testing.T) {
 	a := sample()
 	a.Groups[0].Keys[1].Default = str("+007")
@@ -153,9 +194,15 @@ func TestGeneratedCodeCompiles(t *testing.T) {
 		t.Skip("runs the go command")
 	}
 	cases := map[string]func(a *ir.App){
-		"sample":      func(a *ir.App) {},
-		"no commands": func(a *ir.App) { a.Commands = nil },
-		"no groups":   func(a *ir.App) { a.Groups = nil; a.Commands = []ir.Command{{Name: "Version", Uses: []string{}}} },
+		"sample":         func(a *ir.App) {},
+		"no config file": func(a *ir.App) { a.ConfigFile = ""; a.SearchPaths = nil; a.Global = nil },
+		"formats":        func(a *ir.App) { a.Formats = []string{"json"}; a.SearchPaths = nil },
+		"no commands":    func(a *ir.App) { a.Commands = nil },
+		"no groups": func(a *ir.App) {
+			a.Groups = nil
+			a.Global = nil
+			a.Commands = []ir.Command{{Name: "Version", Uses: []string{}}}
+		},
 		"empty group": func(a *ir.App) { a.Groups = append(a.Groups, ir.Group{Name: "empty", Desc: "Nothing yet"}) },
 		"initialisms and digits": func(a *ir.App) {
 			a.Groups = append(a.Groups,

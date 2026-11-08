@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 1
+const Version = 2
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -36,13 +36,22 @@ const (
 
 // App is a whole schema.
 type App struct {
-	Version   int       `json:"version"`
-	Name      string    `json:"name"`
-	Desc      string    `json:"desc"`
-	EnvPrefix string    `json:"envPrefix,omitempty"`
-	Groups    []Group   `json:"groups"`
-	Commands  []Command `json:"commands"`
-	Pos       Pos       `json:"pos"`
+	Version   int    `json:"version"`
+	Name      string `json:"name"`
+	Desc      string `json:"desc"`
+	EnvPrefix string `json:"envPrefix,omitempty"`
+	// ConfigFile is the config file's basename; "" means no config file.
+	ConfigFile  string   `json:"configFile,omitempty"`
+	SearchPaths []string `json:"searchPaths,omitempty"`
+	// Formats are the accepted file formats ("yaml", "json"); empty means both.
+	Formats []string `json:"formats,omitempty"`
+	// Global names the groups every command gets.
+	Global []string `json:"global,omitempty"`
+	// GlobalOrphans are Global groups that weren't passed to dsl.App.
+	GlobalOrphans []Ref     `json:"globalOrphans,omitempty"`
+	Groups        []Group   `json:"groups"`
+	Commands      []Command `json:"commands"`
+	Pos           Pos       `json:"pos"`
 }
 
 // Group is a named set of keys.
@@ -59,8 +68,9 @@ type Key struct {
 	Desc string `json:"desc"`
 	Kind Kind   `json:"kind"`
 	// Default is the default in canonical text form; nil means none.
-	Default *string `json:"default,omitempty"`
-	Pos     Pos     `json:"pos"`
+	Default  *string `json:"default,omitempty"`
+	Required bool    `json:"required,omitempty"`
+	Pos      Pos     `json:"pos"`
 }
 
 // Command is a config profile: the groups one command uses.

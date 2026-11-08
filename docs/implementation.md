@@ -331,6 +331,51 @@ An explicit path (1 or 2) that doesn't exist is an error. If the search paths
 find nothing, that's fine. A file that exists but is invalid is always an
 error.
 
+**[decided, M3]** Details settled while building it:
+- An app without `ConfigFile` reads no file: it has no `--config` flag, and
+  `ZP_CONFIG` is just an unknown env var.
+- A `--config` that was passed decides, even when empty, so `ZP_CONFIG` isn't
+  consulted; an empty `--config` or `ZP_CONFIG` means "search as usual".
+- The explicit path's extension must name an accepted format (compared
+  ignoring case), and it must be a regular file. In a search path, a directory that happens to be named
+  `config.yaml` is skipped.
+- A null value in the file (`port: ~`, `port:`) is absent, not empty: only an
+  env var or flag that is present but empty clears a value (A4).
+- A file value of the wrong shape (a map or list where a value belongs, a value
+  where a group's map belongs) is a problem only if that layer wins, like any
+  other bad value. A shape problem above several keys is reported once.
+- Not finding or not parsing the file is a plain error, printed as
+  `zp: the config file is invalid: config.yaml:3:3: …`, because nothing else
+  can be checked without it. Every other problem is collected into
+  `cfgx.Errors`.
+- On a configuration error the binder prints `<root name>: <problems>`
+  itself and sets `SilenceErrors` and `SilenceUsage`, so cobra adds neither
+  `Error:` nor the usage text; warnings follow the problems, as in interface
+  §8. `Execute` still returns the error.
+- A required key that isn't set says how to set it:
+  `database.name: is required; set --database-name, ZP_DATABASE_NAME or
+  database.name in the config file`. If a layer set it to the zero value, the
+  problem names that layer, never the value: `is required, but is empty (env
+  ZP_DATABASE_NAME)`, or `is required, but is set to the zero value` for text
+  such as `0`. `Required` with a non-zero default is allowed and useful: an
+  empty env var or flag clears the default (A4).
+- The unknown-env warning reads `unknown environment variable ZP_DATABSE_HOST;
+  did you mean ZP_DATABASE_HOST?`. Warnings carry slog attributes (`key` and
+  `source`, or `env`) for custom loggers; the default handler prints only the
+  message.
+- Suggestions use optimal string alignment distance, with a limit that grows
+  with the name's length (1 for up to 5 runes, at most 4), and a case-only
+  difference is always suggested (`internal/suggest`).
+- `BindRoot` is required when the app has a config file or `Global` groups,
+  since they add flags to the root. A binder whose root wasn't bound fails
+  with an error saying so, instead of silently ignoring `--config`.
+- `Global` groups must also be passed to `dsl.App`, as in interface §3.1's
+  example, so `dsl.App` stays the one list of groups. A command that also
+  lists a global group in `Uses` is fine.
+- The generator claims the identifiers later milestones generate
+  (`ConfigCommand`, `Test`, `All`, `Values`, `Load<Command>`), so a schema
+  that generates today keeps generating when they arrive.
+
 ### 3.5 Errors and provenance
 
 - `engine.Errors` holds a slice of `Problem{Key, Message, Source}`, where

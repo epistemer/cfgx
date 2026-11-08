@@ -11,9 +11,11 @@ func TestRoundTrip(t *testing.T) {
 	def := "localhost"
 	in := &App{
 		Version: Version, Name: "zp", Desc: "ZaynPay backend", EnvPrefix: "ZP",
+		ConfigFile: "config", SearchPaths: []string{".", "$HOME/.zp"}, Formats: []string{"yaml"},
+		Global: []string{"database"}, GlobalOrphans: []Ref{{Name: "log", Pos: Pos{"schema.go", 2}}},
 		Groups: []Group{{
 			Name: "database", Desc: "Database connection", Pos: Pos{"schema.go", 3},
-			Keys: []Key{{Name: "host", Desc: "Host", Kind: KindString, Default: &def, Pos: Pos{"schema.go", 4}}},
+			Keys: []Key{{Name: "host", Desc: "Host", Kind: KindString, Default: &def, Required: true, Pos: Pos{"schema.go", 4}}},
 		}},
 		Commands: []Command{{Name: "Serve", Uses: []string{"database"}, Pos: Pos{"schema.go", 9}}},
 		Pos:      Pos{"schema.go", 7},

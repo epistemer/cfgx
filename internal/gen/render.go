@@ -30,6 +30,7 @@ import (
 	"context"
 	"slices"
 {{end}}
+	"github.com/epistemer/cfgx"
 	"github.com/epistemer/cfgx/engine"
 	"github.com/spf13/cobra"
 )
@@ -52,12 +53,33 @@ var keys = [...]engine.Key[values]{
 		{{- if .HasDefault}} DefaultText: {{printf "%q" .DefaultText}},{{end}}
 		{{- if .Quote}} Quote: true,{{end}}
 		{{- if .Bool}} Bool: true,{{end}}
+		{{- if .Required}} Required: true,{{end}}
+		{{- if .Global}} Global: true,{{end}}
 		Set: func(v *values, raw string) error { return engine.{{.Parse}}(raw, &v.{{.Field}}) },
+		IsSet: func(v *values) bool { return {{.IsSet}} },
 		{{- if .HasDefault}}
 		Default: func(v *values) { v.{{.Field}} = {{.DefaultLit}} },
 		{{- end}}
 	},
 {{- end}}
+}
+
+// app describes the whole application to the engine.
+var app = engine.App[values]{
+	EnvPrefix: {{printf "%q" .EnvPrefix}},
+	{{- if .ConfigFile}}
+	ConfigFile: {{printf "%q" .ConfigFile}},
+	{{- if .SearchPaths}}
+	SearchPaths: []string{ {{- range $i, $p := .SearchPaths}}{{if $i}}, {{end}}{{printf "%q" $p}}{{end -}} },
+	{{- end}}
+	{{- if .Formats}}
+	Formats: []string{ {{- range $i, $f := .Formats}}{{if $i}}, {{end}}{{printf "%q" $f}}{{end -}} },
+	{{- end}}
+	{{- end}}
+	Keys: keys[:],
+	{{- if .GlobalIdx}}
+	Global: []int{ {{- range $i, $k := .GlobalIdx}}{{if $i}}, {{end}}{{$k}}{{end -}} },
+	{{- end}}
 }
 
 // root holds the current values; every getter reads through it.
@@ -77,9 +99,10 @@ type {{.Type}} struct{ r *root }
 func (g *{{$g.Type}}) {{.Getter}}() {{.GoType}} { return g.r.cur.Load().{{.Field}} }
 {{end}}
 {{- end}}
-// BindRoot prepares the root command. Global settings and --config arrive in
-// later cfgx versions.
-func BindRoot(root *cobra.Command) { _ = root }
+// BindRoot prepares the root command: it adds --config and the flags of
+// global settings, and records options such as cfgx.WithLogger. Call it
+// before Execute.
+func BindRoot(root *cobra.Command, opts ...cfgx.Option) { engine.BindRoot(root, &app, opts...) }
 {{range .Commands}}
 // {{.Name}} is the configuration of the {{.Name}} command.
 type {{.Name}} struct {
@@ -114,6 +137,6 @@ func new{{.Name}}(v *values, args []string) *{{.Name}} {
 // {{.Name}}Command binds the {{.Name}} configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func {{.Name}}Command(cmd *cobra.Command, run func(context.Context, *{{.Name}}) error) *cobra.Command {
-	return engine.Command(cmd, keys[:], {{.KeysVar}}, new{{.Name}}, run)
+	return engine.Command(cmd, &app, {{.KeysVar}}, new{{.Name}}, run)
 }
 {{end}}`))

@@ -6,6 +6,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/epistemer/cfgx"
 	"github.com/epistemer/cfgx/engine"
 	"github.com/spf13/cobra"
 )
@@ -21,6 +22,7 @@ type values struct {
 	DatabaseURL     string
 	DatabaseTimeout int
 	DatabaseDebug   bool
+	LogVerbose      bool
 }
 
 var keys = [...]engine.Key[values]{
@@ -28,35 +30,56 @@ var keys = [...]engine.Key[values]{
 		Path: "server.host", Env: "MINI_SERVER_HOST", Flag: "server-host",
 		Type: "string", Desc: "Listen host", DefaultText: "localhost", Quote: true,
 		Set:     func(v *values, raw string) error { return engine.ParseString(raw, &v.ServerHost) },
+		IsSet:   func(v *values) bool { return v.ServerHost != "" },
 		Default: func(v *values) { v.ServerHost = "localhost" },
 	},
 	{
 		Path: "server.port", Env: "MINI_SERVER_PORT", Flag: "server-port",
 		Type: "int", Desc: "Listen port", DefaultText: "8080",
 		Set:     func(v *values, raw string) error { return engine.ParseInt(raw, &v.ServerPort) },
+		IsSet:   func(v *values) bool { return v.ServerPort != 0 },
 		Default: func(v *values) { v.ServerPort = 8080 },
 	},
 	{
 		Path: "server.tls", Env: "MINI_SERVER_TLS", Flag: "server-tls",
 		Type: "bool", Desc: "Enable TLS", Bool: true,
-		Set: func(v *values, raw string) error { return engine.ParseBool(raw, &v.ServerTLS) },
+		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.ServerTLS) },
+		IsSet: func(v *values) bool { return v.ServerTLS },
 	},
 	{
 		Path: "database.url", Env: "MINI_DATABASE_URL", Flag: "database-url",
 		Type: "string", Desc: "Database connection URL", Quote: true,
-		Set: func(v *values, raw string) error { return engine.ParseString(raw, &v.DatabaseURL) },
+		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.DatabaseURL) },
+		IsSet: func(v *values) bool { return v.DatabaseURL != "" },
 	},
 	{
 		Path: "database.timeout", Env: "MINI_DATABASE_TIMEOUT", Flag: "database-timeout",
 		Type: "int", Desc: "Query timeout in seconds",
-		Set: func(v *values, raw string) error { return engine.ParseInt(raw, &v.DatabaseTimeout) },
+		Set:   func(v *values, raw string) error { return engine.ParseInt(raw, &v.DatabaseTimeout) },
+		IsSet: func(v *values) bool { return v.DatabaseTimeout != 0 },
 	},
 	{
 		Path: "database.debug", Env: "MINI_DATABASE_DEBUG", Flag: "database-debug",
 		Type: "bool", Desc: "Log SQL queries", DefaultText: "false", Bool: true,
 		Set:     func(v *values, raw string) error { return engine.ParseBool(raw, &v.DatabaseDebug) },
+		IsSet:   func(v *values) bool { return v.DatabaseDebug },
 		Default: func(v *values) { v.DatabaseDebug = false },
 	},
+	{
+		Path: "log.verbose", Env: "MINI_LOG_VERBOSE", Flag: "log-verbose",
+		Type: "bool", Desc: "Log more", Bool: true, Global: true,
+		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.LogVerbose) },
+		IsSet: func(v *values) bool { return v.LogVerbose },
+	},
+}
+
+// app describes the whole application to the engine.
+var app = engine.App[values]{
+	EnvPrefix:   "MINI",
+	ConfigFile:  "mini",
+	SearchPaths: []string{".", "$HOME/.config/mini"},
+	Keys:        keys[:],
+	Global:      []int{6},
 }
 
 // root holds the current values; every getter reads through it.
@@ -98,12 +121,24 @@ func (g *databaseGroup) DatabaseTimeout() int { return g.r.cur.Load().DatabaseTi
 // DatabaseDebug returns database.debug: Log SQL queries
 func (g *databaseGroup) DatabaseDebug() bool { return g.r.cur.Load().DatabaseDebug }
 
-// BindRoot prepares the root command. Global settings and --config arrive in
-// later cfgx versions.
-func BindRoot(root *cobra.Command) { _ = root }
+// Log is the log group: Logging
+type Log interface {
+	LogVerbose() bool
+}
+
+type logGroup struct{ r *root }
+
+// LogVerbose returns log.verbose: Log more
+func (g *logGroup) LogVerbose() bool { return g.r.cur.Load().LogVerbose }
+
+// BindRoot prepares the root command: it adds --config and the flags of
+// global settings, and records options such as cfgx.WithLogger. Call it
+// before Execute.
+func BindRoot(root *cobra.Command, opts ...cfgx.Option) { engine.BindRoot(root, &app, opts...) }
 
 // Serve is the configuration of the Serve command.
 type Serve struct {
+	*logGroup
 	*serverGroup
 	*databaseGroup
 	args []string
@@ -113,12 +148,13 @@ type Serve struct {
 // them. The slice is a copy.
 func (c *Serve) Args() []string { return slices.Clone(c.args) }
 
-var keysServe = []int{0, 1, 2, 3, 4, 5}
+var keysServe = []int{0, 1, 2, 3, 4, 5, 6}
 
 func newServe(v *values, args []string) *Serve {
 	r := &root{}
 	r.cur.Store(v)
 	return &Serve{
+		logGroup:      &logGroup{r: r},
 		serverGroup:   &serverGroup{r: r},
 		databaseGroup: &databaseGroup{r: r},
 		args:          slices.Clone(args),
@@ -128,11 +164,12 @@ func newServe(v *values, args []string) *Serve {
 // ServeCommand binds the Serve configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *cobra.Command {
-	return engine.Command(cmd, keys[:], keysServe, newServe, run)
+	return engine.Command(cmd, &app, keysServe, newServe, run)
 }
 
 // Migrate is the configuration of the Migrate command.
 type Migrate struct {
+	*logGroup
 	*databaseGroup
 	args []string
 }
@@ -141,12 +178,13 @@ type Migrate struct {
 // them. The slice is a copy.
 func (c *Migrate) Args() []string { return slices.Clone(c.args) }
 
-var keysMigrate = []int{3, 4, 5}
+var keysMigrate = []int{3, 4, 5, 6}
 
 func newMigrate(v *values, args []string) *Migrate {
 	r := &root{}
 	r.cur.Store(v)
 	return &Migrate{
+		logGroup:      &logGroup{r: r},
 		databaseGroup: &databaseGroup{r: r},
 		args:          slices.Clone(args),
 	}
@@ -155,5 +193,5 @@ func newMigrate(v *values, args []string) *Migrate {
 // MigrateCommand binds the Migrate configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) error) *cobra.Command {
-	return engine.Command(cmd, keys[:], keysMigrate, newMigrate, run)
+	return engine.Command(cmd, &app, keysMigrate, newMigrate, run)
 }

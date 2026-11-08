@@ -9,7 +9,7 @@ import (
 type Problem struct {
 	Key     string // the setting, e.g. database.port
 	Message string // what is wrong with it
-	Source  string // where the value came from, e.g. "env ZP_DATABASE_PORT"
+	Source  string // where the value came from, e.g. "env ZP_DATABASE_PORT"; "" if nowhere
 }
 
 // Errors is every problem found while loading, sorted by key. Loading
@@ -24,7 +24,10 @@ func (e Errors) Error() string {
 		fmt.Fprintf(&b, "invalid configuration (%d problems)", len(e))
 	}
 	for _, p := range e {
-		fmt.Fprintf(&b, "\n  %s: %s (%s)", p.Key, p.Message, p.Source)
+		fmt.Fprintf(&b, "\n  %s: %s", p.Key, p.Message)
+		if p.Source != "" {
+			fmt.Fprintf(&b, " (%s)", p.Source)
+		}
 	}
 	return b.String()
 }

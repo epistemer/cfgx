@@ -14,6 +14,19 @@ cmp internal/settings/zz_settings.go $CFGX_ROOT/examples/mini/internal/settings/
 
 go build -o mini$exe .
 exec ./mini$exe serve
-stdout '^serve: host="localhost" port=8080 tls=false db_url="" db_timeout=0 db_debug=false\r?\n$'
-exec ./mini$exe migrate --database-url postgres://localhost/mini --database-timeout 15 --database-debug
-stdout '^migrate: db_url="postgres://localhost/mini" db_timeout=15 db_debug=true\r?\n$'
+stdout '^serve: host="localhost" port=8080 tls=false db_url="" db_timeout=0 db_debug=false verbose=false\r?\n$'
+exec ./mini$exe migrate --database-url postgres://localhost/mini --database-timeout 15 --database-debug --log-verbose
+stdout '^migrate: db_url="postgres://localhost/mini" db_timeout=15 db_debug=true verbose=true\r?\n$'
+
+# mini.yaml in the working directory is read; flags still win.
+cp mini.yaml.example mini.yaml
+exec ./mini$exe serve --server-port 3000
+stdout '^serve: host="0.0.0.0" port=3000 tls=false db_url="postgres://db/mini" db_timeout=0 db_debug=false verbose=false\r?\n$'
+! stderr .
+
+-- mini.yaml.example --
+server:
+  host: 0.0.0.0
+  port: 9000
+database:
+  url: postgres://db/mini
