@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 5
+const Version = 6
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -79,10 +79,12 @@ type Key struct {
 	Desc string `json:"desc"`
 	Kind Kind   `json:"kind"`
 	// Default is the default in canonical text form; nil means none.
-	Default  *string  `json:"default,omitempty"`
-	Required bool     `json:"required,omitempty"`
-	Tags     []string `json:"tags,omitempty"`
-	Pos      Pos      `json:"pos"`
+	Default    *string  `json:"default,omitempty"`
+	Required   bool     `json:"required,omitempty"`
+	Tags       []string `json:"tags,omitempty"`
+	Aliases    []string `json:"aliases,omitempty"`
+	Deprecated string   `json:"deprecated,omitempty"`
+	Pos        Pos      `json:"pos"`
 }
 
 // RuleKind is a kind of cross-key rule.

@@ -13,6 +13,11 @@ import (
 // doesn't match this package fails to compile instead of misbehaving.
 const GeneratedV1 = 1
 
+// Alias is an old name for a key across file, env, and flag.
+type Alias struct {
+	Path, Env, Flag string
+}
+
 // Key describes one setting. Generated code builds a table of them.
 type Key[V any] struct {
 	Path        string // file key, e.g. database.port
@@ -27,6 +32,8 @@ type Key[V any] struct {
 	Required    bool   // must be set (non-zero) after merging
 	Global      bool   // in a Global group: its flag is a persistent flag on the root
 	FlagOnly    bool   // flag-only: never looked up in config file or env
+	Aliases     []Alias
+	Deprecated  string
 	// RelevantIf lists keys that must all be set for this key to matter.
 	// Otherwise it keeps its default, isn't validated, and setting it warns.
 	RelevantIf []int
@@ -112,6 +119,16 @@ func BindFlags[V any](fs *pflag.FlagSet, keys []Key[V], idx []int) {
 		f := fs.VarPF(&rawValue{typ: k.Type}, k.Flag, k.Short, usage)
 		if k.Bool {
 			f.NoOptDefVal = "true"
+		}
+		for _, a := range k.Aliases {
+			if a.Flag == "" || fs.Lookup(a.Flag) != nil {
+				continue
+			}
+			af := fs.VarPF(&rawValue{typ: k.Type}, a.Flag, "", "deprecated: use --"+k.Flag)
+			if k.Bool {
+				af.NoOptDefVal = "true"
+			}
+			_ = fs.MarkHidden(a.Flag)
 		}
 	}
 }

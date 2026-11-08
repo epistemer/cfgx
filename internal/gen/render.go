@@ -61,6 +61,12 @@ var keys = [...]engine.Key[values]{
 		{{- if .Required}} Required: true,{{end}}
 		{{- if .Global}} Global: true,{{end}}
 		{{- if .RelevantIf}} RelevantIf: []int{ {{- range $i, $c := .RelevantIf}}{{if $i}}, {{end}}{{$c}}{{end -}} },{{end}}
+		{{- if .Aliases}}
+		Aliases: []engine.Alias{ {{- range $i, $a := .Aliases}}{{if $i}}, {{end}}{Path: {{printf "%q" $a.Path}}, Env: {{printf "%q" $a.Env}}, Flag: {{printf "%q" $a.Flag}}}{{end -}} },
+		{{- end}}
+		{{- if .Deprecated}}
+		Deprecated: {{printf "%q" .Deprecated}},
+		{{- end}}
 		Set: func(v *values, raw string) error { return engine.{{.Parse}}(raw, &v.{{.Field}}) },
 		IsSet: func(v *values) bool { return {{.IsSet}} },
 		{{- if .HasDefault}}

@@ -69,7 +69,7 @@ func nested() *ir.App {
 		Initialisms: []string{"OTP"},
 		Groups: []ir.Group{
 			{Name: "database", Desc: "Database connection", GoName: "DB", Keys: []ir.Key{
-				{Name: "host", Desc: "Host", Kind: ir.KindString},
+				{Name: "host", Desc: "Host", Kind: ir.KindString, Aliases: []string{"database.hostname"}, Deprecated: "use host instead"},
 			}},
 			{Name: "server", Desc: "HTTP server", FlagPrefix: &empty, Keys: []ir.Key{
 				{Name: "port", Desc: "Port", Kind: ir.KindInt, Default: str("7777")},
@@ -380,6 +380,24 @@ func TestChecks(t *testing.T) {
 			a.Groups = append(a.Groups, ir.Group{Name: "serve", Desc: "x", Keys: []ir.Key{{Name: "host", Desc: "x", Kind: ir.KindString}}})
 			a.Commands[0].Args = []ir.Key{{Name: "host", Desc: "x", Kind: ir.KindString}}
 		}, "Go name ServeHost of host collides with another key or group"},
+		{"bad alias path", func(a *ir.App) {
+			a.Groups[0].Keys[0].Aliases = []string{"bad_alias"}
+		}, `alias "bad_alias" must be a full dotted path`},
+		{"alias path collision", func(a *ir.App) {
+			a.Groups[1].Keys[0].Aliases = []string{"database.host"}
+		}, "file key database.host of smtp.url collides with another key or group"},
+		{"alias env collision", func(a *ir.App) {
+			a.Groups[1].Keys[0].Aliases = []string{"database.host"}
+		}, "env var DEMO_DATABASE_HOST of smtp.url collides with another key or group"},
+		{"alias flag collision", func(a *ir.App) {
+			a.Groups[1].Keys[0].Aliases = []string{"database.host"}
+		}, "flag --database-host of smtp.url collides with another key or group"},
+		{"alias on an argument", func(a *ir.App) {
+			a.Commands[0].Args = []ir.Key{{Name: "verbose", Desc: "x", Kind: ir.KindBool, Aliases: []string{"server.verbose"}}}
+		}, "aliases aren't supported on arguments"},
+		{"blank Deprecated", func(a *ir.App) {
+			a.Groups[0].Keys[0].Deprecated = "   "
+		}, "deprecated message of database.host must not be blank"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

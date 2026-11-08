@@ -195,3 +195,46 @@ func TestArgsKeyInTwoCommandsIsAnError(t *testing.T) {
 		t.Errorf("got %v, want error naming both commands", err)
 	}
 }
+
+func TestExportCarriesAliasesAndDeprecated(t *testing.T) {
+	reset()
+	s := String("sslmode", "SSL mode").Alias("ssl_mode", "ssl").Deprecated("use tls instead")
+	i := Int("port", "Port").Alias("p").Deprecated("port is deprecated")
+	b := Bool("debug", "Debug").Alias("verbose").Deprecated("debug is deprecated")
+	g := Group("db", "Database", s, i, b)
+	arg := String("dry_run", "Dry run").Alias("dry").Deprecated("don't use dry run")
+	App("demo", "Demo app", g)
+	Command("Serve").Uses(g).Args(arg)
+
+	var buf bytes.Buffer
+	if err := Export(&buf); err != nil {
+		t.Fatal(err)
+	}
+	a, err := ir.Decode(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db := a.Groups[0]
+	if got := db.Keys[0].Aliases; strings.Join(got, ",") != "ssl_mode,ssl" {
+		t.Errorf("string aliases = %v", got)
+	}
+	if got := db.Keys[0].Deprecated; got != "use tls instead" {
+		t.Errorf("string deprecated = %q", got)
+	}
+	if got := db.Keys[1].Aliases; strings.Join(got, ",") != "p" {
+		t.Errorf("int aliases = %v", got)
+	}
+	if got := db.Keys[1].Deprecated; got != "port is deprecated" {
+		t.Errorf("int deprecated = %q", got)
+	}
+	if got := db.Keys[2].Aliases; strings.Join(got, ",") != "verbose" {
+		t.Errorf("bool aliases = %v", got)
+	}
+	if got := db.Keys[2].Deprecated; got != "debug is deprecated" {
+		t.Errorf("bool deprecated = %q", got)
+	}
+	args := a.Commands[0].Args
+	if len(args) != 1 || strings.Join(args[0].Aliases, ",") != "dry" || args[0].Deprecated != "don't use dry run" {
+		t.Errorf("args[0] = %+v", args[0])
+	}
+}

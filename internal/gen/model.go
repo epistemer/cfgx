@@ -41,6 +41,11 @@ type TagModel struct {
 	Keys       []*KeyModel
 }
 
+// AliasModel is one alias for a key across file, env, and flag.
+type AliasModel struct {
+	Path, Env, Flag string
+}
+
 // KeyModel is one key with its derived names.
 type KeyModel struct {
 	Index                    int
@@ -54,6 +59,8 @@ type KeyModel struct {
 	Required, Global         bool
 	FlagOnly                 bool
 	Tags                     []string
+	Aliases                  []AliasModel
+	Deprecated               string
 	RelevantIf               []int // keys that must be set for this one to matter
 	Pos                      ir.Pos
 }
@@ -400,6 +407,45 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				}
 				c.seen[c.name] = k.Pos
 			}
+			if k.Deprecated != "" {
+				if strings.TrimSpace(k.Deprecated) == "" {
+					bad(k.Pos, "deprecated message of %s must not be blank", km.Path)
+				}
+				km.Deprecated = k.Deprecated
+			}
+			for _, alias := range k.Aliases {
+				segs := strings.Split(alias, ".")
+				valid := len(segs) > 1
+				if valid {
+					for _, s := range segs {
+						if !nameRE.MatchString(s) {
+							valid = false
+							break
+						}
+					}
+				}
+				if !valid {
+					bad(k.Pos, "alias %q must be a full dotted path whose segments start with a lower-case letter and use only a-z, 0-9 and _", alias)
+					continue
+				}
+				aliasEnv := prefix + "_" + strings.ToUpper(strings.ReplaceAll(alias, ".", "_"))
+				aliasFlag := dashed(alias)
+				for _, c := range []struct {
+					seen map[string]ir.Pos
+					name string
+					what string
+				}{{flags, aliasFlag, "flag --"}, {envs, aliasEnv, "env var "}, {paths, alias, "file key "}} {
+					if prev, ok := c.seen[c.name]; ok {
+						bad(k.Pos, "%s%s of %s collides with another key or group (declared at %s)", c.what, c.name, km.Path, prev)
+					}
+					c.seen[c.name] = k.Pos
+				}
+				km.Aliases = append(km.Aliases, AliasModel{
+					Path: alias,
+					Env:  aliasEnv,
+					Flag: aliasFlag,
+				})
+			}
 			gm.Keys = append(gm.Keys, km)
 			m.Keys = append(m.Keys, km)
 		}
@@ -438,13 +484,22 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	keyPaths := map[string]bool{}
 	for _, k := range m.Keys {
 		keyPaths[k.Path] = true
+		for _, a := range k.Aliases {
+			keyPaths[a.Path] = true
+		}
 	}
-	for _, k := range m.Keys {
-		segs := strings.Split(k.Path, ".")
+	checkMap := func(path string) {
+		segs := strings.Split(path, ".")
 		for i := 1; i < len(segs); i++ {
 			if p := strings.Join(segs[:i], "."); keyPaths[p] {
-				bad(paths[k.Path], "file key %s needs %s to be a map, but %s is a key", k.Path, p, p)
+				bad(paths[path], "file key %s needs %s to be a map, but %s is a key", path, p, p)
 			}
+		}
+	}
+	for _, k := range m.Keys {
+		checkMap(k.Path)
+		for _, a := range k.Aliases {
+			checkMap(a.Path)
 		}
 	}
 
@@ -614,6 +669,15 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				continue
 			}
 			km.Required = k.Required
+			if len(k.Aliases) > 0 {
+				bad(k.Pos, "aliases aren't supported on arguments")
+			}
+			if k.Deprecated != "" {
+				if strings.TrimSpace(k.Deprecated) == "" {
+					bad(k.Pos, "deprecated message of %s must not be blank", km.Path)
+				}
+				km.Deprecated = k.Deprecated
+			}
 			if len(k.Tags) > 0 {
 				bad(k.Pos, "argument %s of %s has tags, but arguments belong to no interface", km.Path, c.Name)
 			}

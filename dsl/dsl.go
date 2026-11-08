@@ -227,6 +227,8 @@ type keyBase struct {
 	def        *string
 	required   bool
 	tags       []*TagDef
+	aliases    []string
+	deprecated string
 	pos        ir.Pos
 }
 
@@ -244,6 +246,19 @@ func (k *StringKey) Tags(tags ...*TagDef) *StringKey {
 // commands that load the key check it.
 func (k *StringKey) Required() *StringKey {
 	k.required = true
+	return k
+}
+
+// Alias registers old file key / env / flag names that are still accepted,
+// with a deprecation warning. Renames only.
+func (k *StringKey) Alias(oldPaths ...string) *StringKey {
+	k.aliases = append(k.aliases, oldPaths...)
+	return k
+}
+
+// Deprecated sets a warning to emit when the key is set.
+func (k *StringKey) Deprecated(msg string) *StringKey {
+	k.deprecated = msg
 	return k
 }
 
@@ -275,6 +290,19 @@ func (k *IntKey) Required() *IntKey {
 	return k
 }
 
+// Alias registers old file key / env / flag names that are still accepted,
+// with a deprecation warning. Renames only.
+func (k *IntKey) Alias(oldPaths ...string) *IntKey {
+	k.aliases = append(k.aliases, oldPaths...)
+	return k
+}
+
+// Deprecated sets a warning to emit when the key is set.
+func (k *IntKey) Deprecated(msg string) *IntKey {
+	k.deprecated = msg
+	return k
+}
+
 // IntKey is an int setting. Create it with Int.
 type IntKey struct{ keyBase }
 
@@ -301,6 +329,19 @@ func (k *BoolKey) Tags(tags ...*TagDef) *BoolKey {
 // commands that load the key check it.
 func (k *BoolKey) Required() *BoolKey {
 	k.required = true
+	return k
+}
+
+// Alias registers old file key / env / flag names that are still accepted,
+// with a deprecation warning. Renames only.
+func (k *BoolKey) Alias(oldPaths ...string) *BoolKey {
+	k.aliases = append(k.aliases, oldPaths...)
+	return k
+}
+
+// Deprecated sets a warning to emit when the key is set.
+func (k *BoolKey) Deprecated(msg string) *BoolKey {
+	k.deprecated = msg
 	return k
 }
 
@@ -406,7 +447,21 @@ func Export(w io.Writer) error {
 			if err != nil {
 				return ir.Group{}, err
 			}
-			ig.Keys = append(ig.Keys, ir.Key{Name: k.name, Desc: k.desc, Kind: k.kind, Default: k.def, Required: k.required, Tags: kt, Pos: k.pos})
+			var aliases []string
+			if len(k.aliases) > 0 {
+				aliases = append([]string(nil), k.aliases...)
+			}
+			ig.Keys = append(ig.Keys, ir.Key{
+				Name:       k.name,
+				Desc:       k.desc,
+				Kind:       k.kind,
+				Default:    k.def,
+				Required:   k.required,
+				Tags:       kt,
+				Aliases:    aliases,
+				Deprecated: k.deprecated,
+				Pos:        k.pos,
+			})
 		}
 		for _, r := range g.rules {
 			if r == nil {
@@ -499,14 +554,20 @@ func Export(w io.Writer) error {
 			if err != nil {
 				return err
 			}
+			var aliases []string
+			if len(k.aliases) > 0 {
+				aliases = append([]string(nil), k.aliases...)
+			}
 			ic.Args = append(ic.Args, ir.Key{
-				Name:     k.name,
-				Desc:     k.desc,
-				Kind:     k.kind,
-				Default:  k.def,
-				Required: k.required,
-				Tags:     kt,
-				Pos:      k.pos,
+				Name:       k.name,
+				Desc:       k.desc,
+				Kind:       k.kind,
+				Default:    k.def,
+				Required:   k.required,
+				Tags:       kt,
+				Aliases:    aliases,
+				Deprecated: k.deprecated,
+				Pos:        k.pos,
 			})
 		}
 		out.Commands = append(out.Commands, ic)

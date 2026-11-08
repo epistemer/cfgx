@@ -38,8 +38,10 @@ var keys = [...]engine.Key[values]{
 	{
 		Path: "database.host", Env: "ZP_DATABASE_HOST", Flag: "database-host",
 		Type: "string", Desc: "Host", Quote: true,
-		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.DBHost) },
-		IsSet: func(v *values) bool { return v.DBHost != "" },
+		Aliases:    []engine.Alias{{Path: "database.hostname", Env: "ZP_DATABASE_HOSTNAME", Flag: "database-hostname"}},
+		Deprecated: "use host instead",
+		Set:        func(v *values, raw string) error { return engine.ParseString(raw, &v.DBHost) },
+		IsSet:      func(v *values) bool { return v.DBHost != "" },
 	},
 	{
 		Path: "server.port", Env: "ZP_SERVER_PORT", Flag: "port",
