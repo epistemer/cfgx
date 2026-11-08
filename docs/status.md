@@ -37,9 +37,8 @@ taken for you, what's next, and what's waiting on you. The terms are in
 - **Next:** M5.3 (rules), M5.4 and M5.5 (to Gemini, Flash or Argon Medium),
   M5.6 (computed methods) and M5.7 (checks); the Argon High second review of
   M3 once its quota resets.
-- **Waiting on you:** optional, delete the merged branches `a12-args`,
-  `m2-skeleton`, `m3` and `m4.3-m5`; GitHub deletes branches only for merges
-  from now on.
+- **Waiting on you:** nothing. You deleted the old merged branches; GitHub
+  deletes branches after each merge from now on.
 
 ## 2026-11-08: M3 config files, errors and provenance
 
