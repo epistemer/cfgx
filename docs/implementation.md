@@ -177,6 +177,26 @@ or parameters are generate-time errors.
   non-zero defaults (A4); `Requires` and `RelevantIf` take exactly two; a
   `RelevantIf` cycle is an error.
 
+### 2.3c Arguments, aliases, deprecation **[decided, M5.4–M5.5]**
+
+- Command `Args` are flag-only: never read from env or the config file, not
+  file keys, so the unknown-key and unknown-env scans ignore them. The getter
+  is the argument's name alone (`Steps()`); its values field is prefixed with
+  the command (`MigrateSteps`), so two commands can share an argument name.
+  An argument's flag can't clash with `--help`, `--config` or any flag the
+  command already has (globals and `RelevantIf` conditions included), and an
+  argument can't have tags or aliases.
+- `.Alias("database.ssl_mode")` derives the old env var and flag from the old
+  path, as for any key. The old flag is hidden from `--help`. In each layer
+  the new name wins over an alias. Using an alias warns (`database.ssl_mode
+  is deprecated, use database.sslmode (config.yaml:9:3)`, `ZP_DATABASE_SSL_MODE
+  is deprecated, use ZP_DATABASE_SSLMODE`, `--database-ssl-mode is deprecated,
+  use --database-sslmode`), even when a higher layer overrides it; an alias
+  set next to the new name warns that it is ignored.
+- `.Deprecated(msg)` warns `database.legacy is deprecated: <msg> (<source>)`
+  when the key is set to a value that counts as set (A4), and not when the key
+  is irrelevant.
+
 ### 2.4 Checks **[decided by interface]**
 
 These all run on the IR before anything is written:

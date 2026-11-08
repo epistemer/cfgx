@@ -4,6 +4,30 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M5.4 and M5.5, by Gemini
+
+- **Landed:** through a PR:
+  - **M5.5, command `Args`:** flag-only arguments with getters on the command
+    type, such as `m.Down()` and `m.Steps()`.
+  - **M5.4, `Alias` and `Deprecated`:** an old file key, env var or flag keeps
+    working and warns; a deprecated key warns when it is set.
+- **Reviewed:** Gemini 3.8 Flash (High) wrote both items, and Claude reviewed
+  them. Claude added two checks to M5.5: an argument's flag can't clash with a
+  `RelevantIf` condition's flag, and arguments can't have tags. Since Claude
+  reviewed Gemini's work, no second-model review was needed.
+- **Cost:** about 570k tokens for M5.5 and 510k for M5.4, mostly Gemini
+  reading the code and re-running tests. That's high for small items, even on
+  Flash. Next time, for items this size, a brief that hands over the exact
+  code skeleton and needs less exploration should cost much less. Doing them
+  myself is an option too.
+- **Decided for you:** the details in implementation.md §2.3c. Among them:
+  - Within a layer, the new name wins over an alias.
+  - An alias that is used always warns.
+  - Argument getters carry no group prefix.
+- **Next:** M5.6 (computed methods, a type-checking pass) and M5.7 (the full
+  check list), both Claude's; then M4.
+- **Waiting on you:** nothing.
+
 ## 2026-11-08: M5.3 rules
 
 - **Landed:**
