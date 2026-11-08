@@ -9,7 +9,7 @@ import (
 	"github.com/epistemer/cfgx/internal/ir"
 )
 
-func reset() { apps, commands = nil, nil }
+func reset() { apps, commands, tags = nil, nil, nil }
 
 func TestExport(t *testing.T) {
 	reset()
@@ -79,5 +79,47 @@ func TestUsesNeedsTheAppsGroup(t *testing.T) {
 	c := a.Commands[0]
 	if len(c.Uses) != 0 || len(c.Orphans) != 1 || c.Orphans[0].Name != "database" {
 		t.Fatalf("the lookalike must be an orphan, got %+v", c)
+	}
+}
+
+func TestNilKeyIsAnError(t *testing.T) {
+	reset()
+	var missing *StringKey
+	App("a", "A", Group("g", "G", missing))
+	if err := Export(&bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "nil key or group") {
+		t.Errorf("got %v", err)
+	}
+}
+
+func TestGroupInTwoPlaces(t *testing.T) {
+	reset()
+	shared := Group("shared", "Shared", Int("x", "X"))
+	App("a", "A", Group("one", "One", shared), Group("two", "Two", shared))
+	if err := Export(&bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "used twice, as one.shared and as two.shared") {
+		t.Errorf("got %v", err)
+	}
+}
+
+func TestNestedPathsAndTags(t *testing.T) {
+	reset()
+	mailer := Tag("Mailer", "Mail")
+	retry := Group("retry", "Retry", Int("max", "Max"))
+	sched := Group("scheduler", "Scheduler", retry).Tags(mailer)
+	App("a", "A", sched).Global(retry)
+	Command("Retry").Uses(retry, mailer)
+	var buf bytes.Buffer
+	if err := Export(&buf); err != nil {
+		t.Fatal(err)
+	}
+	a, err := ir.Decode(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := a.Commands[0]
+	if strings.Join(c.Uses, ",") != "scheduler.retry" || strings.Join(c.Tags, ",") != "Mailer" {
+		t.Errorf("command: %+v", c)
+	}
+	if strings.Join(a.Global, ",") != "scheduler.retry" || len(a.Tags) != 1 || a.Groups[0].Tags[0] != "Mailer" {
+		t.Errorf("app: global %v, tags %+v, group tags %v", a.Global, a.Tags, a.Groups[0].Tags)
 	}
 }

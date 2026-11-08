@@ -1,0 +1,122 @@
+# M5.1 and M5.2: nested groups, GoName, FlagPrefix, dotted key names,
+# App.Initialisms and tags, through the real DSL, the file, env and flags.
+go generate ./...
+go build -o app$exe .
+
+exec ./app$exe serve
+stdout '^serve: db=localhost port=7777 tls=false retry=3 otp=6 smtp=mail:587\r?\n$'
+
+# FlagPrefix("") gives --port and --tls-enabled; nested groups and dotted
+# keys nest in the file and lengthen env names.
+cp files/app.yaml app.yaml
+env APP_AUTH_OTP_LENGTH=8
+exec ./app$exe serve --port 9000 --tls-enabled
+stdout '^serve: db=db.internal port=9000 tls=true retry=5 otp=8 smtp=mail:587\r?\n$'
+! stderr .
+
+# A typo below a nested group is caught with its full path.
+cp files/typo.yaml app.yaml
+exec ./app$exe serve
+stderr '^warning: unknown key "scheduler.retry.mxa" in app.yaml:3:5; did you mean "scheduler.retry.max"\?\r?$'
+
+# A command that uses only a tag gets exactly the tagged keys.
+exec ./app$exe test-email --smtp-host relay
+stdout '^test-email: from=noreply@x smtp=relay:587\r?\n$'
+exec ./app$exe test-email --help
+stdout '--smtp-host'
+stdout '--auth-emailfrom'
+! stdout '--auth-otp-length'
+! stdout '--port'
+
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+// send needs only the Mailer tag's interface.
+func send(m settings.Mailer) string {
+	return fmt.Sprintf("from=%s smtp=%s:%d", m.AuthEmailfrom(), m.SMTPHost(), m.SMTPPort())
+}
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(
+		settings.ServeCommand(&cobra.Command{Use: "serve"},
+			func(_ context.Context, s *settings.Serve) error {
+				fmt.Printf("serve: db=%s port=%d tls=%t retry=%d otp=%d smtp=%s:%d\n",
+					s.DBHost(), s.ServerPort(), s.ServerTLSEnabled(), s.SchedulerRetryMax(), s.AuthOTPLength(), s.SMTPHost(), s.SMTPPort())
+				return nil
+			}),
+		settings.TestEmailCommand(&cobra.Command{Use: "test-email"},
+			func(_ context.Context, t *settings.TestEmail) error {
+				fmt.Printf("test-email: %s\n", send(t))
+				return nil
+			}),
+	)
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var Mailer = dsl.Tag("Mailer", "Everything the mailer needs")
+
+var DB = dsl.Group("database", "Database connection",
+	dsl.String("host", "Database host").Default("localhost"),
+).GoName("DB")
+
+var Server = dsl.Group("server", "HTTP server",
+	dsl.Int("port", "Listen port").Default(7777),
+	dsl.Bool("tls.enabled", "Serve HTTPS"),
+).FlagPrefix("")
+
+var Scheduler = dsl.Group("scheduler", "Task scheduler",
+	dsl.Group("retry", "Retry policy",
+		dsl.Int("max", "Maximum retries").Default(3),
+	),
+)
+
+var Auth = dsl.Group("auth", "Authentication",
+	dsl.Int("otp.length", "OTP length").Default(6),
+	dsl.String("emailfrom", "Sender address").Default("noreply@x").Tags(Mailer),
+)
+
+var SMTP = dsl.Group("smtp", "Outgoing mail",
+	dsl.String("host", "SMTP host").Default("mail"),
+	dsl.Int("port", "SMTP port").Default(587),
+).Tags(Mailer)
+
+var App = dsl.App("app", "Test app", DB, Server, Scheduler, Auth, SMTP).
+	ConfigFile("app", ".").
+	Initialisms("OTP")
+
+var (
+	Serve     = dsl.Command("Serve").Uses(DB, Server, Scheduler, Auth, SMTP)
+	TestEmail = dsl.Command("TestEmail").Uses(Mailer)
+)
+-- files/app.yaml --
+database:
+  host: db.internal
+scheduler:
+  retry:
+    max: 5
+-- files/typo.yaml --
+scheduler:
+  retry:
+    mxa: 1

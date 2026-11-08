@@ -1,4 +1,4 @@
-package secret
+package cfgx
 
 import (
 	"bytes"
@@ -79,20 +79,20 @@ func TestSecret_BasicSemantics(t *testing.T) {
 		t.Fatal("zero.Equal(canary) = true, want false")
 	}
 
-	empty := New("")
+	empty := NewSecret("")
 	if empty.IsSet() {
-		t.Fatal("New(\"\") should be unset")
+		t.Fatal("NewSecret(\"\") should be unset")
 	}
 	if empty.Equal("") {
-		t.Fatal("New(\"\").Equal(\"\") = true, want false when unset")
+		t.Fatal("NewSecret(\"\").Equal(\"\") = true, want false when unset")
 	}
 	if got := empty.Bytes(); got != nil {
-		t.Fatalf("New(\"\").Bytes() = %v, want nil", got)
+		t.Fatalf("NewSecret(\"\").Bytes() = %v, want nil", got)
 	}
 
-	s := New(canary)
+	s := NewSecret(canary)
 	if !s.IsSet() {
-		t.Fatal("New(canary).IsSet() = false, want true")
+		t.Fatal("NewSecret(canary).IsSet() = false, want true")
 	}
 	if got := s.Reveal(); got != canary {
 		t.Fatalf("s.Reveal() = %q, want %q", got, canary)
@@ -125,7 +125,7 @@ func TestSecret_BasicSemantics(t *testing.T) {
 
 func TestLeak_FmtVerbsAndFunctions(t *testing.T) {
 	// Not parallel because subtest captures os.Stdout for fmt.Print/Println.
-	s := New(canary)
+	s := NewSecret(canary)
 	var unset Secret
 
 	verbs := []string{
@@ -147,14 +147,14 @@ func TestLeak_FmtVerbsAndFunctions(t *testing.T) {
 			outVal := fmt.Sprintf(verb, v)
 			assertNoLeak(t, fmt.Sprintf("Sprintf(%s, %s value)", verb, secretVal.name), outVal)
 			if verb == "%T" {
-				if outVal != "secret.Secret" {
-					t.Fatalf("Sprintf(%%T, value) = %q, want \"secret.Secret\"", outVal)
+				if outVal != "cfgx.Secret" {
+					t.Fatalf("Sprintf(%%T, value) = %q, want \"cfgx.Secret\"", outVal)
 				}
 			} else if verb == "%p" {
 				// fmt handles %p before fmt.Formatter; for a non-pointer value badVerb prints
-				// "%!p(secret.Secret={0x...})" or "%!p(secret.Secret={<nil>})" without calling methods.
-				if !strings.HasPrefix(outVal, "%!p(secret.Secret={") {
-					t.Fatalf("Sprintf(%%p, value) = %q, want %%!p(secret.Secret={...})", outVal)
+				// "%!p(cfgx.Secret={0x...})" or "%!p(cfgx.Secret={<nil>})" without calling methods.
+				if !strings.HasPrefix(outVal, "%!p(cfgx.Secret={") {
+					t.Fatalf("Sprintf(%%p, value) = %q, want %%!p(cfgx.Secret={...})", outVal)
 				}
 			} else if outVal != mask {
 				t.Fatalf("Sprintf(%s, %s value) = %q, want %q", verb, secretVal.name, outVal, mask)
@@ -163,8 +163,8 @@ func TestLeak_FmtVerbsAndFunctions(t *testing.T) {
 			outPtr := fmt.Sprintf(verb, vp)
 			assertNoLeak(t, fmt.Sprintf("Sprintf(%s, %s ptr)", verb, secretVal.name), outPtr)
 			if verb == "%T" {
-				if outPtr != "*secret.Secret" {
-					t.Fatalf("Sprintf(%%T, ptr) = %q, want \"*secret.Secret\"", outPtr)
+				if outPtr != "*cfgx.Secret" {
+					t.Fatalf("Sprintf(%%T, ptr) = %q, want \"*cfgx.Secret\"", outPtr)
 				}
 			} else if verb == "%p" {
 				if !strings.HasPrefix(outPtr, "0x") {
@@ -249,7 +249,7 @@ func TestLeak_FmtVerbsAndFunctions(t *testing.T) {
 func TestLeak_ParentStructsAndContainers(t *testing.T) {
 	t.Parallel()
 
-	s := New(canary)
+	s := NewSecret(canary)
 	exp := exportedHolder{Secret: s, Name: "db"}
 	unexp := unexportedHolder{secret: s}
 	var unexpUnset unexportedHolder
@@ -274,7 +274,7 @@ func TestLeak_ParentStructsAndContainers(t *testing.T) {
 	// the inner struct { reveal func() string } via reflection.
 	reValV := regexp.MustCompile(`^\{\{0x[0-9a-f]+\}\}$`)
 	reValPlusV := regexp.MustCompile(`^\{secret:\{reveal:0x[0-9a-f]+\}\}$`)
-	reValSharpV := regexp.MustCompile(`^secret\.unexportedHolder\{secret:secret\.Secret\{reveal:\(func\(\) string\)\(0x[0-9a-f]+\)\}\}$`)
+	reValSharpV := regexp.MustCompile(`^cfgx\.unexportedHolder\{secret:cfgx\.Secret\{reveal:\(func\(\) string\)\(0x[0-9a-f]+\)\}\}$`)
 
 	gotV := fmt.Sprintf("%v", unexp)
 	assertNoLeak(t, "unexportedHolder value %v", gotV)
@@ -322,9 +322,9 @@ func TestLeak_ParentStructsAndContainers(t *testing.T) {
 	}
 
 	// 3. Slices, arrays, maps, nested structs, and interfaces holding a Secret.
-	sliceVal := []Secret{s, New("")}
-	arrayVal := [2]Secret{s, New("")}
-	mapVal := map[string]Secret{"primary": s, "empty": New("")}
+	sliceVal := []Secret{s, NewSecret("")}
+	arrayVal := [2]Secret{s, NewSecret("")}
+	mapVal := map[string]Secret{"primary": s, "empty": NewSecret("")}
 	var ifaceVal any = s
 	var ifacePtr any = &s
 	var stringerVal fmt.Stringer = s
@@ -376,7 +376,7 @@ func TestLeak_ParentStructsAndContainers(t *testing.T) {
 func TestLeak_EncodingsTemplatesLogsErrors(t *testing.T) {
 	t.Parallel()
 
-	s := New(canary)
+	s := NewSecret(canary)
 	exp := exportedHolder{Secret: s, Name: "db"}
 	unexp := unexportedHolder{secret: s}
 
@@ -547,8 +547,8 @@ func TestLeak_EncodingsTemplatesLogsErrors(t *testing.T) {
 func TestLeak_ReflectionDumpersAndGob(t *testing.T) {
 	t.Parallel()
 
-	s1 := New(canary)
-	s2 := New("second-secret-LEAK-CANARY-2")
+	s1 := NewSecret(canary)
+	s2 := NewSecret("second-secret-LEAK-CANARY-2")
 	exp1 := exportedHolder{Secret: s1, Name: "db"}
 	exp2 := exportedHolder{Secret: s2, Name: "db"}
 	unexp1 := unexportedHolder{secret: s1}
@@ -608,7 +608,7 @@ func TestLeak_ReflectionDumpersAndGob(t *testing.T) {
 	// and a mixed struct with an exported non-secret field plus an unexported Secret field.
 	// gob checks GobEncoder and encoding.BinaryMarshaler (not TextMarshaler), then falls back to
 	// exported struct fields. Because Secret has only an unexported func field, gob rejects it with:
-	// "gob: type secret.Secret has no exported fields".
+	// "gob: type cfgx.Secret has no exported fields".
 	var gobBuf bytes.Buffer
 	errGobDirect := gob.NewEncoder(&gobBuf).Encode(s1)
 	if errGobDirect == nil {
@@ -649,7 +649,7 @@ func TestLeak_ReflectionDumpersAndGob(t *testing.T) {
 func TestLeak_ReflectWithoutUnsafeCannotReachString(t *testing.T) {
 	t.Parallel()
 
-	s := New(canary)
+	s := NewSecret(canary)
 	rv := reflect.ValueOf(s)
 	field := rv.Field(0) // reveal func() string
 

@@ -59,14 +59,135 @@ func TestGolden(t *testing.T) {
 	}
 }
 
+// nested is a schema with the structure M5.1 adds: a nested group, GoName,
+// FlagPrefix, dotted key names and App.Initialisms.
+func nested() *ir.App {
+	empty := ""
+	return &ir.App{
+		Version: ir.Version, Name: "zp", Desc: "Nested", EnvPrefix: "ZP",
+		Initialisms: []string{"OTP"},
+		Groups: []ir.Group{
+			{Name: "database", Desc: "Database connection", GoName: "DB", Keys: []ir.Key{
+				{Name: "host", Desc: "Host", Kind: ir.KindString},
+			}},
+			{Name: "server", Desc: "HTTP server", FlagPrefix: &empty, Keys: []ir.Key{
+				{Name: "port", Desc: "Port", Kind: ir.KindInt, Default: str("7777")},
+				{Name: "tls.enabled", Desc: "Serve HTTPS", Kind: ir.KindBool},
+			}},
+			{Name: "scheduler", Desc: "Task scheduler", Keys: []ir.Key{
+				{Name: "workers", Desc: "Workers", Kind: ir.KindInt},
+			}, Groups: []ir.Group{
+				{Name: "retry", Desc: "Retry policy", Keys: []ir.Key{
+					{Name: "max", Desc: "Maximum retries", Kind: ir.KindInt, Default: str("3")},
+				}},
+			}},
+			{Name: "auth", Desc: "Authentication", Keys: []ir.Key{
+				{Name: "otp.length", Desc: "OTP length", Kind: ir.KindInt},
+				{Name: "emailfrom", Desc: "Sender address for auth emails", Kind: ir.KindString, Tags: []string{"Mailer"}},
+			}},
+			{Name: "smtp", Desc: "Outgoing mail", Tags: []string{"Mailer"}, Keys: []ir.Key{
+				{Name: "host", Desc: "SMTP server host", Kind: ir.KindString},
+				{Name: "port", Desc: "SMTP server port", Kind: ir.KindInt, Default: str("587")},
+				{Name: "tls", Desc: "Use implicit TLS", Kind: ir.KindBool},
+			}},
+		},
+		Tags: []ir.Tag{{Name: "Mailer", Desc: "Everything the mailer needs"}},
+		Commands: []ir.Command{
+			{Name: "Serve", Uses: []string{"database", "server", "scheduler", "scheduler.retry", "auth", "smtp"}, Tags: []string{"Mailer"}},
+			{Name: "Retry", Uses: []string{"scheduler.retry"}},
+			{Name: "TestEmail", Uses: []string{}, Tags: []string{"Mailer"}},
+			{Name: "Notify", Uses: []string{"smtp"}, Tags: []string{"Mailer"}},
+		},
+	}
+}
+
+func TestNestedGolden(t *testing.T) {
+	m, err := Build(nested(), "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := Render(m)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, src)
+	}
+	golden.Assert(t, filepath.Join("testdata", "nested.golden"), src)
+	byPath := map[string]*KeyModel{}
+	for _, k := range m.Keys {
+		byPath[k.Path] = k
+	}
+	for path, want := range map[string][3]string{
+		"database.host":       {"DBHost", "--database-host", "ZP_DATABASE_HOST"},
+		"server.port":         {"ServerPort", "--port", "ZP_SERVER_PORT"},
+		"server.tls.enabled":  {"ServerTLSEnabled", "--tls-enabled", "ZP_SERVER_TLS_ENABLED"},
+		"scheduler.retry.max": {"SchedulerRetryMax", "--scheduler-retry-max", "ZP_SCHEDULER_RETRY_MAX"},
+		"auth.otp.length":     {"AuthOTPLength", "--auth-otp-length", "ZP_AUTH_OTP_LENGTH"},
+		"scheduler.workers":   {"SchedulerWorkers", "--scheduler-workers", "ZP_SCHEDULER_WORKERS"},
+	} {
+		k := byPath[path]
+		if k == nil {
+			t.Errorf("no key %s", path)
+			continue
+		}
+		if got := [3]string{k.Getter, "--" + k.Flag, k.Env}; got != want {
+			t.Errorf("%s: got %q, want %q", path, got, want)
+		}
+	}
+	types := map[string]string{}
+	for _, g := range m.Groups {
+		types[g.Path] = g.Iface + " " + g.Type
+	}
+	for path, want := range map[string]string{
+		"database": "DB dbGroup", "server": "Server serverGroup",
+		"scheduler": "Scheduler schedulerGroup", "scheduler.retry": "SchedulerRetry schedulerRetryGroup",
+	} {
+		if types[path] != want {
+			t.Errorf("%s: got %q, want %q", path, types[path], want)
+		}
+	}
+	// Serve uses scheduler and scheduler.retry: retry is reached through
+	// scheduler, not embedded twice.
+	for _, c := range m.Commands {
+		var names []string
+		for _, g := range c.Groups {
+			names = append(names, g.Path)
+		}
+		var fwd []string
+		for _, k := range c.Forward {
+			fwd = append(fwd, k.Getter)
+		}
+		want := map[string][2]string{
+			"Serve":     {"database,server,scheduler,auth,smtp", ""},
+			"Retry":     {"scheduler.retry", ""},
+			"TestEmail": {"", "AuthEmailfrom,SMTPHost,SMTPPort,SMTPTLS"},
+			// Notify embeds smtp whole, so only the auth key is forwarded.
+			"Notify": {"smtp", "AuthEmailfrom"},
+		}[c.Name]
+		if got := [2]string{strings.Join(names, ","), strings.Join(fwd, ",")}; got != want {
+			t.Errorf("%s: embeds and forwards %q, want %q", c.Name, got, want)
+		}
+	}
+	if len(m.Tags) != 1 || len(m.Tags[0].Keys) != 4 {
+		t.Errorf("Mailer tag: %+v", m.Tags)
+	}
+}
+
+func TestLowerGo(t *testing.T) {
+	for in, want := range map[string]string{"DB": "db", "HTTPServer": "httpServer", "Mail": "mail", "MyDB": "myDB", "X": "x",
+		"DB1": "db1", "HTTP2": "http2", "HTTP2Server": "http2Server", "S3Bucket": "s3Bucket"} {
+		if got := lowerGo(in); got != want {
+			t.Errorf("lowerGo(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestNames(t *testing.T) {
 	for in, want := range map[string]string{"database": "Database", "smtp_url": "SMTPURL", "db": "DB", "max_conns": "MaxConns", "otp_ttl": "OTPTTL"} {
-		if got := pascal(in); got != want {
+		if got := newNamer().pascal(in); got != want {
 			t.Errorf("pascal(%q) = %q, want %q", in, got, want)
 		}
 	}
 	for in, want := range map[string]string{"database": "database", "db": "db", "smtp_tls": "smtpTLS", "db_1": "db1", "http_api": "httpAPI", "scheduler_retry": "schedulerRetry", "a_db": "aDB"} {
-		if got := lowerCamel(in); got != want {
+		if got := newNamer().lowerCamel(in); got != want {
 			t.Errorf("lowerCamel(%q) = %q, want %q", in, got, want)
 		}
 	}
@@ -106,6 +227,41 @@ func TestChecks(t *testing.T) {
 		{"global orphan", func(a *ir.App) {
 			a.GlobalOrphans = []ir.Ref{{Name: "extra", Pos: ir.Pos{File: "schema.go", Line: 9}}}
 		}, `Global lists group "extra" (declared at schema.go:9), which isn't passed to dsl.App`},
+		{"bad GoName", func(a *ir.App) { a.Groups[0].GoName = "db" }, `GoName "db" of group "database"`},
+		{"bad FlagPrefix", func(a *ir.App) { p := "Srv_"; a.Groups[0].FlagPrefix = &p }, `FlagPrefix "Srv_"`},
+		{"bad initialism", func(a *ir.App) { a.Initialisms = []string{"otp"} }, `initialism "otp"`},
+		{"bad dotted key", func(a *ir.App) { a.Groups[0].Keys[0].Name = "tls..x" }, `key name "tls..x"`},
+		{"key under a key", func(a *ir.App) {
+			a.Groups[0].Keys = append(a.Groups[0].Keys, ir.Key{Name: "host.x", Desc: "x", Kind: ir.KindString})
+		}, "file key database.host.x needs database.host to be a map"},
+		{"key and nested group share a path", func(a *ir.App) {
+			a.Groups[0].Keys = append(a.Groups[0].Keys, ir.Key{Name: "pool.size", Desc: "x", Kind: ir.KindInt})
+			a.Groups[0].Groups = []ir.Group{{Name: "pool", Desc: "x", Keys: []ir.Key{{Name: "size", Desc: "x", Kind: ir.KindInt}}}}
+		}, "file key database.pool.size"},
+		{"key and nested group share a name", func(a *ir.App) {
+			a.Groups[0].Groups = []ir.Group{{Name: "host", Desc: "x"}}
+		}, `group "database" has two members named "host"`},
+		{"flag collision from FlagPrefix", func(a *ir.App) {
+			e := ""
+			a.Groups[0].FlagPrefix, a.Groups[1].FlagPrefix = &e, &e
+			a.Groups[1].Keys = append(a.Groups[1].Keys, ir.Key{Name: "host", Desc: "x", Kind: ir.KindString})
+		}, "flag --host"},
+		{"tag on no keys", func(a *ir.App) { a.Tags = []ir.Tag{{Name: "Mailer", Desc: "x"}} }, "tag Mailer isn't on any key"},
+		{"bad tag name", func(a *ir.App) {
+			a.Tags = []ir.Tag{{Name: "mailer", Desc: "x"}}
+			a.Groups[1].Tags = []string{"mailer"}
+		}, `tag name "mailer" must be an exported Go identifier`},
+		{"tag collides with a group interface", func(a *ir.App) {
+			a.Tags = []ir.Tag{{Name: "Database", Desc: "x"}}
+			a.Groups[1].Tags = []string{"Database"}
+		}, "collides"},
+		{"tag declared twice", func(a *ir.App) {
+			a.Tags = []ir.Tag{{Name: "Mailer", Desc: "x"}, {Name: "Mailer", Desc: "y"}}
+			a.Groups[1].Tags = []string{"Mailer"}
+		}, "tag Mailer is declared twice"},
+		{"key with an undeclared tag", func(a *ir.App) { a.Groups[0].Keys[0].Tags = []string{"Mailr"} }, "key database.host has tag Mailr, which isn't declared"},
+		{"group with an undeclared tag", func(a *ir.App) { a.Groups[0].Tags = []string{"Mailr"} }, "group database has tag Mailr, which isn't declared"},
+		{"command uses an unknown tag", func(a *ir.App) { a.Commands[0].Tags = []string{"Nope"} }, "uses tag Nope, which isn't declared"},
 		{"global unknown", func(a *ir.App) { a.Global = append(a.Global, "nope") }, `Global lists group "nope"`},
 		{"global twice", func(a *ir.App) { a.Global = append(a.Global, "log") }, `Global lists group "log" twice`},
 		{"config file with directory", func(a *ir.App) { a.ConfigFile = "etc/config" }, "without a directory"},
@@ -197,6 +353,7 @@ func TestGeneratedCodeCompiles(t *testing.T) {
 		"sample":         func(a *ir.App) {},
 		"no config file": func(a *ir.App) { a.ConfigFile = ""; a.SearchPaths = nil; a.Global = nil },
 		"formats":        func(a *ir.App) { a.Formats = []string{"json"}; a.SearchPaths = nil },
+		"nested":         func(a *ir.App) { *a = *nested() },
 		"no commands":    func(a *ir.App) { a.Commands = nil },
 		"no groups": func(a *ir.App) {
 			a.Groups = nil
@@ -231,6 +388,25 @@ func TestGeneratedCodeCompiles(t *testing.T) {
 			t.Cleanup(func() { os.RemoveAll(dir) })
 			if err := os.WriteFile(filepath.Join(dir, "zz_settings.go"), src, 0o644); err != nil {
 				t.Fatal(err)
+			}
+			if name == "nested" {
+				// The interfaces each command type must implement (A5).
+				assert := `package settings
+
+var (
+	_ Mailer         = (*TestEmail)(nil)
+	_ Mailer         = (*Notify)(nil)
+	_ Mailer         = (*Serve)(nil)
+	_ SMTP           = (*Notify)(nil)
+	_ Scheduler      = (*Serve)(nil)
+	_ SchedulerRetry = (*Serve)(nil)
+	_ SchedulerRetry = (*Retry)(nil)
+	_ DB             = (*Serve)(nil)
+)
+`
+				if err := os.WriteFile(filepath.Join(dir, "assert.go"), []byte(assert), 0o644); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if out, err := exec.Command("go", "vet", "./"+filepath.Base(dir)).CombinedOutput(); err != nil {
 				t.Fatalf("generated code doesn't vet: %v\n%s\n%s", err, out, src)

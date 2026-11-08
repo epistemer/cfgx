@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 2
+const Version = 3
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -48,18 +48,28 @@ type App struct {
 	// Global names the groups every command gets.
 	Global []string `json:"global,omitempty"`
 	// GlobalOrphans are Global groups that weren't passed to dsl.App.
-	GlobalOrphans []Ref     `json:"globalOrphans,omitempty"`
-	Groups        []Group   `json:"groups"`
-	Commands      []Command `json:"commands"`
-	Pos           Pos       `json:"pos"`
+	GlobalOrphans []Ref `json:"globalOrphans,omitempty"`
+	// Initialisms are extra words written in capitals in Go names.
+	Initialisms []string  `json:"initialisms,omitempty"`
+	Groups      []Group   `json:"groups"`
+	Tags        []Tag     `json:"tags,omitempty"`
+	Commands    []Command `json:"commands"`
+	Pos         Pos       `json:"pos"`
 }
 
-// Group is a named set of keys.
+// Group is a named set of keys and nested groups.
 type Group struct {
 	Name string `json:"name"`
 	Desc string `json:"desc"`
-	Keys []Key  `json:"keys"`
-	Pos  Pos    `json:"pos"`
+	// GoName replaces the group's segment of Go names; "" derives it.
+	GoName string `json:"goName,omitempty"`
+	// FlagPrefix replaces the prefix of the group's flags; nil derives it.
+	FlagPrefix *string `json:"flagPrefix,omitempty"`
+	// Tags apply to every key in the group, nested groups included.
+	Tags   []string `json:"tags,omitempty"`
+	Keys   []Key    `json:"keys"`
+	Groups []Group  `json:"groups,omitempty"`
+	Pos    Pos      `json:"pos"`
 }
 
 // Key is one setting.
@@ -68,15 +78,26 @@ type Key struct {
 	Desc string `json:"desc"`
 	Kind Kind   `json:"kind"`
 	// Default is the default in canonical text form; nil means none.
-	Default  *string `json:"default,omitempty"`
-	Required bool    `json:"required,omitempty"`
-	Pos      Pos     `json:"pos"`
+	Default  *string  `json:"default,omitempty"`
+	Required bool     `json:"required,omitempty"`
+	Tags     []string `json:"tags,omitempty"`
+	Pos      Pos      `json:"pos"`
+}
+
+// Tag is a cross-cutting set of keys with its own interface.
+type Tag struct {
+	Name string `json:"name"`
+	Desc string `json:"desc"`
+	Pos  Pos    `json:"pos"`
 }
 
 // Command is a config profile: the groups one command uses.
 type Command struct {
-	Name string   `json:"name"`
+	Name string `json:"name"`
+	// Uses are the dotted paths of the groups the command uses.
 	Uses []string `json:"uses"`
+	// Tags are the tags the command uses.
+	Tags []string `json:"tags,omitempty"`
 	// Orphans are groups the command uses that weren't passed to dsl.App.
 	// The generator reports them along with every other problem.
 	Orphans []Ref `json:"orphans,omitempty"`
