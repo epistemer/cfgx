@@ -143,8 +143,8 @@ and can run in parallel. The questions and kill criteria are in
 
 **Status (2026-11-07):** done. All five spikes passed and none of the kill
 criteria fired; the decisions are ADRs 0002–0006. The spike code was deleted when
-they merged, except `spikes/s5-secret`, whose leak suite moves into package
-`cfgx` in M4.3.
+they merged, except `spikes/s5-secret`, whose leak suite moved into package
+`cfgx` in M4.3 (the spike directory is gone).
 
 | ✓ | ID | Spike | Size | Done when |
 |---|----|-------|------|-----------|
@@ -220,7 +220,7 @@ alias, deprecated) and M7 (mutable, epoch). Reloadable is after v0.1.0.
 |---|----|------|------|-----------|
 | ☐ | M4.1 | `Int64`, `Uint`, `Float`, `Duration` (a unit is required), `ByteSize` | M | Golden + e2e tests; fuzzers for Duration and ByteSize |
 | ☐ | M4.2 | `Enum`: the Go type inferred from the values, canonical text, named types and `TextMarshaler`, defaults checked at generate time, "did you mean" | M | zp's `models.ZpTaskExecutionMode` case works end to end |
-| ☐ | M4.3 | The `cfgx.Secret` runtime type from ADR 0006: masking, `Reveal`, `Bytes`, `IsSet`, `Equal` on SHA-256 digests, `NewSecret`, no unmarshalers. Moves the S5 leak suite into package `cfgx` and deletes `spikes/s5-secret`; until then the suite runs only inside that module, not in CI. | M | The leak suite passes in CI |
+| ☑ | M4.3 | The `cfgx.Secret` runtime type from ADR 0006: masking, `Reveal`, `Bytes`, `IsSet`, `Equal` on SHA-256 digests, `NewSecret`, no unmarshalers. Moves the S5 leak suite into package `cfgx` and deletes `spikes/s5-secret`; until then the suite runs only inside that module, not in CI. | M | The leak suite passes in CI |
 | ☐ | M4.4 | `Secret` and `SecretFile` kinds (A10): no flag by default; `_FILE` env with one trailing newline trimmed (`\n` or `\r\n`), and an error if both are set; regular files only, with size limits; read eagerly, only for the command's relevant keys. CRLF fixtures are written by the test or stored as `*.raw`, which Git never normalizes | M | testscript for env, `_FILE`, both set, file, missing file, FIFO and oversized file |
 | ☐ | M4.5 | `Path`, `File`, `URL`, `Location`. Relative paths from a config file resolve against its directory for `Path`, `SecretFile` and `File` (A11); `.Default` takes the text form (A6). | M | Golden + e2e tests |
 | ☐ | M4.6 | `Strings`, `Ints`, `Durations`, `StringMap`: flags repeatable or comma-separated, recording raw occurrences that the engine splits (ADR 0003); env comma-separated or `k=v`; file nodes | M | e2e tests, including `--tag a --tag b`, `--tag ""`, and malformed CSV reported by cfgx rather than pflag; fuzzers for the list and map parsers |

@@ -1,9 +1,4 @@
-// Package secret prototypes cfgx.Secret (spike S5, roadmap item M1.5).
-//
-// Secret stores its underlying string inside a closure so that formatting,
-// serialization, logging, and pure-Go reflection cannot accidentally read or
-// print the raw value.
-package secret
+package cfgx
 
 import (
 	"crypto/sha256"
@@ -30,15 +25,16 @@ var (
 )
 
 // Secret holds a sensitive configuration string hidden inside an unexported
-// closure field. Because Secret contains a func field, it is not comparable
+// closure field, so formatting, serialization, logging and pure-Go reflection
+// can neither read nor print it (ADR 0006). Because Secret contains a func field, it is not comparable
 // with == (use Equal instead) and cannot be used as a map key.
 type Secret struct {
 	reveal func() string
 }
 
-// New returns a Secret wrapping s. An empty string produces an unset Secret
+// NewSecret returns a Secret wrapping s. An empty string produces an unset Secret
 // (zero value), matching cfgx's value-based "set" semantics (interface.md §3.5).
-func New(s string) Secret {
+func NewSecret(s string) Secret {
 	if s == "" {
 		return Secret{}
 	}
