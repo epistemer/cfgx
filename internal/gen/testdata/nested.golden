@@ -19,10 +19,13 @@ type values struct {
 	DBHost            string
 	ServerPort        int
 	ServerTLSEnabled  bool
+	ServerTLSCert     string
 	SchedulerWorkers  int
 	SchedulerRetryMax int
 	AuthOTPLength     int
 	AuthEmailfrom     string
+	AuthToken         string
+	AuthKeys          string
 	SMTPHost          string
 	SMTPPort          int
 	SMTPTLS           bool
@@ -47,6 +50,13 @@ var keys = [...]engine.Key[values]{
 		Type: "bool", Desc: "Serve HTTPS", Bool: true,
 		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.ServerTLSEnabled) },
 		IsSet: func(v *values) bool { return v.ServerTLSEnabled },
+	},
+	{
+		Path: "server.tls.cert", Env: "ZP_SERVER_TLS_CERT", Flag: "tls-cert",
+		Type: "string", Desc: "TLS certificate", DefaultText: "cert.pem", Quote: true, RelevantIf: []int{2},
+		Set:     func(v *values, raw string) error { return engine.ParseString(raw, &v.ServerTLSCert) },
+		IsSet:   func(v *values) bool { return v.ServerTLSCert != "" },
+		Default: func(v *values) { v.ServerTLSCert = "cert.pem" },
 	},
 	{
 		Path: "scheduler.workers", Env: "ZP_SCHEDULER_WORKERS", Flag: "scheduler-workers",
@@ -74,6 +84,18 @@ var keys = [...]engine.Key[values]{
 		IsSet: func(v *values) bool { return v.AuthEmailfrom != "" },
 	},
 	{
+		Path: "auth.token", Env: "ZP_AUTH_TOKEN", Flag: "auth-token",
+		Type: "string", Desc: "Static API token", Quote: true,
+		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.AuthToken) },
+		IsSet: func(v *values) bool { return v.AuthToken != "" },
+	},
+	{
+		Path: "auth.keys", Env: "ZP_AUTH_KEYS", Flag: "auth-keys",
+		Type: "string", Desc: "API keys file", Quote: true,
+		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.AuthKeys) },
+		IsSet: func(v *values) bool { return v.AuthKeys != "" },
+	},
+	{
 		Path: "smtp.host", Env: "ZP_SMTP_HOST", Flag: "smtp-host",
 		Type: "string", Desc: "SMTP server host", Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.SMTPHost) },
@@ -98,6 +120,9 @@ var keys = [...]engine.Key[values]{
 var app = engine.App[values]{
 	EnvPrefix: "ZP",
 	Keys:      keys[:],
+	Rules: []engine.Rule{
+		{Kind: engine.AtMostOne, Group: "auth", Keys: []int{8, 9}},
+	},
 }
 
 // root holds the current values; every getter reads through it.
@@ -117,6 +142,7 @@ func (g *dbGroup) DBHost() string { return g.r.cur.Load().DBHost }
 type Server interface {
 	ServerPort() int
 	ServerTLSEnabled() bool
+	ServerTLSCert() string
 }
 
 type serverGroup struct{ r *root }
@@ -126,6 +152,9 @@ func (g *serverGroup) ServerPort() int { return g.r.cur.Load().ServerPort }
 
 // ServerTLSEnabled returns server.tls.enabled: Serve HTTPS
 func (g *serverGroup) ServerTLSEnabled() bool { return g.r.cur.Load().ServerTLSEnabled }
+
+// ServerTLSCert returns server.tls.cert: TLS certificate
+func (g *serverGroup) ServerTLSCert() string { return g.r.cur.Load().ServerTLSCert }
 
 // Scheduler is the scheduler group: Task scheduler
 type Scheduler interface {
@@ -155,6 +184,8 @@ func (g *schedulerRetryGroup) SchedulerRetryMax() int { return g.r.cur.Load().Sc
 type Auth interface {
 	AuthOTPLength() int
 	AuthEmailfrom() string
+	AuthToken() string
+	AuthKeys() string
 }
 
 type authGroup struct{ r *root }
@@ -164,6 +195,12 @@ func (g *authGroup) AuthOTPLength() int { return g.r.cur.Load().AuthOTPLength }
 
 // AuthEmailfrom returns auth.emailfrom: Sender address for auth emails
 func (g *authGroup) AuthEmailfrom() string { return g.r.cur.Load().AuthEmailfrom }
+
+// AuthToken returns auth.token: Static API token
+func (g *authGroup) AuthToken() string { return g.r.cur.Load().AuthToken }
+
+// AuthKeys returns auth.keys: API keys file
+func (g *authGroup) AuthKeys() string { return g.r.cur.Load().AuthKeys }
 
 // SMTP is the smtp group: Outgoing mail
 type SMTP interface {
@@ -210,7 +247,7 @@ type Serve struct {
 // them. The slice is a copy.
 func (c *Serve) Args() []string { return slices.Clone(c.args) }
 
-var keysServe = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+var keysServe = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
 
 func newServe(v *values, args []string) *Serve {
 	r := &root{}
@@ -241,7 +278,7 @@ type Retry struct {
 // them. The slice is a copy.
 func (c *Retry) Args() []string { return slices.Clone(c.args) }
 
-var keysRetry = []int{4}
+var keysRetry = []int{5}
 
 func newRetry(v *values, args []string) *Retry {
 	r := &root{}
@@ -280,7 +317,7 @@ func (c *TestEmail) SMTPPort() int { return c.r.cur.Load().SMTPPort }
 // SMTPTLS returns smtp.tls: Use implicit TLS
 func (c *TestEmail) SMTPTLS() bool { return c.r.cur.Load().SMTPTLS }
 
-var keysTestEmail = []int{6, 7, 8, 9}
+var keysTestEmail = []int{7, 10, 11, 12}
 
 func newTestEmail(v *values, args []string) *TestEmail {
 	r := &root{}
@@ -311,7 +348,7 @@ func (c *Notify) Args() []string { return slices.Clone(c.args) }
 // AuthEmailfrom returns auth.emailfrom: Sender address for auth emails
 func (c *Notify) AuthEmailfrom() string { return c.r.cur.Load().AuthEmailfrom }
 
-var keysNotify = []int{6, 7, 8, 9}
+var keysNotify = []int{7, 10, 11, 12}
 
 func newNotify(v *values, args []string) *Notify {
 	r := &root{}

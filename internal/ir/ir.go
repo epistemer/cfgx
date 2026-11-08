@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 3
+const Version = 4
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -53,6 +53,7 @@ type App struct {
 	Initialisms []string  `json:"initialisms,omitempty"`
 	Groups      []Group   `json:"groups"`
 	Tags        []Tag     `json:"tags,omitempty"`
+	Rules       []Rule    `json:"rules,omitempty"`
 	Commands    []Command `json:"commands"`
 	Pos         Pos       `json:"pos"`
 }
@@ -82,6 +83,30 @@ type Key struct {
 	Required bool     `json:"required,omitempty"`
 	Tags     []string `json:"tags,omitempty"`
 	Pos      Pos      `json:"pos"`
+}
+
+// RuleKind is a kind of cross-key rule.
+type RuleKind string
+
+// The rules (interface §3.5).
+const (
+	RuleAtMostOne  RuleKind = "AtMostOne"
+	RuleExactlyOne RuleKind = "ExactlyOne"
+	RuleAllOrNone  RuleKind = "AllOrNone"
+	RuleRequires   RuleKind = "Requires"
+	RuleRelevantIf RuleKind = "RelevantIf"
+)
+
+// Rule is a cross-key constraint declared on a group.
+type Rule struct {
+	Kind RuleKind `json:"kind"`
+	// Group is the path of the group that declared it; problems are
+	// reported under it.
+	Group string `json:"group"`
+	// Keys are the paths of the keys, in declaration order. Requires and
+	// RelevantIf have two: a, then b.
+	Keys []string `json:"keys"`
+	Pos  Pos      `json:"pos"`
 }
 
 // Tag is a cross-cutting set of keys with its own interface.

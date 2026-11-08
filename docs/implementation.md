@@ -152,6 +152,28 @@ or parameters are generate-time errors.
   embedded groups don't already provide (A5), so it can embed `smtp` whole and
   forward only `AuthEmailfrom()`.
 
+### 2.3b Rules **[decided, M5.3]**
+
+- A command checks a rule only if it loads every key in it. A rule over a key
+  that failed to load is skipped, because that key is already a problem.
+- A command that loads a `RelevantIf` key also loads its conditions, without
+  getters for them, so it can tell whether the key matters.
+- A key whose condition isn't set keeps its default and isn't parsed or
+  checked (`Required` included). It counts as unset in other rules. If a
+  layer set it anyway, startup warns: `server.tls.cert is set (flag
+  --tls-cert) but ignored: it only matters when server.tls.enabled is set`. No
+  warning is printed when the condition itself failed to load.
+- Rule problems are reported under the declaring group's path, naming keys
+  relative to it and listing the source of each key that is set:
+  `auth: token and keys are mutually exclusive (token: env ZP_AUTH_TOKEN,
+  keys: config.yaml:22:9)`. The other messages are `at most one of a, b and c
+  may be set`, `one of a and b must be set`, `only one of a and b may be set`,
+  `a, b and c must be set together or not at all; a and c aren't set`, and
+  `a requires b`.
+- Generate-time checks: exclusive rules need two or more distinct keys and no
+  non-zero defaults (A4); `Requires` and `RelevantIf` take exactly two; a
+  `RelevantIf` cycle is an error.
+
 ### 2.4 Checks **[decided by interface]**
 
 These all run on the IR before anything is written:

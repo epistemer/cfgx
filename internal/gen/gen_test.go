@@ -2,6 +2,7 @@ package gen
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,6 +74,7 @@ func nested() *ir.App {
 			{Name: "server", Desc: "HTTP server", FlagPrefix: &empty, Keys: []ir.Key{
 				{Name: "port", Desc: "Port", Kind: ir.KindInt, Default: str("7777")},
 				{Name: "tls.enabled", Desc: "Serve HTTPS", Kind: ir.KindBool},
+				{Name: "tls.cert", Desc: "TLS certificate", Kind: ir.KindString, Default: str("cert.pem")},
 			}},
 			{Name: "scheduler", Desc: "Task scheduler", Keys: []ir.Key{
 				{Name: "workers", Desc: "Workers", Kind: ir.KindInt},
@@ -84,6 +86,8 @@ func nested() *ir.App {
 			{Name: "auth", Desc: "Authentication", Keys: []ir.Key{
 				{Name: "otp.length", Desc: "OTP length", Kind: ir.KindInt},
 				{Name: "emailfrom", Desc: "Sender address for auth emails", Kind: ir.KindString, Tags: []string{"Mailer"}},
+				{Name: "token", Desc: "Static API token", Kind: ir.KindString},
+				{Name: "keys", Desc: "API keys file", Kind: ir.KindString},
 			}},
 			{Name: "smtp", Desc: "Outgoing mail", Tags: []string{"Mailer"}, Keys: []ir.Key{
 				{Name: "host", Desc: "SMTP server host", Kind: ir.KindString},
@@ -92,6 +96,10 @@ func nested() *ir.App {
 			}},
 		},
 		Tags: []ir.Tag{{Name: "Mailer", Desc: "Everything the mailer needs"}},
+		Rules: []ir.Rule{
+			{Kind: ir.RuleAtMostOne, Group: "auth", Keys: []string{"auth.token", "auth.keys"}},
+			{Kind: ir.RuleRelevantIf, Group: "server", Keys: []string{"server.tls.cert", "server.tls.enabled"}},
+		},
 		Commands: []ir.Command{
 			{Name: "Serve", Uses: []string{"database", "server", "scheduler", "scheduler.retry", "auth", "smtp"}, Tags: []string{"Mailer"}},
 			{Name: "Retry", Uses: []string{"scheduler.retry"}},
@@ -171,6 +179,33 @@ func TestNestedGolden(t *testing.T) {
 	}
 }
 
+func TestRules(t *testing.T) {
+	a := sample()
+	empty := ""
+	a.Groups[0].Keys[0].Default = &empty // a zero default is fine in exclusive rules
+	a.Rules = []ir.Rule{
+		{Kind: ir.RuleAtMostOne, Group: "database", Keys: []string{"database.host", "smtp.url"}},
+		{Kind: ir.RuleRelevantIf, Group: "database", Keys: []string{"database.port", "log.debug"}},
+	}
+	m, err := Build(a, "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Rules) != 1 || m.Rules[0].Kind != "AtMostOne" || fmt.Sprint(m.Rules[0].Keys) != "[0 2]" {
+		t.Errorf("rules: %+v", m.Rules)
+	}
+	if fmt.Sprint(m.Keys[1].RelevantIf) != "[3]" {
+		t.Errorf("RelevantIf = %v", m.Keys[1].RelevantIf)
+	}
+	// Migrate uses only database, but loads log.debug as well, the condition
+	// of database.port.
+	for _, c := range m.Commands {
+		if c.Name == "Migrate" && fmt.Sprint(c.KeyIdx) != "[0 1 3]" {
+			t.Errorf("Migrate loads %v", c.KeyIdx)
+		}
+	}
+}
+
 func TestLowerGo(t *testing.T) {
 	for in, want := range map[string]string{"DB": "db", "HTTPServer": "httpServer", "Mail": "mail", "MyDB": "myDB", "X": "x",
 		"DB1": "db1", "HTTP2": "http2", "HTTP2Server": "http2Server", "S3Bucket": "s3Bucket"} {
@@ -246,6 +281,27 @@ func TestChecks(t *testing.T) {
 			a.Groups[0].FlagPrefix, a.Groups[1].FlagPrefix = &e, &e
 			a.Groups[1].Keys = append(a.Groups[1].Keys, ir.Key{Name: "host", Desc: "x", Kind: ir.KindString})
 		}, "flag --host"},
+		{"rule with one key", func(a *ir.App) {
+			a.Rules = []ir.Rule{{Kind: ir.RuleAtMostOne, Group: "smtp", Keys: []string{"smtp.url"}}}
+		}, "AtMostOne needs at least two keys"},
+		{"requires with three keys", func(a *ir.App) {
+			a.Rules = []ir.Rule{{Kind: ir.RuleRequires, Group: "database", Keys: []string{"database.host", "database.port", "smtp.url"}}}
+		}, "Requires takes two keys"},
+		{"rule on an unknown key", func(a *ir.App) {
+			a.Rules = []ir.Rule{{Kind: ir.RuleRequires, Group: "smtp", Keys: []string{"smtp.url", "nope.x"}}}
+		}, "Requires refers to key nope.x"},
+		{"rule lists a key twice", func(a *ir.App) {
+			a.Rules = []ir.Rule{{Kind: ir.RuleAllOrNone, Group: "smtp", Keys: []string{"smtp.url", "smtp.url"}}}
+		}, "AllOrNone lists smtp.url twice"},
+		{"exclusive key with a default", func(a *ir.App) {
+			a.Rules = []ir.Rule{{Kind: ir.RuleExactlyOne, Group: "database", Keys: []string{"database.port", "smtp.url"}}}
+		}, "ExactlyOne can't include database.port, whose default 5432 counts as set"},
+		{"RelevantIf cycle", func(a *ir.App) {
+			a.Rules = []ir.Rule{
+				{Kind: ir.RuleRelevantIf, Group: "smtp", Keys: []string{"smtp.url", "log.debug"}},
+				{Kind: ir.RuleRelevantIf, Group: "log", Keys: []string{"log.debug", "smtp.url"}},
+			}
+		}, "form a cycle"},
 		{"tag on no keys", func(a *ir.App) { a.Tags = []ir.Tag{{Name: "Mailer", Desc: "x"}} }, "tag Mailer isn't on any key"},
 		{"bad tag name", func(a *ir.App) {
 			a.Tags = []ir.Tag{{Name: "mailer", Desc: "x"}}

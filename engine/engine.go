@@ -26,6 +26,9 @@ type Key[V any] struct {
 	Bool        bool   // a bool flag: --x means --x=true
 	Required    bool   // must be set (non-zero) after merging
 	Global      bool   // in a Global group: its flag is a persistent flag on the root
+	// RelevantIf lists keys that must all be set for this key to matter.
+	// Otherwise it keeps its default, isn't validated, and setting it warns.
+	RelevantIf []int
 
 	// Set parses raw into the field of v. An empty raw sets the zero value,
 	// which is how an empty env var or flag clears a value.
@@ -47,6 +50,27 @@ type App[V any] struct {
 	Formats     []string // "yaml", "json"; nil means both
 	Keys        []Key[V] // every key of the app
 	Global      []int    // indexes of the keys in Global groups
+	Rules       []Rule   // cross-key rules
+}
+
+// RuleKind is a kind of cross-key rule (interface §3.5).
+type RuleKind int
+
+// The rules a loaded configuration is checked against. RelevantIf isn't
+// one: it is Key.RelevantIf, because it decides what is loaded.
+const (
+	AtMostOne RuleKind = iota + 1
+	ExactlyOne
+	AllOrNone
+	Requires // Keys[0] requires Keys[1]
+)
+
+// Rule is a cross-key rule declared on a group. A command checks it only if
+// it loads every key in it.
+type Rule struct {
+	Kind  RuleKind
+	Group string // the declaring group's path; problems are reported under it
+	Keys  []int
 }
 
 // configEnv is the env var that names the config file.
