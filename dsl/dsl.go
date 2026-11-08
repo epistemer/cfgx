@@ -104,6 +104,7 @@ type GroupDef struct {
 	flagPrefix *string
 	tags       []*TagDef
 	rules      []*RuleDef
+	computed   []string
 	pos        ir.Pos
 }
 
@@ -155,6 +156,16 @@ func (g *GroupDef) FlagPrefix(prefix string) *GroupDef {
 // interfaces.
 func (g *GroupDef) Tags(tags ...*TagDef) *GroupDef {
 	g.tags = append(g.tags, tags...)
+	return g
+}
+
+// Computed adds hand-written methods to the group's interface. Write each in
+// the settings package, on the group's type: dsl.Group("database", ...) with
+// GoName("DB") gives *dbGroup, and a nested Retry group in Scheduler gives
+// *schedulerRetryGroup. Any method without parameters works; the generator
+// reads its exact signature by type-checking the package.
+func (g *GroupDef) Computed(methods ...string) *GroupDef {
+	g.computed = append(g.computed, methods...)
 	return g
 }
 
@@ -435,7 +446,7 @@ func Export(w io.Writer) error {
 		if err != nil {
 			return ir.Group{}, err
 		}
-		ig := ir.Group{Name: g.name, Desc: g.desc, GoName: g.goName, FlagPrefix: g.flagPrefix, Tags: gt, Pos: g.pos}
+		ig := ir.Group{Name: g.name, Desc: g.desc, GoName: g.goName, FlagPrefix: g.flagPrefix, Tags: gt, Computed: g.computed, Pos: g.pos}
 		for _, kd := range g.keys {
 			if kd == nil {
 				return ir.Group{}, fmt.Errorf("%s: group %q lists a nil key or group", g.pos, g.name)

@@ -4,6 +4,33 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M5.6 computed methods
+
+- **Landed:** `Group.Computed("DSN")` adds a hand-written method to the
+  group's interface (A8):
+  - `cfgx gen` type-checks the settings package with an in-memory stub and
+    renders each method's exact signature, such as `RetryPolicy()
+    (time.Duration, error)`, with the imports it needs (`/v2` paths and
+    renamed imports included).
+  - A command that reaches the group only through a tag doesn't get the
+    method. An end-to-end test checks this with a compile failure.
+  - `examples/mini` now declares cfgx as a `tool`, which the roadmap always
+    said it did. Without it, `go mod tidy` drops the generator's new
+    dependency, `golang.org/x/tools`.
+- **Reviewed:** Gemini 3.8 Flash (High) on the diff (about 210k tokens,
+  [review 0007](reviews/0007-gemini-m5.6-review.md)). Two fixes came out of
+  it: a nested group's computed method could clash with a parent's getter, and
+  the overlay path is now always absolute. The other 4 findings were rejected.
+  The "read-only" review left a compiled binary in the repo; Claude deleted it,
+  and reviews now run from a folder holding only the diff.
+- **Decided for you:** the details in implementation.md §2.3:
+  - Promoted methods are rejected; declare the method on the group itself.
+  - Imports get a number added when their name is taken.
+  - Unrelated type errors don't block generation.
+- **Next:** M5.7 (the full list of generate-time checks); then M4, the key
+  vocabulary. M5.8 needs M4.
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M5.4 and M5.5, by Gemini
 
 - **Landed:** through a PR:

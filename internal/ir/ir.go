@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 6
+const Version = 7
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -66,6 +66,8 @@ type Group struct {
 	GoName string `json:"goName,omitempty"`
 	// FlagPrefix replaces the prefix of the group's flags; nil derives it.
 	FlagPrefix *string `json:"flagPrefix,omitempty"`
+	// Computed names hand-written methods that join the group's interface.
+	Computed []string `json:"computed,omitempty"`
 	// Tags apply to every key in the group, nested groups included.
 	Tags   []string `json:"tags,omitempty"`
 	Keys   []Key    `json:"keys"`

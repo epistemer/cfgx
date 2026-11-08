@@ -110,7 +110,7 @@ further dot instead of matching closure patterns. Generated code imports every
 referenced package under a generated alias, because a package's name can differ
 from its last path element.
 
-### 2.3 Computed methods: a type-checking pass
+### 2.3 Computed methods: a type-checking pass **[decided, M5.6]**
 
 `Group.Computed("DSN")` declares that a hand-written method belongs to the
 group's interface. Its signature has to be exact, so the generator type-checks
@@ -129,6 +129,22 @@ rather than copying source text (A8):
 Any method without parameters is allowed, e.g. `DSN() string` or
 `RetryPolicy() (types.RetryPolicy, error)`. A missing method, a wrong receiver
 or parameters are generate-time errors.
+
+Settled while building it:
+- The pass runs only when a group declares computed methods, through
+  `golang.org/x/tools/go/packages` (v0.52.0), which `cmd/cfgx` needs but the
+  runtime packages don't import.
+- A method must be declared on the group's own type. One promoted from a
+  nested group is rejected: list it on the nested group instead.
+- Packages named in signatures are imported under their package name, or
+  with a number added (`rand2`) when that name is taken in the settings
+  package or by the file's other imports. Named results keep their names.
+- Type errors elsewhere in the settings package don't stop generation (the
+  stub may not satisfy code that uses computed methods yet); they are shown
+  only when a computed method can't be resolved, as a likely cause.
+- A computed method can't share a name with another method in its group's
+  interface, nested groups included, or with a reserved method. Two groups
+  that a command embeds can't both have it, because Go wouldn't promote it.
 
 ### 2.3a Structure **[decided, M5.1–M5.2]**
 
