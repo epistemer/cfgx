@@ -64,6 +64,11 @@ func (ps Problems) Error() string {
 }
 
 // nameRE matches a name segment: lower-case words joined by single underscores.
+// reservedMethods are methods generated on command types, now (Args, A12) or
+// in later milestones (M7). A getter or computed method with one of these
+// names would be silently shadowed, so the generator rejects it.
+var reservedMethods = map[string]bool{"Args": true, "Store": true, "Update": true, "Close": true, "OnChange": true, "Snapshot": true}
+
 var nameRE = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 
 // initialisms are written in capitals in Go names (D4).
@@ -189,6 +194,9 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			km.Getter = km.Field
 			km.Flag = strings.NewReplacer(".", "-", "_", "-").Replace(km.Path)
 			km.Env = prefix + "_" + strings.ToUpper(strings.ReplaceAll(km.Path, ".", "_"))
+			if reservedMethods[km.Getter] {
+				bad(k.Pos, "getter %s of %s is reserved for a method on command types; rename the key", km.Getter, km.Path)
+			}
 			if err := kindInfo(km, k); err != nil {
 				bad(k.Pos, "%v", err)
 				continue

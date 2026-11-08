@@ -10,6 +10,10 @@ taken for you, what's next, and what's waiting on you. The terms are in
   has `Args() []string`, returning a copy of the arguments cobra parsed; rules
   such as `cobra.ExactArgs(1)` work as before. Recorded as A12 in interface §12,
   with an end-to-end script.
+- **Reviewed:** Gemini found five problems in the change, all fixed. The one
+  that mattered: a method on a command type would silently shadow a group getter
+  with the same name, so `Args` and the method names M7 will add are now
+  reserved, checked at generate time.
 - **Next:** M3, config files, errors and provenance.
 - **Waiting on you:** nothing.
 

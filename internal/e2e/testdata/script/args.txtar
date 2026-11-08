@@ -13,9 +13,12 @@ stdout '^hello alice \[alice\]\r?\n$'
 ! exec ./app$exe greet
 stderr 'accepts 1 arg\(s\), received 0'
 
-# A command with no groups still gets its arguments.
+# A command with no groups still gets its arguments, and no arguments are an
+# empty, non-nil slice.
 exec ./app$exe echo x y
-stdout '^\[x y\]\r?\n$'
+stdout '^\[x y\] false\r?\n$'
+exec ./app$exe echo
+stdout '^\[\] false\r?\n$'
 
 -- main.go --
 package main
@@ -48,7 +51,7 @@ func main() {
 			}),
 		settings.EchoCommand(&cobra.Command{Use: "echo"},
 			func(_ context.Context, e *settings.Echo) error {
-				fmt.Println(e.Args())
+				fmt.Println(e.Args(), e.Args() == nil)
 				return nil
 			}),
 	)

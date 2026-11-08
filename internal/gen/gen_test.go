@@ -89,6 +89,9 @@ func TestChecks(t *testing.T) {
 		{"command collides with group", func(a *ir.App) { a.Commands[0].Name = "Database" }, "collides"},
 		{"bad int default", func(a *ir.App) { a.Groups[0].Keys[1].Default = str("x") }, "isn't an int"},
 		{"bad env prefix", func(a *ir.App) { a.EnvPrefix = "demo" }, "env prefix"},
+		{"reserved getter", func(a *ir.App) {
+			a.Groups = append(a.Groups, ir.Group{Name: "on", Desc: "x", Keys: []ir.Key{{Name: "change", Desc: "x", Kind: ir.KindBool}}})
+		}, "getter OnChange of on.change is reserved"},
 		{"orphan group", func(a *ir.App) {
 			a.Commands[0].Orphans = []ir.Ref{{Name: "extra", Pos: ir.Pos{File: "schema.go", Line: 9}}}
 		}, `uses group "extra" (declared at schema.go:9), which isn't passed to dsl.App`},

@@ -4,6 +4,7 @@ package settings
 
 import (
 	"context"
+	"slices"
 
 	"github.com/epistemer/cfgx/engine"
 	"github.com/spf13/cobra"
@@ -110,7 +111,7 @@ type Serve struct {
 
 // Args returns the Serve command's positional arguments, as cobra parsed
 // them. The slice is a copy.
-func (c *Serve) Args() []string { return append([]string(nil), c.args...) }
+func (c *Serve) Args() []string { return slices.Clone(c.args) }
 
 var keysServe = []int{0, 1, 2, 3, 4, 5}
 
@@ -120,7 +121,7 @@ func newServe(v *values, args []string) *Serve {
 	return &Serve{
 		serverGroup:   &serverGroup{r: r},
 		databaseGroup: &databaseGroup{r: r},
-		args:          args,
+		args:          slices.Clone(args),
 	}
 }
 
@@ -138,7 +139,7 @@ type Migrate struct {
 
 // Args returns the Migrate command's positional arguments, as cobra parsed
 // them. The slice is a copy.
-func (c *Migrate) Args() []string { return append([]string(nil), c.args...) }
+func (c *Migrate) Args() []string { return slices.Clone(c.args) }
 
 var keysMigrate = []int{3, 4, 5}
 
@@ -147,7 +148,7 @@ func newMigrate(v *values, args []string) *Migrate {
 	r.cur.Store(v)
 	return &Migrate{
 		databaseGroup: &databaseGroup{r: r},
-		args:          args,
+		args:          slices.Clone(args),
 	}
 }
 
