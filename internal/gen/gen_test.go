@@ -103,8 +103,14 @@ func nested() *ir.App {
 		Commands: []ir.Command{
 			{Name: "Serve", Uses: []string{"database", "server", "scheduler", "scheduler.retry", "auth", "smtp"}, Tags: []string{"Mailer"}},
 			{Name: "Retry", Uses: []string{"scheduler.retry"}},
-			{Name: "TestEmail", Uses: []string{}, Tags: []string{"Mailer"}},
+			{Name: "TestEmail", Uses: []string{}, Tags: []string{"Mailer"}, Args: []ir.Key{
+				{Name: "to.address", Desc: "Recipient", Kind: ir.KindString, Required: true},
+			}},
 			{Name: "Notify", Uses: []string{"smtp"}, Tags: []string{"Mailer"}},
+			{Name: "Migrate", Uses: []string{}, Args: []ir.Key{
+				{Name: "down", Desc: "Apply down migrations", Kind: ir.KindBool},
+				{Name: "steps", Desc: "Number of steps", Kind: ir.KindInt},
+			}},
 		},
 	}
 }
@@ -130,6 +136,9 @@ func TestNestedGolden(t *testing.T) {
 		"scheduler.retry.max": {"SchedulerRetryMax", "--scheduler-retry-max", "ZP_SCHEDULER_RETRY_MAX"},
 		"auth.otp.length":     {"AuthOTPLength", "--auth-otp-length", "ZP_AUTH_OTP_LENGTH"},
 		"scheduler.workers":   {"SchedulerWorkers", "--scheduler-workers", "ZP_SCHEDULER_WORKERS"},
+		"to.address":          {"ToAddress", "--to-address", ""},
+		"down":                {"Down", "--down", ""},
+		"steps":               {"Steps", "--steps", ""},
 	} {
 		k := byPath[path]
 		if k == nil {
@@ -168,7 +177,8 @@ func TestNestedGolden(t *testing.T) {
 			"Retry":     {"scheduler.retry", ""},
 			"TestEmail": {"", "AuthEmailfrom,SMTPHost,SMTPPort,SMTPTLS"},
 			// Notify embeds smtp whole, so only the auth key is forwarded.
-			"Notify": {"smtp", "AuthEmailfrom"},
+			"Notify":  {"smtp", "AuthEmailfrom"},
+			"Migrate": {"", ""},
 		}[c.Name]
 		if got := [2]string{strings.Join(names, ","), strings.Join(fwd, ",")}; got != want {
 			t.Errorf("%s: embeds and forwards %q, want %q", c.Name, got, want)
@@ -323,6 +333,53 @@ func TestChecks(t *testing.T) {
 		{"unknown format", func(a *ir.App) { a.Formats = []string{"toml"} }, `unknown config file format "toml"`},
 		{"format twice", func(a *ir.App) { a.Formats = []string{"yaml", "yaml"} }, "Formats lists yaml twice"},
 		{"formats without config file", func(a *ir.App) { a.ConfigFile = ""; a.SearchPaths = nil; a.Formats = []string{"json"} }, "Formats has no effect"},
+		{"arg reserved getter", func(a *ir.App) {
+			a.Commands[0].Args = []ir.Key{{Name: "args", Desc: "x", Kind: ir.KindString}}
+		}, "getter Args of args is reserved"},
+		{"arg getter collides with group getter", func(a *ir.App) {
+			a.Commands[0].Args = []ir.Key{{Name: "database_host", Desc: "x", Kind: ir.KindString}}
+		}, "getter DatabaseHost of database_host collides with another getter on Serve"},
+		{"arg getter collides with forward getter", func(a *ir.App) {
+			a.Tags = []ir.Tag{{Name: "T", Desc: "x"}}
+			a.Groups[0].Keys[0].Tags = []string{"T"}
+			a.Commands = []ir.Command{{Name: "C", Tags: []string{"T"}, Args: []ir.Key{{Name: "database_host", Desc: "x", Kind: ir.KindString}}}}
+		}, "getter DatabaseHost of database_host collides with another getter on C"},
+		{"arg getter collides with another arg", func(a *ir.App) {
+			a.Commands[0].Args = []ir.Key{
+				{Name: "step_count", Desc: "x", Kind: ir.KindInt},
+				{Name: "step.count", Desc: "x", Kind: ir.KindInt},
+			}
+		}, "getter StepCount of step.count collides with another getter on Serve"},
+		{"arg flag help", func(a *ir.App) {
+			a.Commands[0].Args = []ir.Key{{Name: "help", Desc: "x", Kind: ir.KindBool}}
+		}, "flag --help of help collides"},
+		{"arg flag config with config file", func(a *ir.App) {
+			a.Commands[0].Args = []ir.Key{{Name: "config", Desc: "x", Kind: ir.KindString}}
+		}, "flag --config of config collides"},
+		{"arg flag collides with loaded key flag", func(a *ir.App) {
+			a.Commands[0].Args = []ir.Key{{Name: "database.host", Desc: "x", Kind: ir.KindString}}
+		}, "flag --database-host of database.host collides with another flag on Serve"},
+		{"arg flag collides with global key flag", func(a *ir.App) {
+			a.Commands[2].Args = []ir.Key{{Name: "log_debug", Desc: "x", Kind: ir.KindBool}}
+		}, "flag --log-debug of log_debug collides with another flag on Version"},
+		{"arg with tags", func(a *ir.App) {
+			a.Commands[0].Args = []ir.Key{{Name: "force", Desc: "x", Kind: ir.KindBool, Tags: []string{"Mailer"}}}
+		}, "argument force of Serve has tags"},
+		{"arg flag collides with a RelevantIf condition", func(a *ir.App) {
+			a.Groups = append(a.Groups, ir.Group{Name: "x", Desc: "x", Keys: []ir.Key{{Name: "on", Desc: "x", Kind: ir.KindBool}}})
+			a.Rules = []ir.Rule{{Kind: ir.RuleRelevantIf, Group: "database", Keys: []string{"database.host", "x.on"}}}
+			a.Commands[1].Args = []ir.Key{{Name: "x.on", Desc: "x", Kind: ir.KindBool}}
+		}, "flag --x-on of x.on collides with another flag on Migrate"},
+		{"arg flag collides with another arg flag", func(a *ir.App) {
+			a.Commands[0].Args = []ir.Key{
+				{Name: "dry_run", Desc: "x", Kind: ir.KindBool},
+				{Name: "dry.run", Desc: "x", Kind: ir.KindBool},
+			}
+		}, "flag --dry-run of dry.run collides with another flag on Serve"},
+		{"arg field collides with group key field", func(a *ir.App) {
+			a.Groups = append(a.Groups, ir.Group{Name: "serve", Desc: "x", Keys: []ir.Key{{Name: "host", Desc: "x", Kind: ir.KindString}}})
+			a.Commands[0].Args = []ir.Key{{Name: "host", Desc: "x", Kind: ir.KindString}}
+		}, "Go name ServeHost of host collides with another key or group"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

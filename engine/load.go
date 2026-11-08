@@ -260,13 +260,13 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 		origins = append(origins, Origin{Layer: LayerDefault})
 	}
 	var win *candidate
-	if l.file != nil {
+	if !k.FlagOnly && l.file != nil {
 		if c := l.fromFile(k.Path); c != nil {
 			win = c
 			origins = append(origins, c.origin)
 		}
 	}
-	if k.Env != "" {
+	if !k.FlagOnly && k.Env != "" {
 		if raw, ok := lookup(k.Env); ok {
 			win = &candidate{raw: raw, origin: Origin{LayerEnv, k.Env}}
 			origins = append(origins, win.origin)
@@ -422,10 +422,10 @@ func (l *loader[V]) required(k *Key[V], win *candidate) cfgx.Problem {
 	if k.Flag != "" {
 		ways = append(ways, "--"+k.Flag)
 	}
-	if k.Env != "" {
+	if !k.FlagOnly && k.Env != "" {
 		ways = append(ways, k.Env)
 	}
-	if l.a.ConfigFile != "" {
+	if !k.FlagOnly && l.a.ConfigFile != "" {
 		ways = append(ways, k.Path+" in the config file")
 	}
 	msg := "is required"
@@ -481,6 +481,9 @@ type trie struct {
 func (l *loader[V]) unknownFileKeys() {
 	root := &trie{}
 	for _, k := range l.a.Keys {
+		if k.FlagOnly {
+			continue
+		}
 		t := root
 		for _, seg := range strings.Split(k.Path, ".") {
 			if t.kids == nil {
@@ -537,6 +540,9 @@ func (l *loader[V]) unknownEnv(environ []string) {
 		}
 	}
 	for _, k := range l.a.Keys {
+		if k.FlagOnly {
+			continue
+		}
 		add(k.Env)
 	}
 	if l.a.ConfigFile != "" {

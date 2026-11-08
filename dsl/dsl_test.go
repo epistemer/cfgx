@@ -123,3 +123,75 @@ func TestNestedPathsAndTags(t *testing.T) {
 		t.Errorf("app: global %v, tags %+v, group tags %v", a.Global, a.Tags, a.Groups[0].Tags)
 	}
 }
+
+func TestExportArgs(t *testing.T) {
+	reset()
+	db := Group("database", "Database connection", String("host", "Database host"))
+	App("demo", "Demo app", db)
+	down := Bool("down", "Roll back")
+	steps := Int("steps", "Steps").Default(1)
+	Command("Migrate").Uses(db).Args(down, steps)
+
+	var buf bytes.Buffer
+	if err := Export(&buf); err != nil {
+		t.Fatal(err)
+	}
+	a, err := ir.Decode(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.Commands) != 1 {
+		t.Fatalf("expected 1 command, got %d", len(a.Commands))
+	}
+	cmd := a.Commands[0]
+	if len(cmd.Args) != 2 {
+		t.Fatalf("expected 2 args, got %d", len(cmd.Args))
+	}
+	if cmd.Args[0].Name != "down" || cmd.Args[0].Kind != ir.KindBool {
+		t.Errorf("arg 0: %+v", cmd.Args[0])
+	}
+	if cmd.Args[1].Name != "steps" || cmd.Args[1].Kind != ir.KindInt || cmd.Args[1].Default == nil || *cmd.Args[1].Default != "1" {
+		t.Errorf("arg 1: %+v", cmd.Args[1])
+	}
+}
+
+func TestArgsNilKeyIsAnError(t *testing.T) {
+	reset()
+	App("a", "A")
+	Command("Migrate").Args(nil)
+	if err := Export(&bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "lists a nil key in Args") {
+		t.Errorf("untyped nil: got %v", err)
+	}
+
+	reset()
+	var missing *StringKey
+	App("a", "A")
+	Command("Migrate").Args(missing)
+	if err := Export(&bytes.Buffer{}); err == nil || !strings.Contains(err.Error(), "lists a nil key in Args") {
+		t.Errorf("typed nil: got %v", err)
+	}
+}
+
+func TestArgsKeyInGroupIsAnError(t *testing.T) {
+	reset()
+	host := String("host", "Host")
+	db := Group("database", "Database", host)
+	App("demo", "Demo", db)
+	Command("Serve").Args(host)
+	err := Export(&bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "Serve") || !strings.Contains(err.Error(), "database") {
+		t.Errorf("got %v, want error naming both Serve and database", err)
+	}
+}
+
+func TestArgsKeyInTwoCommandsIsAnError(t *testing.T) {
+	reset()
+	App("demo", "Demo")
+	steps := Int("steps", "Steps")
+	Command("Migrate").Args(steps)
+	Command("Rollback").Args(steps)
+	err := Export(&bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "Migrate") || !strings.Contains(err.Error(), "Rollback") {
+		t.Errorf("got %v, want error naming both commands", err)
+	}
+}

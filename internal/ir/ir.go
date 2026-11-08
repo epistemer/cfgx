@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 4
+const Version = 5
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -123,6 +123,8 @@ type Command struct {
 	Uses []string `json:"uses"`
 	// Tags are the tags the command uses.
 	Tags []string `json:"tags,omitempty"`
+	// Args are the flag-only arguments of the command.
+	Args []Key `json:"args,omitempty"`
 	// Orphans are groups the command uses that weren't passed to dsl.App.
 	// The generator reports them along with every other problem.
 	Orphans []Ref `json:"orphans,omitempty"`

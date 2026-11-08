@@ -330,6 +330,7 @@ func (g *GroupDef) usable() {}
 type CommandDef struct {
 	name string
 	uses []Usable
+	args []KeyDef
 	pos  ir.Pos
 }
 
@@ -344,6 +345,12 @@ func Command(goName string) *CommandDef {
 // Uses adds groups to the command.
 func (c *CommandDef) Uses(items ...Usable) *CommandDef {
 	c.uses = append(c.uses, items...)
+	return c
+}
+
+// Args adds flag-only arguments to the command.
+func (c *CommandDef) Args(keys ...KeyDef) *CommandDef {
+	c.args = append(c.args, keys...)
 	return c
 }
 
@@ -367,6 +374,7 @@ func Export(w io.Writer) error {
 	// paths maps every group reachable from the App to its dotted path.
 	paths := map[*GroupDef]string{}
 	keyPaths := map[*keyBase]string{}
+	keyGroups := map[*keyBase]string{}
 	type pending struct {
 		r     *RuleDef
 		group string
@@ -393,6 +401,7 @@ func Export(w io.Writer) error {
 			}
 			k := kd.base()
 			keyPaths[k] = path + "." + k.name
+			keyGroups[k] = path
 			kt, err := tagNames(k.tags, k.pos)
 			if err != nil {
 				return ir.Group{}, err
@@ -452,6 +461,7 @@ func Export(w io.Writer) error {
 		}
 		out.Global = append(out.Global, path)
 	}
+	argCommands := map[*keyBase]string{}
 	for _, c := range commands {
 		ic := ir.Command{Name: c.name, Pos: c.pos, Uses: []string{}}
 		for _, u := range c.uses {
@@ -469,6 +479,35 @@ func Export(w io.Writer) error {
 				continue
 			}
 			ic.Uses = append(ic.Uses, path)
+		}
+		for _, kd := range c.args {
+			if isNil(kd) {
+				return fmt.Errorf("%s: command %s lists a nil key in Args", c.pos, c.name)
+			}
+			k := kd.base()
+			if group, ok := keyGroups[k]; ok {
+				return fmt.Errorf("%s: key %q in command %s is also in group %q", c.pos, k.name, c.name, group)
+			}
+			if prevCmd, ok := argCommands[k]; ok {
+				if prevCmd == c.name {
+					return fmt.Errorf("%s: command %s lists key %q in Args twice", c.pos, c.name, k.name)
+				}
+				return fmt.Errorf("%s: key %q is used in Args of both %s and %s", c.pos, k.name, prevCmd, c.name)
+			}
+			argCommands[k] = c.name
+			kt, err := tagNames(k.tags, k.pos)
+			if err != nil {
+				return err
+			}
+			ic.Args = append(ic.Args, ir.Key{
+				Name:     k.name,
+				Desc:     k.desc,
+				Kind:     k.kind,
+				Default:  k.def,
+				Required: k.required,
+				Tags:     kt,
+				Pos:      k.pos,
+			})
 		}
 		out.Commands = append(out.Commands, ic)
 	}

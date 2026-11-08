@@ -16,19 +16,22 @@ var _ = engine.GeneratedV1
 
 // values holds every setting of the app.
 type values struct {
-	DBHost            string
-	ServerPort        int
-	ServerTLSEnabled  bool
-	ServerTLSCert     string
-	SchedulerWorkers  int
-	SchedulerRetryMax int
-	AuthOTPLength     int
-	AuthEmailfrom     string
-	AuthToken         string
-	AuthKeys          string
-	SMTPHost          string
-	SMTPPort          int
-	SMTPTLS           bool
+	DBHost             string
+	ServerPort         int
+	ServerTLSEnabled   bool
+	ServerTLSCert      string
+	SchedulerWorkers   int
+	SchedulerRetryMax  int
+	AuthOTPLength      int
+	AuthEmailfrom      string
+	AuthToken          string
+	AuthKeys           string
+	SMTPHost           string
+	SMTPPort           int
+	SMTPTLS            bool
+	TestEmailToAddress string
+	MigrateDown        bool
+	MigrateSteps       int
 }
 
 var keys = [...]engine.Key[values]{
@@ -113,6 +116,24 @@ var keys = [...]engine.Key[values]{
 		Type: "bool", Desc: "Use implicit TLS", Bool: true,
 		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.SMTPTLS) },
 		IsSet: func(v *values) bool { return v.SMTPTLS },
+	},
+	{
+		Path: "to.address", Env: "", Flag: "to-address",
+		Type: "string", Desc: "Recipient", FlagOnly: true, Quote: true, Required: true,
+		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.TestEmailToAddress) },
+		IsSet: func(v *values) bool { return v.TestEmailToAddress != "" },
+	},
+	{
+		Path: "down", Env: "", Flag: "down",
+		Type: "bool", Desc: "Apply down migrations", FlagOnly: true, Bool: true,
+		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.MigrateDown) },
+		IsSet: func(v *values) bool { return v.MigrateDown },
+	},
+	{
+		Path: "steps", Env: "", Flag: "steps",
+		Type: "int", Desc: "Number of steps", FlagOnly: true,
+		Set:   func(v *values, raw string) error { return engine.ParseInt(raw, &v.MigrateSteps) },
+		IsSet: func(v *values) bool { return v.MigrateSteps != 0 },
 	},
 }
 
@@ -317,7 +338,10 @@ func (c *TestEmail) SMTPPort() int { return c.r.cur.Load().SMTPPort }
 // SMTPTLS returns smtp.tls: Use implicit TLS
 func (c *TestEmail) SMTPTLS() bool { return c.r.cur.Load().SMTPTLS }
 
-var keysTestEmail = []int{7, 10, 11, 12}
+// ToAddress returns the --to-address argument: Recipient
+func (c *TestEmail) ToAddress() string { return c.r.cur.Load().TestEmailToAddress }
+
+var keysTestEmail = []int{7, 10, 11, 12, 13}
 
 func newTestEmail(v *values, args []string) *TestEmail {
 	r := &root{}
@@ -364,4 +388,37 @@ func newNotify(v *values, args []string) *Notify {
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func NotifyCommand(cmd *cobra.Command, run func(context.Context, *Notify) error) *cobra.Command {
 	return engine.Command(cmd, &app, keysNotify, newNotify, run)
+}
+
+// Migrate is the configuration of the Migrate command.
+type Migrate struct {
+	r    *root
+	args []string
+}
+
+// Args returns the Migrate command's positional arguments, as cobra parsed
+// them. The slice is a copy.
+func (c *Migrate) Args() []string { return slices.Clone(c.args) }
+
+// Down returns the --down argument: Apply down migrations
+func (c *Migrate) Down() bool { return c.r.cur.Load().MigrateDown }
+
+// Steps returns the --steps argument: Number of steps
+func (c *Migrate) Steps() int { return c.r.cur.Load().MigrateSteps }
+
+var keysMigrate = []int{14, 15}
+
+func newMigrate(v *values, args []string) *Migrate {
+	r := &root{}
+	r.cur.Store(v)
+	return &Migrate{
+		r:    r,
+		args: slices.Clone(args),
+	}
+}
+
+// MigrateCommand binds the Migrate configuration to cmd: it registers the
+// command's flags and sets its RunE, which loads the configuration and calls run.
+func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) error) *cobra.Command {
+	return engine.Command(cmd, &app, keysMigrate, newMigrate, run)
 }

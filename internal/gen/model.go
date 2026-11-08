@@ -52,8 +52,10 @@ type KeyModel struct {
 	DefaultText, DefaultLit  string
 	Quote, Bool              bool
 	Required, Global         bool
+	FlagOnly                 bool
 	Tags                     []string
 	RelevantIf               []int // keys that must be set for this one to matter
+	Pos                      ir.Pos
 }
 
 // nonZeroDefault reports whether the key's default counts as set (A4).
@@ -90,11 +92,14 @@ type CommandModel struct {
 	// Forward are keys the command reaches only through a tag: it gets
 	// forwarding getters for them instead of embedding their group (A5).
 	Forward []*KeyModel
+	Args    []*KeyModel
 	KeyIdx  []int
 }
 
 // HasRoot reports whether the command type needs the values at all.
-func (c *CommandModel) HasRoot() bool { return len(c.Groups) > 0 || len(c.Forward) > 0 }
+func (c *CommandModel) HasRoot() bool {
+	return len(c.Groups) > 0 || len(c.Forward) > 0 || len(c.Args) > 0
+}
 
 // Problem is a schema error found at generate time.
 type Problem struct {
@@ -359,7 +364,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				continue
 			}
 			seen[k.Name] = true
-			km := &KeyModel{Index: len(m.Keys), Path: path + "." + k.Name, Desc: k.Desc}
+			km := &KeyModel{Index: len(m.Keys), Path: path + "." + k.Name, Desc: k.Desc, Pos: k.Pos}
 			if strings.TrimSpace(k.Desc) == "" {
 				bad(k.Pos, "key %s needs a description", km.Path)
 			}
@@ -550,6 +555,73 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			}
 		}
 		sort.Slice(cm.Forward, func(i, j int) bool { return cm.Forward[i].Index < cm.Forward[j].Index })
+		sort.Ints(cm.KeyIdx)
+
+		cmdFlags := map[string]ir.Pos{}
+		cmdGetters := map[string]ir.Pos{}
+		for _, idx := range cm.KeyIdx {
+			k := m.Keys[idx]
+			cmdFlags[k.Flag] = k.Pos
+			cmdGetters[k.Getter] = k.Pos
+			// The engine also binds the flags of RelevantIf conditions.
+			for _, c := range k.RelevantIf {
+				cmdFlags[m.Keys[c].Flag] = m.Keys[c].Pos
+			}
+		}
+		for _, k := range c.Args {
+			if !keyNameRE.MatchString(k.Name) {
+				bad(k.Pos, "key name %q must be lower-case words of a-z and 0-9 joined by single underscores, with dots between path segments", k.Name)
+				continue
+			}
+			km := &KeyModel{
+				Index:    len(m.Keys),
+				Path:     k.Name,
+				Desc:     k.Desc,
+				FlagOnly: true,
+				Pos:      k.Pos,
+			}
+			if strings.TrimSpace(k.Desc) == "" {
+				bad(k.Pos, "key %s needs a description", km.Path)
+			}
+			km.Getter = nm.pascal(k.Name)
+			km.Field = c.Name + km.Getter
+			km.Flag = dashed(k.Name)
+			km.Env = ""
+
+			if reservedMethods[km.Getter] {
+				bad(k.Pos, "getter %s of %s is reserved for a method on command types; rename the key", km.Getter, km.Path)
+			} else if prev, ok := cmdGetters[km.Getter]; ok {
+				bad(k.Pos, "getter %s of %s collides with another getter on %s (declared at %s)", km.Getter, km.Path, c.Name, prev)
+			}
+			cmdGetters[km.Getter] = k.Pos
+
+			if km.Flag == "help" {
+				bad(k.Pos, "flag --help of %s collides with the built-in help flag", km.Path)
+			} else if app.ConfigFile != "" && km.Flag == "config" {
+				bad(k.Pos, "flag --config of %s collides with the config file flag", km.Path)
+			} else if prev, ok := cmdFlags[km.Flag]; ok {
+				bad(k.Pos, "flag --%s of %s collides with another flag on %s (declared at %s)", km.Flag, km.Path, c.Name, prev)
+			}
+			cmdFlags[km.Flag] = k.Pos
+
+			if prev, ok := fields[km.Field]; ok {
+				bad(k.Pos, "Go name %s of %s collides with another key or group (declared at %s)", km.Field, km.Path, prev)
+			}
+			fields[km.Field] = k.Pos
+
+			if err := kindInfo(km, k); err != nil {
+				bad(k.Pos, "%v", err)
+				continue
+			}
+			km.Required = k.Required
+			if len(k.Tags) > 0 {
+				bad(k.Pos, "argument %s of %s has tags, but arguments belong to no interface", km.Path, c.Name)
+			}
+
+			cm.Args = append(cm.Args, km)
+			cm.KeyIdx = append(cm.KeyIdx, km.Index)
+			m.Keys = append(m.Keys, km)
+		}
 		sort.Ints(cm.KeyIdx)
 		m.Commands = append(m.Commands, cm)
 	}

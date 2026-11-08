@@ -26,6 +26,7 @@ type Key[V any] struct {
 	Bool        bool   // a bool flag: --x means --x=true
 	Required    bool   // must be set (non-zero) after merging
 	Global      bool   // in a Global group: its flag is a persistent flag on the root
+	FlagOnly    bool   // flag-only: never looked up in config file or env
 	// RelevantIf lists keys that must all be set for this key to matter.
 	// Otherwise it keeps its default, isn't validated, and setting it warns.
 	RelevantIf []int

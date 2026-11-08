@@ -54,6 +54,7 @@ var keys = [...]engine.Key[values]{
 	{
 		Path: {{printf "%q" .Path}}, Env: {{printf "%q" .Env}}, Flag: {{printf "%q" .Flag}},
 		Type: {{printf "%q" .FlagType}}, Desc: {{printf "%q" .Desc}},
+		{{- if .FlagOnly}} FlagOnly: true,{{end}}
 		{{- if .HasDefault}} DefaultText: {{printf "%q" .DefaultText}},{{end}}
 		{{- if .Quote}} Quote: true,{{end}}
 		{{- if .Bool}} Bool: true,{{end}}
@@ -141,7 +142,7 @@ type {{.Name}} struct {
 {{- range .Groups}}
 	*{{.Type}}
 {{- end}}
-{{- if .Forward}}
+{{- if or .Forward .Args}}
 	r    *root
 {{- end}}
 	args []string
@@ -155,6 +156,10 @@ func (c *{{.Name}}) Args() []string { return slices.Clone(c.args) }
 // {{.Getter}} returns {{.Path}}: {{.Desc}}
 func (c *{{$c.Name}}) {{.Getter}}() {{.GoType}} { return c.r.cur.Load().{{.Field}} }
 {{end}}
+{{- range .Args}}
+// {{.Getter}} returns the --{{.Flag}} argument: {{.Desc}}
+func (c *{{$c.Name}}) {{.Getter}}() {{.GoType}} { return c.r.cur.Load().{{.Field}} }
+{{end}}
 
 var {{.KeysVar}} = []int{ {{- range $i, $k := .KeyIdx}}{{if $i}}, {{end}}{{$k}}{{end -}} }
 
@@ -166,7 +171,7 @@ func new{{.Name}}(v *values, args []string) *{{.Name}} {
 	{{- range .Groups}}
 		{{.Type}}: {{template "group" .}},
 	{{- end}}
-	{{- if .Forward}}
+	{{- if or .Forward .Args}}
 		r: r,
 	{{- end}}
 		args: slices.Clone(args),
