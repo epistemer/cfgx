@@ -22,7 +22,8 @@ import (
 //	dsl.String("host", ""), // want "key server.host needs a description"
 //
 // Every problem and warning must match a want comment on its line, by
-// substring, and every want comment must be matched.
+// substring; every want comment must be matched; and no problem may be
+// reported twice.
 func TestSchemaChecks(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds and runs every schema")
@@ -42,17 +43,28 @@ func TestSchemaChecks(t *testing.T) {
 			if len(wants) == 0 {
 				t.Fatal("schema.go has no want comments")
 			}
+			seen := map[finding]bool{}
 			for _, f := range findings(t, abs) {
-				line, ok := wants[f.line]
-				if !ok || !strings.Contains(f.msg, line.want) {
-					t.Errorf("unexpected problem at line %d: %s", f.line, f.msg)
+				if seen[f] {
+					t.Errorf("problem reported twice at line %d: %s", f.line, f.msg)
 					continue
 				}
-				line.matched = true
+				seen[f] = true
+				matched := false
+				for _, w := range wants[f.line] {
+					if strings.Contains(f.msg, w.want) {
+						w.matched, matched = true, true
+					}
+				}
+				if !matched {
+					t.Errorf("unexpected problem at line %d: %s", f.line, f.msg)
+				}
 			}
-			for n, w := range wants {
-				if !w.matched {
-					t.Errorf("line %d: no problem containing %q", n, w.want)
+			for n, ws := range wants {
+				for _, w := range ws {
+					if !w.matched {
+						t.Errorf("line %d: no problem containing %q", n, w.want)
+					}
 				}
 			}
 		})
@@ -66,21 +78,23 @@ type want struct {
 
 var wantRE = regexp.MustCompile(`// want "((?:[^"\\]|\\.)*)"`)
 
-func readWants(t *testing.T, file string) map[int]*want {
+// readWants returns the want comments of file by line; a line may have
+// several.
+func readWants(t *testing.T, file string) map[int][]*want {
 	f, err := os.Open(file)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	wants := map[int]*want{}
+	wants := map[int][]*want{}
 	sc := bufio.NewScanner(f)
 	for n := 1; sc.Scan(); n++ {
-		if m := wantRE.FindStringSubmatch(sc.Text()); m != nil {
+		for _, m := range wantRE.FindAllStringSubmatch(sc.Text(), -1) {
 			s, err := strconv.Unquote(`"` + m[1] + `"`)
 			if err != nil {
 				t.Fatalf("line %d: bad want: %v", n, err)
 			}
-			wants[n] = &want{want: s}
+			wants[n] = append(wants[n], &want{want: s})
 		}
 	}
 	return wants

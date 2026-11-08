@@ -4,6 +4,27 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M5.7 generate-time checks
+
+- **Landed:**
+  - Every check the generator makes has a bad schema: 63 of them, run
+    through the real DSL, loader and generator. Each one asserts the message
+    and the schema line it points at.
+  - The generator can now warn without failing. The first warning: a
+    command that lists a `Global` group in `Uses`.
+  - Writing the cases found three problems that were reported twice. All
+    three are fixed.
+- **Reviewed:** Gemini 3.8 Flash (Medium) on the diff, about 50k tokens
+  ([review 0008](reviews/0008-gemini-m5.7-review.md)). Two harness
+  improvements came out of it; two findings were rejected.
+- **Cost:** this was the cheapest review so far, from a Medium tier and a
+  small diff. Writing the 63 cases myself with a script was cheaper than
+  briefing Gemini.
+- **Next:** M5 is done except M5.8, which needs M4. M4 is the key vocabulary:
+  durations, enums, file kinds (secret files, paths, URLs), lists, maps,
+  constraints, and naming modifiers.
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M5.6 computed methods
 
 - **Landed:** `Group.Computed("DSN")` adds a hand-written method to the
