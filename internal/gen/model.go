@@ -26,6 +26,7 @@ type Model struct {
 	Tags        []*TagModel
 	Rules       []*RuleModel
 	Commands    []*CommandModel
+	Imports     []ImportModel // set by ResolveComputed
 }
 
 // RuleModel is a cross-key rule, by key index.
@@ -87,9 +88,23 @@ type GroupModel struct {
 	Children         []*GroupModel // nested groups, embedded in this one
 	AllKeys          []*KeyModel   // own keys and every descendant's, in table order
 	Parent           *GroupModel
+	Computed         []*ComputedModel
 	lower            string // Type without "Group": dbGroup → db
 	flagPrefix       string
+	pos              ir.Pos
 }
+
+// ComputedModel is a hand-written method that joins a group's interface.
+// Sig is empty until ResolveComputed fills it in from the type-checked
+// package; until then the interface leaves the method out.
+type ComputedModel struct {
+	Name, Sig string
+	Pos       ir.Pos
+}
+
+// ImportModel is a package the generated file imports for computed
+// methods' signatures.
+type ImportModel struct{ Alias, Path string }
 
 // CommandModel is one command profile.
 type CommandModel struct {
@@ -331,7 +346,21 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			}
 			seg = g.GoName
 		}
-		gm := &GroupModel{Name: g.Name, Path: path, Desc: g.Desc, Parent: parent}
+		gm := &GroupModel{Name: g.Name, Path: path, Desc: g.Desc, Parent: parent, pos: g.Pos}
+		seenComputed := map[string]bool{}
+		for _, c := range g.Computed {
+			switch {
+			case !token.IsIdentifier(c) || !token.IsExported(c):
+				bad(g.Pos, "computed method %q of group %q must be an exported Go method name, like DSN", c, path)
+			case reservedMethods[c]:
+				bad(g.Pos, "computed method %s of group %q is reserved for a method on command types", c, path)
+			case seenComputed[c]:
+				bad(g.Pos, "group %q lists computed method %s twice", path, c)
+			default:
+				seenComputed[c] = true
+				gm.Computed = append(gm.Computed, &ComputedModel{Name: c, Pos: g.Pos})
+			}
+		}
 		switch {
 		case parent != nil:
 			gm.Iface = parent.Iface + seg
@@ -477,6 +506,16 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	for _, tm := range m.Tags {
 		if len(tm.Keys) == 0 {
 			bad(tagPos[tm.Name], "tag %s isn't on any key; tag keys or groups with .Tags(%s)", tm.Name, tm.Name)
+		}
+	}
+	// A computed method can't share a name with a getter or another computed
+	// method in its group's interface, embedded groups included.
+	for _, gm := range m.Groups {
+		names := methodNames(gm)
+		for _, c := range gm.Computed {
+			if names[c.Name] > 1 {
+				bad(c.Pos, "computed method %s of group %q has the name of another method in its interface", c.Name, gm.Path)
+			}
 		}
 	}
 	// A key can't sit where the file needs a map: tls and tls.enabled can't
@@ -687,6 +726,29 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			m.Keys = append(m.Keys, km)
 		}
 		sort.Ints(cm.KeyIdx)
+		// Go promotes a method only if one embedded group has it, so a
+		// computed method must be unique on the command type.
+		owner := map[string]string{"Args": "the command"}
+		for _, k := range cm.Forward {
+			owner[k.Getter] = "the command"
+		}
+		for _, k := range cm.Args {
+			owner[k.Getter] = "the command"
+		}
+		for _, g := range cm.Groups {
+			names := methodNames(g)
+			sorted := make([]string, 0, len(names))
+			for name := range names {
+				sorted = append(sorted, name)
+			}
+			sort.Strings(sorted)
+			for _, name := range sorted {
+				if prev, ok := owner[name]; ok && prev != g.Path {
+					bad(c.Pos, "command %s gets method %s from both %s and group %q; Go can't promote it, so rename a computed method", c.Name, name, prev, g.Path)
+				}
+				owner[name] = g.Path
+			}
+		}
 		m.Commands = append(m.Commands, cm)
 	}
 
@@ -789,6 +851,26 @@ func checkRules(app *ir.App, m *Model, bad func(ir.Pos, string, ...any)) {
 			return
 		}
 	}
+}
+
+// methodNames counts the methods of a group's interface by name: getters and
+// computed methods, its descendants' included.
+func methodNames(g *GroupModel) map[string]int {
+	n := map[string]int{}
+	var add func(g *GroupModel)
+	add = func(g *GroupModel) {
+		for _, k := range g.Keys {
+			n[k.Getter]++
+		}
+		for _, c := range g.Computed {
+			n[c.Name]++
+		}
+		for _, ch := range g.Children {
+			add(ch)
+		}
+	}
+	add(g)
+	return n
 }
 
 func hasUsedAncestor(g *GroupModel, used map[string]bool) bool {

@@ -37,6 +37,9 @@ import (
 	"github.com/epistemer/cfgx"
 	"github.com/epistemer/cfgx/engine"
 	"github.com/spf13/cobra"
+{{- range .Imports}}
+	{{.Alias}} {{printf "%q" .Path}}
+{{- end}}
 )
 
 // The engine version this file was generated for.
@@ -112,6 +115,9 @@ type {{.Iface}} interface {
 {{- range .Children}}
 	{{.Iface}}
 {{- end}}
+{{- range .Computed}}{{if .Sig}}
+	{{.Sig}} // computed
+{{- end}}{{end}}
 }
 
 {{if .Children -}}

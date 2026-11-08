@@ -72,11 +72,14 @@ func generate(ctx context.Context, pattern string, timeout time.Duration) error 
 	if err != nil {
 		return fmt.Errorf("the schema has problems:\n%v", err)
 	}
+	out := filepath.Join(wd, "zz_"+pkg+".go")
+	if err := gen.ResolveComputed(ctx, model, wd, out); err != nil {
+		return fmt.Errorf("the schema has problems:\n%v", err)
+	}
 	src, err := gen.Render(model)
 	if err != nil {
 		return err
 	}
-	out := filepath.Join(wd, "zz_"+pkg+".go")
 	if old, err := os.ReadFile(out); err == nil && bytes.Equal(old, src) {
 		return nil // unchanged; leave the file and its timestamp alone
 	}

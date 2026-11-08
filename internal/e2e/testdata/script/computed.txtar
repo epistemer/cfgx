@@ -1,0 +1,114 @@
+# M5.6: computed methods join their group's interface (A8), with signatures
+# read by type-checking the settings package. Only commands that use the
+# whole group get them (A5).
+go generate ./...
+go build -o app$exe .
+exec ./app$exe serve
+stdout '^dsn=postgres://localhost/app retry=3s <nil>\r?\n$'
+
+# Generating again changes nothing.
+cp internal/settings/zz_settings.go before.go
+go generate ./...
+cmp internal/settings/zz_settings.go before.go
+
+# Mail reaches the database group only through a tag: no DSN().
+! go build ./check
+stderr 'missing method DSN'
+
+# A computed method that isn't written is a schema problem.
+cp files/schema_missing.go.txt internal/settings/schema/schema.go
+! go generate ./...
+stderr 'group "database" declares computed method Missing, but \*dbGroup has no method Missing'
+
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(settings.ServeCommand(&cobra.Command{Use: "serve"},
+		func(_ context.Context, s *settings.Serve) error {
+			d, err := s.RetryPolicy()
+			fmt.Printf("dsn=%s retry=%s %v\n", s.DSN(), d, err)
+			return nil
+		}))
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- check/check.go --
+package check
+
+import "example.com/e2e/internal/settings"
+
+var _ interface{ DSN() string } = (*settings.Mail)(nil)
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/computed.go --
+package settings
+
+import (
+	"net/url"
+	"time"
+)
+
+// DSN is the database URL.
+func (g *dbGroup) DSN() string {
+	return (&url.URL{Scheme: "postgres", Host: g.DBHost(), Path: g.DBName()}).String()
+}
+
+// RetryPolicy is the delay between retries.
+func (g *schedulerGroup) RetryPolicy() (time.Duration, error) {
+	return time.Duration(g.SchedulerRetrySeconds()) * time.Second, nil
+}
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var Mailer = dsl.Tag("Mailer", "Mail settings")
+
+var DB = dsl.Group("database", "Database",
+	dsl.String("host", "Host").Default("localhost").Tags(Mailer),
+	dsl.String("name", "Name").Default("app"),
+).GoName("DB").Computed("DSN")
+
+var Scheduler = dsl.Group("scheduler", "Scheduler",
+	dsl.Int("retry_seconds", "Retry delay").Default(3),
+).Computed("RetryPolicy")
+
+var App = dsl.App("app", "Test app", DB, Scheduler)
+
+var (
+	Serve = dsl.Command("Serve").Uses(DB, Scheduler)
+	Mail  = dsl.Command("Mail").Uses(Mailer)
+)
+-- files/schema_missing.go.txt --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var DB = dsl.Group("database", "Database",
+	dsl.String("host", "Host").Default("localhost"),
+	dsl.String("name", "Name").Default("app"),
+).GoName("DB").Computed("DSN", "Missing")
+
+var Scheduler = dsl.Group("scheduler", "Scheduler",
+	dsl.Int("retry_seconds", "Retry delay").Default(3),
+).Computed("RetryPolicy")
+
+var App = dsl.App("app", "Test app", DB, Scheduler)
+
+var Serve = dsl.Command("Serve").Uses(DB, Scheduler)
