@@ -616,3 +616,69 @@ func TestErrorsWithoutSource(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestFlagOnlyKey(t *testing.T) {
+	type extraVals struct {
+		vals
+		Steps int
+	}
+	keys := []Key[extraVals]{
+		{
+			Path: "server.host", Env: "CFGXT_SERVER_HOST", Flag: "server-host", Type: "string", Desc: "Host",
+			Set: func(v *extraVals, r string) error { return ParseString(r, &v.Host) },
+		},
+		{
+			Path: "steps", Flag: "steps", Type: "int", Desc: "Steps", FlagOnly: true,
+			Set: func(v *extraVals, r string) error { return ParseInt(r, &v.Steps) },
+		},
+	}
+	dir := write(t, map[string]string{
+		"config.yaml": "steps: 99\n",
+	})
+	a := &App[extraVals]{
+		EnvPrefix:   "CFGXT",
+		ConfigFile:  "config",
+		SearchPaths: []string{dir},
+		Keys:        keys,
+	}
+	e := env{
+		"CFGXT_STEPS": "88",
+	}
+
+	// Without flag: steps remains 0 (not read from file or env)
+	fs := pflag.NewFlagSet("t", pflag.ContinueOnError)
+	BindFlags(fs, a.Keys, []int{0, 1})
+	res, err := Load(a, fs, []int{0, 1}, Options{LookupEnv: e.lookup, Environ: e.environ})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Values.Steps != 0 {
+		t.Errorf("steps = %d, want 0 (should not read from file or env)", res.Values.Steps)
+	}
+	// Check warnings: both file and env should warn as unknown
+	var warnKeys []string
+	for _, w := range res.Warnings {
+		warnKeys = append(warnKeys, w.Msg)
+	}
+	warnStr := strings.Join(warnKeys, "\n")
+	if !strings.Contains(warnStr, `unknown key "steps"`) {
+		t.Errorf("expected unknown file key warning for steps, got %v", warnKeys)
+	}
+	if !strings.Contains(warnStr, "unknown environment variable CFGXT_STEPS") {
+		t.Errorf("expected unknown env warning for CFGXT_STEPS, got %v", warnKeys)
+	}
+
+	// With flag: sets the value
+	fs = pflag.NewFlagSet("t", pflag.ContinueOnError)
+	BindFlags(fs, a.Keys, []int{0, 1})
+	if err := fs.Parse([]string{"--steps", "3"}); err != nil {
+		t.Fatal(err)
+	}
+	res, err = Load(a, fs, []int{0, 1}, Options{LookupEnv: e.lookup, Environ: e.environ})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Values.Steps != 3 {
+		t.Errorf("steps = %d, want 3", res.Values.Steps)
+	}
+}

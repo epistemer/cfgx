@@ -1,0 +1,81 @@
+# M5.4: key modifiers Alias and Deprecated.
+go generate ./...
+go build -o app$exe .
+
+# 1. --help lists the new flag but not the old alias flag.
+exec ./app$exe serve --help
+stdout '--database-sslmode'
+! stdout '--database-ssl-mode'
+
+# 2. Old flag works and prints deprecation warning.
+exec ./app$exe serve --database-ssl-mode=disable
+stdout 'sslmode="disable" legacy=""'
+stderr '^warning: --database-ssl-mode is deprecated, use --database-sslmode\r?$'
+
+# 3. Deprecated key warns when set.
+exec ./app$exe serve --database-legacy=oldval
+stdout 'sslmode="prefer" legacy="oldval"'
+stderr '^warning: database.legacy is deprecated: use x instead \(flag --database-legacy\)\r?$'
+
+# 4. Old file key works and prints deprecation warning.
+cp files/old_key.yaml app.yaml
+exec ./app$exe serve
+stdout 'sslmode="require" legacy=""'
+stderr '^warning: database.ssl_mode is deprecated, use database.sslmode \(app.yaml:2:3\)\r?$'
+rm app.yaml
+
+# 5. Old env works and prints deprecation warning (env vars cannot be unset in testscript, so env comes last).
+env APP_DATABASE_SSL_MODE=verify-full
+exec ./app$exe serve
+stdout 'sslmode="verify-full" legacy=""'
+stderr '^warning: APP_DATABASE_SSL_MODE is deprecated, use APP_DATABASE_SSLMODE\r?$'
+
+-- files/old_key.yaml --
+database:
+  ssl_mode: require
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(
+		settings.ServeCommand(&cobra.Command{Use: "serve"},
+			func(_ context.Context, s *settings.Serve) error {
+				fmt.Printf("sslmode=%q legacy=%q\n", s.DatabaseSslmode(), s.DatabaseLegacy())
+				return nil
+			}),
+	)
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var (
+	sslmode = dsl.String("sslmode", "SSL mode").Default("prefer").Alias("database.ssl_mode")
+	legacy  = dsl.String("legacy", "Legacy setting").Deprecated("use x instead")
+)
+
+var Database = dsl.Group("database", "Database connection", sslmode, legacy)
+
+var App = dsl.App("app", "Test app", Database).ConfigFile("app", ".").EnvPrefix("APP")
+
+var Serve = dsl.Command("Serve").Uses(Database)

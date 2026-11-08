@@ -1,0 +1,101 @@
+# Command Args: flag-only keys with getters on the command type (M5.5).
+go generate ./...
+go build -o app$exe .
+
+# migrate --down --steps 3 prints the values via m.Down()/m.Steps()
+exec ./app$exe migrate --down --steps 3
+stdout '^down=true steps=3\r?\n$'
+
+# Default values when flags are omitted
+exec ./app$exe migrate
+stdout '^down=false steps=0\r?\n$'
+! stderr .
+
+# Env MIGRATE-like vars are ignored
+env MIGRATE_DOWN=true
+env MIGRATE_STEPS=5
+exec ./app$exe migrate
+stdout '^down=false steps=0\r?\n$'
+! stderr .
+
+# Vars with the APP_ prefix are also ignored (and warn as unknown)
+env APP_MIGRATE_DOWN=true
+env APP_MIGRATE_STEPS=5
+exec ./app$exe migrate
+stdout '^down=false steps=0\r?\n$'
+stderr '^warning: unknown environment variable APP_MIGRATE_DOWN\r?$'
+stderr 'warning: unknown environment variable APP_MIGRATE_STEPS'
+env APP_MIGRATE_DOWN=
+env APP_MIGRATE_STEPS=
+env MIGRATE_DOWN=
+env MIGRATE_STEPS=
+
+# A bad --steps x prints steps: "x" is not an integer (flag --steps)
+! exec ./app$exe migrate --steps x
+stderr '^  steps: "x" is not an integer \(flag --steps\)\r?$'
+
+# A Required arg missing fails
+! exec ./app$exe deploy
+stderr '^  target: is required; set --target\r?$'
+
+exec ./app$exe deploy --target prod
+stdout '^deploy target=prod\r?\n$'
+
+# --help lists the flags
+exec ./app$exe migrate --help
+stdout '--down'
+stdout '--steps'
+
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(
+		settings.MigrateCommand(&cobra.Command{Use: "migrate"},
+			func(_ context.Context, m *settings.Migrate) error {
+				fmt.Printf("down=%t steps=%d\n", m.Down(), m.Steps())
+				return nil
+			}),
+		settings.DeployCommand(&cobra.Command{Use: "deploy"},
+			func(_ context.Context, d *settings.Deploy) error {
+				fmt.Printf("deploy target=%s\n", d.Target())
+				return nil
+			}),
+	)
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var (
+	down   = dsl.Bool("down", "Apply down migrations")
+	steps  = dsl.Int("steps", "Number of steps")
+	target = dsl.String("target", "Deployment target").Required()
+)
+
+var App = dsl.App("app", "Test app")
+
+var (
+	Migrate = dsl.Command("Migrate").Args(down, steps)
+	Deploy  = dsl.Command("Deploy").Args(target)
+)

@@ -227,6 +227,8 @@ type keyBase struct {
 	def        *string
 	required   bool
 	tags       []*TagDef
+	aliases    []string
+	deprecated string
 	pos        ir.Pos
 }
 
@@ -244,6 +246,19 @@ func (k *StringKey) Tags(tags ...*TagDef) *StringKey {
 // commands that load the key check it.
 func (k *StringKey) Required() *StringKey {
 	k.required = true
+	return k
+}
+
+// Alias registers old file key / env / flag names that are still accepted,
+// with a deprecation warning. Renames only.
+func (k *StringKey) Alias(oldPaths ...string) *StringKey {
+	k.aliases = append(k.aliases, oldPaths...)
+	return k
+}
+
+// Deprecated sets a warning to emit when the key is set.
+func (k *StringKey) Deprecated(msg string) *StringKey {
+	k.deprecated = msg
 	return k
 }
 
@@ -272,6 +287,19 @@ func (k *IntKey) Tags(tags ...*TagDef) *IntKey {
 // commands that load the key check it.
 func (k *IntKey) Required() *IntKey {
 	k.required = true
+	return k
+}
+
+// Alias registers old file key / env / flag names that are still accepted,
+// with a deprecation warning. Renames only.
+func (k *IntKey) Alias(oldPaths ...string) *IntKey {
+	k.aliases = append(k.aliases, oldPaths...)
+	return k
+}
+
+// Deprecated sets a warning to emit when the key is set.
+func (k *IntKey) Deprecated(msg string) *IntKey {
+	k.deprecated = msg
 	return k
 }
 
@@ -304,6 +332,19 @@ func (k *BoolKey) Required() *BoolKey {
 	return k
 }
 
+// Alias registers old file key / env / flag names that are still accepted,
+// with a deprecation warning. Renames only.
+func (k *BoolKey) Alias(oldPaths ...string) *BoolKey {
+	k.aliases = append(k.aliases, oldPaths...)
+	return k
+}
+
+// Deprecated sets a warning to emit when the key is set.
+func (k *BoolKey) Deprecated(msg string) *BoolKey {
+	k.deprecated = msg
+	return k
+}
+
 // BoolKey is a bool setting. Create it with Bool.
 type BoolKey struct{ keyBase }
 
@@ -330,6 +371,7 @@ func (g *GroupDef) usable() {}
 type CommandDef struct {
 	name string
 	uses []Usable
+	args []KeyDef
 	pos  ir.Pos
 }
 
@@ -344,6 +386,12 @@ func Command(goName string) *CommandDef {
 // Uses adds groups to the command.
 func (c *CommandDef) Uses(items ...Usable) *CommandDef {
 	c.uses = append(c.uses, items...)
+	return c
+}
+
+// Args adds flag-only arguments to the command.
+func (c *CommandDef) Args(keys ...KeyDef) *CommandDef {
+	c.args = append(c.args, keys...)
 	return c
 }
 
@@ -367,6 +415,7 @@ func Export(w io.Writer) error {
 	// paths maps every group reachable from the App to its dotted path.
 	paths := map[*GroupDef]string{}
 	keyPaths := map[*keyBase]string{}
+	keyGroups := map[*keyBase]string{}
 	type pending struct {
 		r     *RuleDef
 		group string
@@ -393,11 +442,26 @@ func Export(w io.Writer) error {
 			}
 			k := kd.base()
 			keyPaths[k] = path + "." + k.name
+			keyGroups[k] = path
 			kt, err := tagNames(k.tags, k.pos)
 			if err != nil {
 				return ir.Group{}, err
 			}
-			ig.Keys = append(ig.Keys, ir.Key{Name: k.name, Desc: k.desc, Kind: k.kind, Default: k.def, Required: k.required, Tags: kt, Pos: k.pos})
+			var aliases []string
+			if len(k.aliases) > 0 {
+				aliases = append([]string(nil), k.aliases...)
+			}
+			ig.Keys = append(ig.Keys, ir.Key{
+				Name:       k.name,
+				Desc:       k.desc,
+				Kind:       k.kind,
+				Default:    k.def,
+				Required:   k.required,
+				Tags:       kt,
+				Aliases:    aliases,
+				Deprecated: k.deprecated,
+				Pos:        k.pos,
+			})
 		}
 		for _, r := range g.rules {
 			if r == nil {
@@ -452,6 +516,7 @@ func Export(w io.Writer) error {
 		}
 		out.Global = append(out.Global, path)
 	}
+	argCommands := map[*keyBase]string{}
 	for _, c := range commands {
 		ic := ir.Command{Name: c.name, Pos: c.pos, Uses: []string{}}
 		for _, u := range c.uses {
@@ -469,6 +534,41 @@ func Export(w io.Writer) error {
 				continue
 			}
 			ic.Uses = append(ic.Uses, path)
+		}
+		for _, kd := range c.args {
+			if isNil(kd) {
+				return fmt.Errorf("%s: command %s lists a nil key in Args", c.pos, c.name)
+			}
+			k := kd.base()
+			if group, ok := keyGroups[k]; ok {
+				return fmt.Errorf("%s: key %q in command %s is also in group %q", c.pos, k.name, c.name, group)
+			}
+			if prevCmd, ok := argCommands[k]; ok {
+				if prevCmd == c.name {
+					return fmt.Errorf("%s: command %s lists key %q in Args twice", c.pos, c.name, k.name)
+				}
+				return fmt.Errorf("%s: key %q is used in Args of both %s and %s", c.pos, k.name, prevCmd, c.name)
+			}
+			argCommands[k] = c.name
+			kt, err := tagNames(k.tags, k.pos)
+			if err != nil {
+				return err
+			}
+			var aliases []string
+			if len(k.aliases) > 0 {
+				aliases = append([]string(nil), k.aliases...)
+			}
+			ic.Args = append(ic.Args, ir.Key{
+				Name:       k.name,
+				Desc:       k.desc,
+				Kind:       k.kind,
+				Default:    k.def,
+				Required:   k.required,
+				Tags:       kt,
+				Aliases:    aliases,
+				Deprecated: k.deprecated,
+				Pos:        k.pos,
+			})
 		}
 		out.Commands = append(out.Commands, ic)
 	}

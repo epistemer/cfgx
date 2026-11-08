@@ -249,6 +249,7 @@ func (l *loader[V]) at(p node.Pos) string {
 type candidate struct {
 	raw    string
 	origin Origin
+	keyPos node.Pos
 	bad    *cfgx.Problem
 }
 
@@ -260,22 +261,87 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 		origins = append(origins, Origin{Layer: LayerDefault})
 	}
 	var win *candidate
-	if l.file != nil {
+	if !k.FlagOnly && l.file != nil {
 		if c := l.fromFile(k.Path); c != nil {
 			win = c
 			origins = append(origins, c.origin)
+			for _, a := range k.Aliases {
+				if a.Path != "" {
+					if ac := l.fromFile(a.Path); ac != nil {
+						where := l.at(ac.keyPos)
+						l.warn(fmt.Sprintf("%s is ignored: %s is set too", a.Path, k.Path),
+							slog.String("key", k.Path), slog.String("source", where))
+					}
+				}
+			}
+		} else {
+			for _, a := range k.Aliases {
+				if a.Path != "" {
+					if ac := l.fromFile(a.Path); ac != nil {
+						win = ac
+						origins = append(origins, ac.origin)
+						where := l.at(ac.keyPos)
+						l.warn(fmt.Sprintf("%s is deprecated, use %s (%s)", a.Path, k.Path, where),
+							slog.String("key", k.Path), slog.String("source", where))
+						break
+					}
+				}
+			}
 		}
 	}
-	if k.Env != "" {
+	if !k.FlagOnly && k.Env != "" {
 		if raw, ok := lookup(k.Env); ok {
 			win = &candidate{raw: raw, origin: Origin{LayerEnv, k.Env}}
 			origins = append(origins, win.origin)
+			for _, a := range k.Aliases {
+				if a.Env != "" {
+					if _, aok := lookup(a.Env); aok {
+						orig := Origin{LayerEnv, a.Env}
+						l.warn(fmt.Sprintf("%s is ignored: %s is set too", a.Env, k.Env),
+							slog.String("key", k.Path), slog.String("source", orig.String()))
+					}
+				}
+			}
+		} else {
+			for _, a := range k.Aliases {
+				if a.Env != "" {
+					if raw, ok := lookup(a.Env); ok {
+						win = &candidate{raw: raw, origin: Origin{LayerEnv, a.Env}}
+						origins = append(origins, win.origin)
+						l.warn(fmt.Sprintf("%s is deprecated, use %s", a.Env, k.Env),
+							slog.String("key", k.Path), slog.String("source", win.origin.String()))
+						break
+					}
+				}
+			}
 		}
 	}
 	if fs != nil && k.Flag != "" {
-		if f := fs.Lookup(k.Flag); f != nil && f.Changed {
+		f := fs.Lookup(k.Flag)
+		if f != nil && f.Changed {
 			win = &candidate{raw: f.Value.String(), origin: Origin{LayerFlag, "--" + k.Flag}}
 			origins = append(origins, win.origin)
+			for _, a := range k.Aliases {
+				if a.Flag != "" {
+					if af := fs.Lookup(a.Flag); af != nil && af.Changed {
+						orig := Origin{LayerFlag, "--" + a.Flag}
+						l.warn(fmt.Sprintf("--%s is ignored: --%s is set too", a.Flag, k.Flag),
+							slog.String("key", k.Path), slog.String("source", orig.String()))
+					}
+				}
+			}
+		} else {
+			for _, a := range k.Aliases {
+				if a.Flag != "" {
+					if af := fs.Lookup(a.Flag); af != nil && af.Changed {
+						win = &candidate{raw: af.Value.String(), origin: Origin{LayerFlag, "--" + a.Flag}}
+						origins = append(origins, win.origin)
+						l.warn(fmt.Sprintf("--%s is deprecated, use --%s", a.Flag, k.Flag),
+							slog.String("key", k.Path), slog.String("source", win.origin.String()))
+						break
+					}
+				}
+			}
 		}
 	}
 	l.res.Origins[i] = origins
@@ -289,6 +355,10 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 				slog.String("key", k.Path), slog.String("source", where))
 		}
 		return
+	}
+	if win != nil && k.Deprecated != "" && setsValue(k, win.raw) {
+		l.warn(fmt.Sprintf("%s is deprecated: %s (%s)", k.Path, k.Deprecated, win.origin.String()),
+			slog.String("key", k.Path), slog.String("source", win.origin.String()))
 	}
 	l.state[i] = failed
 	if win != nil {
@@ -422,10 +492,10 @@ func (l *loader[V]) required(k *Key[V], win *candidate) cfgx.Problem {
 	if k.Flag != "" {
 		ways = append(ways, "--"+k.Flag)
 	}
-	if k.Env != "" {
+	if !k.FlagOnly && k.Env != "" {
 		ways = append(ways, k.Env)
 	}
-	if l.a.ConfigFile != "" {
+	if !k.FlagOnly && l.a.ConfigFile != "" {
 		ways = append(ways, k.Path+" in the config file")
 	}
 	msg := "is required"
@@ -453,11 +523,11 @@ func (l *loader[V]) fromFile(path string) *candidate {
 		if n == len(segs)-1 {
 			switch val.Kind {
 			case node.Map:
-				return &candidate{origin: origin, bad: &cfgx.Problem{Key: path, Message: "expected a single value, found a map", Source: origin.String()}}
+				return &candidate{origin: origin, keyPos: p.KeyPos, bad: &cfgx.Problem{Key: path, Message: "expected a single value, found a map", Source: origin.String()}}
 			case node.List:
-				return &candidate{origin: origin, bad: &cfgx.Problem{Key: path, Message: "expected a single value, found a list", Source: origin.String()}}
+				return &candidate{origin: origin, keyPos: p.KeyPos, bad: &cfgx.Problem{Key: path, Message: "expected a single value, found a list", Source: origin.String()}}
 			}
-			return &candidate{raw: val.Scalar, origin: origin}
+			return &candidate{raw: val.Scalar, origin: origin, keyPos: p.KeyPos}
 		}
 		if val.Kind != node.Map {
 			prefix := strings.Join(segs[:n+1], ".")
@@ -465,7 +535,7 @@ func (l *loader[V]) fromFile(path string) *candidate {
 			if val.Kind == node.List {
 				found = "a list"
 			}
-			return &candidate{origin: origin, bad: &cfgx.Problem{Key: prefix, Message: "expected a map of settings, found " + found, Source: origin.String()}}
+			return &candidate{origin: origin, keyPos: p.KeyPos, bad: &cfgx.Problem{Key: prefix, Message: "expected a map of settings, found " + found, Source: origin.String()}}
 		}
 		cur = val
 	}
@@ -480,9 +550,9 @@ type trie struct {
 
 func (l *loader[V]) unknownFileKeys() {
 	root := &trie{}
-	for _, k := range l.a.Keys {
+	addPath := func(path string) {
 		t := root
-		for _, seg := range strings.Split(k.Path, ".") {
+		for _, seg := range strings.Split(path, ".") {
 			if t.kids == nil {
 				t.kids = map[string]*trie{}
 			}
@@ -494,6 +564,17 @@ func (l *loader[V]) unknownFileKeys() {
 			t = next
 		}
 		t.leaf = true
+	}
+	for _, k := range l.a.Keys {
+		if k.FlagOnly {
+			continue
+		}
+		addPath(k.Path)
+		for _, a := range k.Aliases {
+			if a.Path != "" {
+				addPath(a.Path)
+			}
+		}
 	}
 	l.walkUnknown(root, l.file.root, "")
 }
@@ -537,7 +618,13 @@ func (l *loader[V]) unknownEnv(environ []string) {
 		}
 	}
 	for _, k := range l.a.Keys {
+		if k.FlagOnly {
+			continue
+		}
 		add(k.Env)
+		for _, a := range k.Aliases {
+			add(a.Env)
+		}
 	}
 	if l.a.ConfigFile != "" {
 		add(l.a.configEnv())
