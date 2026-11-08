@@ -1,0 +1,86 @@
+# M4.1: Int64, Uint, Float, Duration and ByteSize keys, through the DSL, the
+# file, env, flags and --help.
+go generate ./...
+go build -o app$exe .
+
+exec ./app$exe run
+stdout '^big=9000000000 workers=4 ratio=0.5 timeout=5m0s max=1048576\r?\n$'
+
+# --help shows the defaults in canonical form.
+exec ./app$exe run --help
+stdout '--k-timeout duration\s+Request timeout \(default 5m0s\)'
+stdout '--k-max bytesize\s+Maximum body size \(default 1MiB\)'
+stdout '--k-ratio float\s+Sampling ratio \(default 0.5\)'
+
+# Each layer parses the same way.
+cp files/app.yaml app.yaml
+env 'APP_K_MAX=2 MiB'
+exec ./app$exe run --k-ratio 1e-3
+stdout '^big=-5 workers=8 ratio=0.001 timeout=1h30m0s max=2097152\r?\n$'
+rm app.yaml
+
+# Every bad value is reported at once, with its source.
+! exec ./app$exe run --k-timeout 30 --k-max 1.5GB --k-workers -1 --k-ratio NaN --k-big 1e3
+cmp stderr want.txt
+
+-- want.txt --
+app: invalid configuration (5 problems)
+  k.big: "1e3" is not an integer (flag --k-big)
+  k.max: "1.5GB" is not a size; write bytes or a whole number with a unit, like 512KB or 1MiB (flag --k-max)
+  k.ratio: "NaN" is not a finite number (flag --k-ratio)
+  k.timeout: "30" has no unit; write it like 90s, 5m or 1h30m (flag --k-timeout)
+  k.workers: "-1" is not a non-negative integer (flag --k-workers)
+-- files/app.yaml --
+k:
+  big: -5
+  workers: 8
+  timeout: 1h30m
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(settings.RunCommand(&cobra.Command{Use: "run"},
+		func(_ context.Context, r *settings.Run) error {
+			fmt.Printf("big=%d workers=%d ratio=%g timeout=%s max=%d\n", r.KBig(), r.KWorkers(), r.KRatio(), r.KTimeout(), r.KMax())
+			return nil
+		}))
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import (
+	"time"
+
+	"github.com/epistemer/cfgx/dsl"
+)
+
+var K = dsl.Group("k", "Kinds",
+	dsl.Int64("big", "A big number").Default(9_000_000_000),
+	dsl.Uint("workers", "Workers").Default(4),
+	dsl.Float("ratio", "Sampling ratio").Default(0.5),
+	dsl.Duration("timeout", "Request timeout").Default(5*time.Minute),
+	dsl.ByteSize("max", "Maximum body size").Default(1<<20),
+)
+
+var App = dsl.App("app", "Test app", K).ConfigFile("app", ".")
+
+var Run = dsl.Command("Run").Uses(K)

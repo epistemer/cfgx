@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
+	"time"
 
 	"github.com/epistemer/cfgx/internal/ir"
 )
@@ -246,128 +247,136 @@ type keyBase struct {
 func (k *keyBase) base() *keyBase { return k }
 func (k *keyBase) member()        {}
 
-// Tags adds the key to tag interfaces.
-func (k *StringKey) Tags(tags ...*TagDef) *StringKey {
-	k.tags = append(k.tags, tags...)
-	return k
+// key holds what every key type shares: the modifiers every kind has, each
+// returning the concrete key type K so calls chain. T is the Go type of the
+// key's values; text turns one into the canonical text the IR records.
+// Schemas never name it: they call String, Int and the other constructors.
+type key[K any, T any] struct {
+	keyBase
+	self K
+	text func(T) string
 }
 
-// Required makes loading fail when the key isn't set: when its value is
-// empty or zero (false for a Bool) after every source is merged. Only the
-// commands that load the key check it.
-func (k *StringKey) Required() *StringKey {
-	k.required = true
-	return k
-}
-
-// Alias registers old file key / env / flag names that are still accepted,
-// with a deprecation warning. Renames only.
-func (k *StringKey) Alias(oldPaths ...string) *StringKey {
-	k.aliases = append(k.aliases, oldPaths...)
-	return k
-}
-
-// Deprecated sets a warning to emit when the key is set.
-func (k *StringKey) Deprecated(msg string) *StringKey {
-	k.deprecated = msg
-	return k
-}
-
-// StringKey is a string setting. Create it with String.
-type StringKey struct{ keyBase }
-
-// String declares a string key.
-func String(name, desc string) *StringKey {
-	return &StringKey{keyBase{name: name, desc: desc, kind: ir.KindString, pos: caller(1)}}
+func (k *key[K, T]) init(self K, name, desc string, kind ir.Kind, text func(T) string, pos ir.Pos) {
+	k.keyBase = keyBase{name: name, desc: desc, kind: kind, pos: pos}
+	k.self, k.text = self, text
 }
 
 // Default sets the key's default.
-func (k *StringKey) Default(v string) *StringKey {
-	k.def = &v
-	return k
+func (k *key[K, T]) Default(v T) K {
+	s := k.text(v)
+	k.def = &s
+	return k.self
+}
+
+// Required makes loading fail when the key isn't set: when its value is the
+// zero value (empty, 0, false) after every source is merged. Only the
+// commands that load the key check it.
+func (k *key[K, T]) Required() K {
+	k.required = true
+	return k.self
 }
 
 // Tags adds the key to tag interfaces.
-func (k *IntKey) Tags(tags ...*TagDef) *IntKey {
+func (k *key[K, T]) Tags(tags ...*TagDef) K {
 	k.tags = append(k.tags, tags...)
-	return k
+	return k.self
 }
 
-// Required makes loading fail when the key isn't set: when its value is
-// empty or zero (false for a Bool) after every source is merged. Only the
-// commands that load the key check it.
-func (k *IntKey) Required() *IntKey {
-	k.required = true
-	return k
-}
-
-// Alias registers old file key / env / flag names that are still accepted,
-// with a deprecation warning. Renames only.
-func (k *IntKey) Alias(oldPaths ...string) *IntKey {
+// Alias keeps old names working: each old path's file key, env var and flag
+// are still accepted, with a deprecation warning. Renames only.
+func (k *key[K, T]) Alias(oldPaths ...string) K {
 	k.aliases = append(k.aliases, oldPaths...)
-	return k
+	return k.self
 }
 
-// Deprecated sets a warning to emit when the key is set.
-func (k *IntKey) Deprecated(msg string) *IntKey {
+// Deprecated makes setting the key print a warning with msg.
+func (k *key[K, T]) Deprecated(msg string) K {
 	k.deprecated = msg
+	return k.self
+}
+
+// StringKey is a string setting. Create it with String.
+type StringKey struct{ key[*StringKey, string] }
+
+// String declares a string key.
+func String(name, desc string) *StringKey {
+	k := &StringKey{}
+	k.init(k, name, desc, ir.KindString, func(v string) string { return v }, caller(1))
 	return k
 }
 
 // IntKey is an int setting. Create it with Int.
-type IntKey struct{ keyBase }
+type IntKey struct{ key[*IntKey, int] }
 
 // Int declares an int key.
 func Int(name, desc string) *IntKey {
-	return &IntKey{keyBase{name: name, desc: desc, kind: ir.KindInt, pos: caller(1)}}
-}
-
-// Default sets the key's default.
-func (k *IntKey) Default(v int) *IntKey {
-	s := strconv.Itoa(v)
-	k.def = &s
-	return k
-}
-
-// Tags adds the key to tag interfaces.
-func (k *BoolKey) Tags(tags ...*TagDef) *BoolKey {
-	k.tags = append(k.tags, tags...)
-	return k
-}
-
-// Required makes loading fail when the key isn't set: when its value is
-// empty or zero (false for a Bool) after every source is merged. Only the
-// commands that load the key check it.
-func (k *BoolKey) Required() *BoolKey {
-	k.required = true
-	return k
-}
-
-// Alias registers old file key / env / flag names that are still accepted,
-// with a deprecation warning. Renames only.
-func (k *BoolKey) Alias(oldPaths ...string) *BoolKey {
-	k.aliases = append(k.aliases, oldPaths...)
-	return k
-}
-
-// Deprecated sets a warning to emit when the key is set.
-func (k *BoolKey) Deprecated(msg string) *BoolKey {
-	k.deprecated = msg
+	k := &IntKey{}
+	k.init(k, name, desc, ir.KindInt, strconv.Itoa, caller(1))
 	return k
 }
 
 // BoolKey is a bool setting. Create it with Bool.
-type BoolKey struct{ keyBase }
+type BoolKey struct{ key[*BoolKey, bool] }
 
-// Bool declares a bool key.
+// Bool declares a bool key; its flag is --x, or --x=false.
 func Bool(name, desc string) *BoolKey {
-	return &BoolKey{keyBase{name: name, desc: desc, kind: ir.KindBool, pos: caller(1)}}
+	k := &BoolKey{}
+	k.init(k, name, desc, ir.KindBool, strconv.FormatBool, caller(1))
+	return k
 }
 
-// Default sets the key's default.
-func (k *BoolKey) Default(v bool) *BoolKey {
-	s := strconv.FormatBool(v)
-	k.def = &s
+// Int64Key is an int64 setting. Create it with Int64.
+type Int64Key struct{ key[*Int64Key, int64] }
+
+// Int64 declares an int64 key.
+func Int64(name, desc string) *Int64Key {
+	k := &Int64Key{}
+	k.init(k, name, desc, ir.KindInt64, func(v int64) string { return strconv.FormatInt(v, 10) }, caller(1))
+	return k
+}
+
+// UintKey is a uint setting. Create it with Uint.
+type UintKey struct{ key[*UintKey, uint] }
+
+// Uint declares a uint key.
+func Uint(name, desc string) *UintKey {
+	k := &UintKey{}
+	k.init(k, name, desc, ir.KindUint, func(v uint) string { return strconv.FormatUint(uint64(v), 10) }, caller(1))
+	return k
+}
+
+// FloatKey is a float64 setting. Create it with Float.
+type FloatKey struct{ key[*FloatKey, float64] }
+
+// Float declares a float64 key.
+func Float(name, desc string) *FloatKey {
+	k := &FloatKey{}
+	k.init(k, name, desc, ir.KindFloat, func(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }, caller(1))
+	return k
+}
+
+// DurationKey is a time.Duration setting. Create it with Duration.
+type DurationKey struct {
+	key[*DurationKey, time.Duration]
+}
+
+// Duration declares a time.Duration key. Values need a unit, such as 90s or
+// 5m: a bare number other than 0 is rejected.
+func Duration(name, desc string) *DurationKey {
+	k := &DurationKey{}
+	k.init(k, name, desc, ir.KindDuration, time.Duration.String, caller(1))
+	return k
+}
+
+// ByteSizeKey is a size in bytes, an int64. Create it with ByteSize.
+type ByteSizeKey struct{ key[*ByteSizeKey, int64] }
+
+// ByteSize declares a size key. Values are bytes, or a whole number with a
+// unit: 512KB (1000s) or 1MiB (1024s).
+func ByteSize(name, desc string) *ByteSizeKey {
+	k := &ByteSizeKey{}
+	k.init(k, name, desc, ir.KindByteSize, func(v int64) string { return strconv.FormatInt(v, 10) }, caller(1))
 	return k
 }
 

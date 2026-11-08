@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 7
+const Version = 8
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -27,11 +27,17 @@ func (p Pos) String() string {
 // Kind is the value kind of a key.
 type Kind string
 
-// The kinds the walking skeleton (M2) supports.
+// The kinds of keys.
 const (
 	KindString Kind = "string"
 	KindInt    Kind = "int"
 	KindBool   Kind = "bool"
+	// M4.1
+	KindInt64    Kind = "int64"
+	KindUint     Kind = "uint"
+	KindFloat    Kind = "float"
+	KindDuration Kind = "duration"
+	KindByteSize Kind = "bytesize"
 )
 
 // App is a whole schema.

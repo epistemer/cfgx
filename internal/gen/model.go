@@ -3,6 +3,7 @@ package gen
 import (
 	"fmt"
 	"go/token"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -26,7 +27,7 @@ type Model struct {
 	Tags        []*TagModel
 	Rules       []*RuleModel
 	Commands    []*CommandModel
-	Imports     []ImportModel // set by ResolveComputed
+	Imports     []ImportModel // for the getters' types and computed methods
 	// Warnings are schema issues that don't stop generation.
 	Warnings Problems
 }
@@ -65,21 +66,13 @@ type KeyModel struct {
 	Aliases                  []AliasModel
 	Deprecated               string
 	RelevantIf               []int // keys that must be set for this one to matter
+	Kind                     kindSpec
 	Pos                      ir.Pos
 }
 
 // nonZeroDefault reports whether the key's default counts as set (A4).
 func (k *KeyModel) nonZeroDefault() bool {
-	if !k.HasDefault {
-		return false
-	}
-	switch k.GoType {
-	case "int":
-		return k.DefaultText != "0"
-	case "bool":
-		return k.DefaultText == "true"
-	}
-	return k.DefaultText != ""
+	return k.HasDefault && k.DefaultText != k.Kind.zero
 }
 
 // GroupModel is one group: its interface and the type that implements it.
@@ -107,6 +100,15 @@ type ComputedModel struct {
 // ImportModel is a package the generated file imports for computed
 // methods' signatures.
 type ImportModel struct{ Alias, Path string }
+
+// Spec is the import line: the path, with the alias only when Go wouldn't
+// infer it from the path.
+func (i ImportModel) Spec() string {
+	if i.Alias == path.Base(i.Path) {
+		return strconv.Quote(i.Path)
+	}
+	return i.Alias + " " + strconv.Quote(i.Path)
+}
 
 // CommandModel is one command profile.
 type CommandModel struct {
@@ -774,6 +776,18 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		m.Commands = append(m.Commands, cm)
 	}
 
+	// The packages the getters' types need, such as time.
+	seenImport := map[string]bool{}
+	for _, k := range m.Keys {
+		for _, p := range k.Kind.imports {
+			if !seenImport[p] {
+				seenImport[p] = true
+				m.Imports = append(m.Imports, ImportModel{Alias: path.Base(p), Path: p})
+			}
+		}
+	}
+	sort.Slice(m.Imports, func(i, j int) bool { return m.Imports[i].Path < m.Imports[j].Path })
+
 	if len(probs) > 0 {
 		return nil, probs
 	}
@@ -955,42 +969,4 @@ func checkConfigFile(app *ir.App, bad func(ir.Pos, string, ...any)) {
 		}
 		seen[f] = true
 	}
-}
-
-func kindInfo(km *KeyModel, k ir.Key) error {
-	km.HasDefault = k.Default != nil
-	if km.HasDefault {
-		km.DefaultText = *k.Default
-	}
-	switch k.Kind {
-	case ir.KindString:
-		km.GoType, km.FlagType, km.Parse, km.Quote = "string", "string", "ParseString", true
-		km.IsSet = "v." + km.Field + ` != ""`
-		km.DefaultLit = strconv.Quote(km.DefaultText)
-	case ir.KindInt:
-		km.GoType, km.FlagType, km.Parse = "int", "int", "ParseInt"
-		km.IsSet = "v." + km.Field + " != 0"
-		if km.HasDefault {
-			n, err := strconv.ParseInt(km.DefaultText, 10, 64)
-			if err != nil {
-				return fmt.Errorf("default %q of %s isn't an int", km.DefaultText, km.Path)
-			}
-			km.DefaultText = strconv.FormatInt(n, 10) // canonical form
-		}
-		km.DefaultLit = km.DefaultText
-	case ir.KindBool:
-		km.GoType, km.FlagType, km.Parse, km.Bool = "bool", "bool", "ParseBool", true
-		km.IsSet = "v." + km.Field
-		if km.HasDefault {
-			b, err := strconv.ParseBool(km.DefaultText)
-			if err != nil {
-				return fmt.Errorf("default %q of %s isn't a bool", km.DefaultText, km.Path)
-			}
-			km.DefaultText = strconv.FormatBool(b) // canonical form
-		}
-		km.DefaultLit = km.DefaultText
-	default:
-		return fmt.Errorf("key %s has kind %q, which this cfgx doesn't support", km.Path, k.Kind)
-	}
-	return nil
 }

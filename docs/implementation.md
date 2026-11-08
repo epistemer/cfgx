@@ -110,6 +110,25 @@ further dot instead of matching closure patterns. Generated code imports every
 referenced package under a generated alias, because a package's name can differ
 from its last path element.
 
+### 2.2a Key kinds **[decided, M4.1]**
+
+- Every DSL key type embeds one generic base, `key[K, T]`, whose modifiers
+  return the concrete type `K`, so `dsl.Duration(...).Default(...).Required()`
+  chains and each key type can add only the modifiers that fit it. Schemas
+  never name the generic type (interface §3.1). Adding a kind is a type, a
+  constructor and a text encoder in `dsl`, a parser in `engine`, and a row in
+  the generator's kinds table (`internal/gen/kinds.go`).
+- The generator checks a default with the engine's own parser, so a default
+  is accepted exactly when the same text in a file would be, and writes it
+  canonically: `5m0s` in `--help` and `5 * time.Minute` in the code; sizes
+  as `1MiB` in `--help`.
+- `Duration` rejects a bare number other than 0 (`"30" has no unit`).
+  Negative durations parse; constraints (M4.8) can forbid them.
+- `ByteSize` takes bytes or a whole number with a unit, case-insensitive,
+  optionally after a space: B, KB/MB/GB/TB/PB (1000s), KiB/MiB/GiB/TiB/PiB
+  (1024s). Fractions such as `1.5GB` are rejected in v0.1.0.
+- `Float` rejects NaN and infinities.
+
 ### 2.3 Computed methods: a type-checking pass **[decided, M5.6]**
 
 `Group.Computed("DSN")` declares that a hand-written method belongs to the

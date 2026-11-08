@@ -23,6 +23,9 @@ func fixedImports(m *Model) map[string]string {
 	if len(m.Commands) > 0 {
 		f["context"], f["slices"] = "context", "slices"
 	}
+	for _, imp := range m.Imports {
+		f[imp.Path] = imp.Alias
+	}
 	return f
 }
 
@@ -111,7 +114,8 @@ func ResolveComputed(ctx context.Context, m *Model, dir, outFile string) error {
 		}
 		return probs
 	}
-	m.Imports = q.imports()
+	m.Imports = append(m.Imports, q.imports()...)
+	sort.Slice(m.Imports, func(i, j int) bool { return m.Imports[i].Path < m.Imports[j].Path })
 	return nil
 }
 

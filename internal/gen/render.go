@@ -38,7 +38,7 @@ import (
 	"github.com/epistemer/cfgx/engine"
 	"github.com/spf13/cobra"
 {{- range .Imports}}
-	{{.Alias}} {{printf "%q" .Path}}
+	{{.Spec}}
 {{- end}}
 )
 
