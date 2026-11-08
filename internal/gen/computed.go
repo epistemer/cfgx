@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"go/types"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -46,6 +47,10 @@ func ResolveComputed(ctx context.Context, m *Model, dir, outFile string) error {
 	}
 	stub, err := Render(m)
 	if err != nil {
+		return err
+	}
+	// go/packages matches overlays by absolute path.
+	if outFile, err = filepath.Abs(outFile); err != nil {
 		return err
 	}
 	cfg := &packages.Config{

@@ -12,6 +12,32 @@ import (
 	"github.com/epistemer/cfgx/internal/ir"
 )
 
+func TestComputedRelativeOutFile(t *testing.T) {
+	m, dir, err := resolve(t, computedApp([]string{"DSN"}, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range m.Groups {
+		for _, c := range g.Computed {
+			c.Sig = ""
+		}
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel, err := filepath.Rel(wd, filepath.Join(dir, "zz_settings.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ResolveComputed(context.Background(), m, dir, rel); err != nil {
+		t.Fatal(err)
+	}
+	if m.Groups[0].Computed[0].Sig != "DSN() string" {
+		t.Errorf("sig = %q", m.Groups[0].Computed[0].Sig)
+	}
+}
+
 // computedApp has a DB group with DSN, a scheduler with a nested retry group,
 // and a command using both.
 func computedApp(dbComputed, schedComputed []string) *ir.App {
@@ -156,8 +182,9 @@ func TestComputedChecks(t *testing.T) {
 		{"unexported", func(a *ir.App) { a.Groups[0].Computed = []string{"dsn"} }, `computed method "dsn" of group "database" must be an exported`},
 		{"reserved", func(a *ir.App) { a.Groups[0].Computed = []string{"Close"} }, "computed method Close of group \"database\" is reserved"},
 		{"twice", func(a *ir.App) { a.Groups[0].Computed = []string{"DSN", "DSN"} }, "lists computed method DSN twice"},
-		{"same as a getter", func(a *ir.App) { a.Groups[0].Computed = []string{"DBHost"} }, "has the name of another method in its interface"},
-		{"same as a nested getter", func(a *ir.App) { a.Groups[1].Computed = []string{"SchedulerRetryMax"} }, "has the name of another method"},
+		{"same as a getter", func(a *ir.App) { a.Groups[0].Computed = []string{"DBHost"} }, `group "database"'s interface has two methods named DBHost`},
+		{"same as a nested getter", func(a *ir.App) { a.Groups[1].Computed = []string{"SchedulerRetryMax"} }, "two methods named SchedulerRetryMax"},
+		{"nested computed same as a parent getter", func(a *ir.App) { a.Groups[1].Groups[0].Computed = []string{"SchedulerWorkers"} }, `group "scheduler"'s interface has two methods named SchedulerWorkers`},
 		{"two groups on one command", func(a *ir.App) {
 			a.Groups[0].Computed = []string{"Ping"}
 			a.Groups[1].Computed = []string{"Ping"}

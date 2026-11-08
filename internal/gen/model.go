@@ -510,12 +510,22 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	}
 	// A computed method can't share a name with a getter or another computed
 	// method in its group's interface, embedded groups included.
+	// Getters are unique, so any repeated name involves a computed method;
+	// check every group, since a nested group's computed method can clash
+	// with a getter or computed method of an ancestor.
+	reported := map[string]bool{}
 	for _, gm := range m.Groups {
 		names := methodNames(gm)
-		for _, c := range gm.Computed {
-			if names[c.Name] > 1 {
-				bad(c.Pos, "computed method %s of group %q has the name of another method in its interface", c.Name, gm.Path)
+		sorted := make([]string, 0, len(names))
+		for name, n := range names {
+			if n > 1 && !reported[name] {
+				sorted = append(sorted, name)
 			}
+		}
+		sort.Strings(sorted)
+		for _, name := range sorted {
+			reported[name] = true
+			bad(gm.pos, "group %q's interface has two methods named %s, at least one computed; rename the computed method", gm.Path, name)
 		}
 	}
 	// A key can't sit where the file needs a map: tls and tls.enabled can't
