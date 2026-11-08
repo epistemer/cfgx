@@ -29,10 +29,17 @@ taken for you, what's next, and what's waiting on you. The terms are in
 - **Noticed:** interface §3.1's key `emailfrom` derives `AuthEmailfrom()`,
   while §5.1 shows `AuthEmailFrom()`. M5.8's example needs `email_from` or a
   key `GoName` (M4.9); noted in the roadmap.
+- **Changed with your approval:** the repo now allows auto-merge and deletes
+  merged branches, and `main` requires the six CI jobs (admins exempt, for
+  docs-only commits). From now on each PR gets auto-merge, with merge commits,
+  once the cross-model review is done, so a green PR lands without waiting
+  for Claude to be prompted.
 - **Next:** M5.3 (rules), M5.4 and M5.5 (to Gemini, Flash or Argon Medium),
   M5.6 (computed methods) and M5.7 (checks); the Argon High second review of
   M3 once its quota resets.
-- **Waiting on you:** nothing.
+- **Waiting on you:** optional, delete the merged branches `a12-args`,
+  `m2-skeleton`, `m3` and `m4.3-m5`; GitHub deletes branches only for merges
+  from now on.
 
 ## 2026-11-08: M3 config files, errors and provenance
 
