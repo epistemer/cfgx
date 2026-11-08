@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go/token"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -22,7 +23,14 @@ type Model struct {
 	GlobalIdx   []int // indexes of the keys in Global groups
 	Keys        []*KeyModel
 	Groups      []*GroupModel
+	Tags        []*TagModel
 	Commands    []*CommandModel
+}
+
+// TagModel is one tag: an interface over keys from any group.
+type TagModel struct {
+	Name, Desc string
+	Keys       []*KeyModel
 }
 
 // KeyModel is one key with its derived names.
@@ -36,13 +44,19 @@ type KeyModel struct {
 	DefaultText, DefaultLit  string
 	Quote, Bool              bool
 	Required, Global         bool
+	Tags                     []string
 }
 
 // GroupModel is one group: its interface and the type that implements it.
 type GroupModel struct {
-	Name, Desc  string
-	Iface, Type string
-	Keys        []*KeyModel
+	Name, Path, Desc string
+	Iface, Type      string
+	Keys             []*KeyModel   // the group's own keys
+	Children         []*GroupModel // nested groups, embedded in this one
+	AllKeys          []*KeyModel   // own keys and every descendant's, in table order
+	Parent           *GroupModel
+	lower            string // Type without "Group": dbGroup → db
+	flagPrefix       string
 }
 
 // CommandModel is one command profile.
@@ -50,8 +64,14 @@ type CommandModel struct {
 	Name    string
 	KeysVar string // the generated slice of the command's key indexes
 	Groups  []*GroupModel
+	// Forward are keys the command reaches only through a tag: it gets
+	// forwarding getters for them instead of embedding their group (A5).
+	Forward []*KeyModel
 	KeyIdx  []int
 }
+
+// HasRoot reports whether the command type needs the values at all.
+func (c *CommandModel) HasRoot() bool { return len(c.Groups) > 0 || len(c.Forward) > 0 }
 
 // Problem is a schema error found at generate time.
 type Problem struct {
@@ -86,15 +106,34 @@ var initialisms = map[string]string{
 	"uri": "URI", "url": "URL", "uuid": "UUID", "xml": "XML", "yaml": "YAML",
 }
 
+var (
+	initialismRE = regexp.MustCompile(`^[A-Z][A-Z0-9]*$`)
+	flagRE       = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+	// keyNameRE is a key name: name segments joined by dots, a path shorthand.
+	keyNameRE = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*(\.[a-z][a-z0-9]*(_[a-z0-9]+)*)*$`)
+)
+
 func words(s string) []string {
 	return strings.FieldsFunc(s, func(r rune) bool { return r == '_' || r == '.' || r == '-' })
 }
 
+// namer turns schema names into Go names, with the built-in initialisms plus
+// the App's.
+type namer struct{ init map[string]string }
+
+func newNamer() *namer {
+	n := &namer{init: map[string]string{}}
+	for k, v := range initialisms {
+		n.init[k] = v
+	}
+	return n
+}
+
 // pascal turns a schema name into a Go name: database_url → DatabaseURL.
-func pascal(s string) string {
+func (n *namer) pascal(s string) string {
 	var b strings.Builder
 	for _, w := range words(s) {
-		if up, ok := initialisms[w]; ok {
+		if up, ok := n.init[w]; ok {
 			b.WriteString(up)
 			continue
 		}
@@ -106,12 +145,38 @@ func pascal(s string) string {
 // lowerCamel turns a schema name into an unexported Go name: the first word
 // lower-cased, the rest as in pascal. smtp_tls → smtpTLS, db_1 → db1
 // (interface §5.3).
-func lowerCamel(s string) string {
+func (n *namer) lowerCamel(s string) string {
 	ws := words(s)
 	if len(ws) == 0 {
 		return ""
 	}
-	return ws[0] + pascal(strings.Join(ws[1:], "_"))
+	return ws[0] + n.pascal(strings.Join(ws[1:], "_"))
+}
+
+// lowerGo lower-cases the first word of a Go name given by GoName: DB → db,
+// HTTPServer → httpServer, Mail → mail.
+func lowerGo(s string) string {
+	r := []rune(s)
+	n := 0
+	for n < len(r) && unicode.IsUpper(r[n]) {
+		n++
+	}
+	switch {
+	case n == len(r):
+		return strings.ToLower(s)
+	case n > 1:
+		n-- // HTTPServer: keep the S of Server
+	}
+	return strings.ToLower(string(r[:n])) + string(r[n:])
+}
+
+func dashed(s string) string { return strings.NewReplacer(".", "-", "_", "-").Replace(s) }
+
+func joinDash(a, b string) string {
+	if a == "" {
+		return b
+	}
+	return a + "-" + b
 }
 
 func envPrefix(app *ir.App) string {
@@ -166,45 +231,113 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		}
 		idents[name] = pos
 	}
-	flags, envs, fields := map[string]ir.Pos{}, map[string]ir.Pos{}, map[string]ir.Pos{}
+	nm := newNamer()
+	for _, w := range app.Initialisms {
+		if !initialismRE.MatchString(w) {
+			bad(app.Pos, "initialism %q must be upper-case letters and digits, starting with a letter, like OTP", w)
+			continue
+		}
+		nm.init[strings.ToLower(w)] = w
+	}
+	flags, envs, fields, paths := map[string]ir.Pos{}, map[string]ir.Pos{}, map[string]ir.Pos{}, map[string]ir.Pos{}
 	groups := map[string]*GroupModel{}
+	var groupPaths []string
 
-	for _, g := range app.Groups {
+	tagSet := map[string]*TagModel{}
+	for _, t := range app.Tags {
+		if !token.IsIdentifier(t.Name) || !token.IsExported(t.Name) {
+			bad(t.Pos, "tag name %q must be an exported Go identifier, like Mailer; it names the tag's interface", t.Name)
+			continue
+		}
+		if _, dup := tagSet[t.Name]; dup {
+			bad(t.Pos, "tag %s is declared twice", t.Name)
+			continue
+		}
+		if strings.TrimSpace(t.Desc) == "" {
+			bad(t.Pos, "tag %s needs a description", t.Name)
+		}
+		tm := &TagModel{Name: t.Name, Desc: t.Desc}
+		claim(t.Name, t.Pos, "tag interface")
+		tagSet[t.Name] = tm
+		m.Tags = append(m.Tags, tm)
+	}
+	tagPos := map[string]ir.Pos{}
+	for _, t := range app.Tags {
+		tagPos[t.Name] = t.Pos
+	}
+
+	var walk func(g ir.Group, parent *GroupModel, inherited []string) *GroupModel
+	walk = func(g ir.Group, parent *GroupModel, inherited []string) *GroupModel {
+		inherited = append(append([]string(nil), inherited...), g.Tags...)
 		if !nameRE.MatchString(g.Name) {
 			bad(g.Pos, "group name %q must start with a lower-case letter and use only a-z, 0-9 and _", g.Name)
-			continue
+			return nil
 		}
-		if _, dup := groups[g.Name]; dup {
-			bad(g.Pos, "group %q is declared twice", g.Name)
-			continue
+		path := g.Name
+		if parent != nil {
+			path = parent.Path + "." + g.Name
+		}
+		if _, dup := groups[path]; dup {
+			bad(g.Pos, "group %q is declared twice", path)
+			return nil
 		}
 		if strings.TrimSpace(g.Desc) == "" {
-			bad(g.Pos, "group %q needs a description", g.Name)
+			bad(g.Pos, "group %q needs a description", path)
 		}
-		gm := &GroupModel{Name: g.Name, Desc: g.Desc, Iface: pascal(g.Name), Type: lowerCamel(g.Name) + "Group"}
+		seg := nm.pascal(g.Name)
+		if g.GoName != "" {
+			if !token.IsIdentifier(g.GoName) || !token.IsExported(g.GoName) {
+				bad(g.Pos, "GoName %q of group %q must be an exported Go identifier, like DB", g.GoName, path)
+			}
+			seg = g.GoName
+		}
+		gm := &GroupModel{Name: g.Name, Path: path, Desc: g.Desc, Parent: parent}
+		switch {
+		case parent != nil:
+			gm.Iface = parent.Iface + seg
+			gm.lower = parent.lower + seg
+		case g.GoName != "":
+			gm.Iface, gm.lower = seg, lowerGo(seg)
+		default:
+			gm.Iface, gm.lower = seg, nm.lowerCamel(g.Name)
+		}
+		gm.Type = gm.lower + "Group"
+		switch {
+		case g.FlagPrefix != nil:
+			gm.flagPrefix = *g.FlagPrefix
+			if gm.flagPrefix != "" && !flagRE.MatchString(gm.flagPrefix) {
+				bad(g.Pos, "FlagPrefix %q of group %q must be lower-case words joined by single dashes, or \"\"", gm.flagPrefix, path)
+			}
+		case parent != nil:
+			gm.flagPrefix = joinDash(parent.flagPrefix, dashed(g.Name))
+		default:
+			gm.flagPrefix = dashed(g.Name)
+		}
 		claim(gm.Iface, g.Pos, "group interface")
 		claim(gm.Type, g.Pos, "group type")
-		groups[g.Name] = gm
+		groups[path] = gm
+		groupPaths = append(groupPaths, path)
+		paths[path] = g.Pos
 		m.Groups = append(m.Groups, gm)
 
 		seen := map[string]bool{}
 		for _, k := range g.Keys {
-			if !nameRE.MatchString(k.Name) {
-				bad(k.Pos, "key name %q must start with a lower-case letter and use only a-z, 0-9 and _", k.Name)
+			if !keyNameRE.MatchString(k.Name) {
+				bad(k.Pos, "key name %q must be lower-case words of a-z and 0-9 joined by single underscores, with dots between path segments", k.Name)
 				continue
 			}
 			if seen[k.Name] {
-				bad(k.Pos, "key %q is declared twice in group %q", k.Name, g.Name)
+				bad(k.Pos, "key %q is declared twice in group %q", k.Name, path)
 				continue
 			}
 			seen[k.Name] = true
+			km := &KeyModel{Index: len(m.Keys), Path: path + "." + k.Name, Desc: k.Desc}
 			if strings.TrimSpace(k.Desc) == "" {
-				bad(k.Pos, "key %s.%s needs a description", g.Name, k.Name)
+				bad(k.Pos, "key %s needs a description", km.Path)
 			}
-			km := &KeyModel{Index: len(m.Keys), Path: g.Name + "." + k.Name, Desc: k.Desc}
-			km.Field = pascal(g.Name) + pascal(k.Name)
+			km.Field = gm.Iface + nm.pascal(k.Name)
 			km.Getter = km.Field
-			km.Flag = strings.NewReplacer(".", "-", "_", "-").Replace(km.Path)
+			km.Flag = joinDash(gm.flagPrefix, dashed(k.Name))
 			km.Env = prefix + "_" + strings.ToUpper(strings.ReplaceAll(km.Path, ".", "_"))
 			if reservedMethods[km.Getter] {
 				bad(k.Pos, "getter %s of %s is reserved for a method on command types; rename the key", km.Getter, km.Path)
@@ -214,18 +347,66 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				continue
 			}
 			km.Required = k.Required
+			for _, t := range append(append([]string(nil), inherited...), k.Tags...) {
+				if !slices.Contains(km.Tags, t) {
+					km.Tags = append(km.Tags, t)
+				}
+			}
 			for _, c := range []struct {
 				seen map[string]ir.Pos
 				name string
 				what string
-			}{{flags, km.Flag, "flag --"}, {envs, km.Env, "env var "}, {fields, km.Field, "Go name "}} {
+			}{{flags, km.Flag, "flag --"}, {envs, km.Env, "env var "}, {fields, km.Field, "Go name "}, {paths, km.Path, "file key "}} {
 				if prev, ok := c.seen[c.name]; ok {
-					bad(k.Pos, "%s%s of %s collides with another key's (declared at %s)", c.what, c.name, km.Path, prev)
+					bad(k.Pos, "%s%s of %s collides with another key or group (declared at %s)", c.what, c.name, km.Path, prev)
 				}
 				c.seen[c.name] = k.Pos
 			}
 			gm.Keys = append(gm.Keys, km)
 			m.Keys = append(m.Keys, km)
+		}
+		gm.AllKeys = append(gm.AllKeys, gm.Keys...)
+		sibling := map[string]bool{}
+		for _, c := range g.Groups {
+			if seen[c.Name] || sibling[c.Name] {
+				bad(c.Pos, "group %q has two members named %q", path, c.Name)
+				continue
+			}
+			sibling[c.Name] = true
+			if cm := walk(c, gm, inherited); cm != nil {
+				gm.Children = append(gm.Children, cm)
+				gm.AllKeys = append(gm.AllKeys, cm.AllKeys...)
+			}
+		}
+		return gm
+	}
+	for _, g := range app.Groups {
+		walk(g, nil, nil)
+	}
+	for _, k := range m.Keys {
+		for _, t := range k.Tags {
+			if tm := tagSet[t]; tm != nil {
+				tm.Keys = append(tm.Keys, k)
+			}
+		}
+	}
+	for _, tm := range m.Tags {
+		if len(tm.Keys) == 0 {
+			bad(tagPos[tm.Name], "tag %s isn't on any key; tag keys or groups with .Tags(%s)", tm.Name, tm.Name)
+		}
+	}
+	// A key can't sit where the file needs a map: tls and tls.enabled can't
+	// both be keys, and a key can't share its path with a group.
+	keyPaths := map[string]bool{}
+	for _, k := range m.Keys {
+		keyPaths[k.Path] = true
+	}
+	for _, k := range m.Keys {
+		segs := strings.Split(k.Path, ".")
+		for i := 1; i < len(segs); i++ {
+			if p := strings.Join(segs[:i], "."); keyPaths[p] {
+				bad(paths[k.Path], "file key %s needs %s to be a map, but %s is a key", k.Path, p, p)
+			}
 		}
 	}
 
@@ -246,7 +427,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		}
 		isGlobal[name] = true
 		globals = append(globals, gm)
-		for _, k := range gm.Keys {
+		for _, k := range gm.AllKeys {
 			k.Global = true
 			m.GlobalIdx = append(m.GlobalIdx, k.Index)
 		}
@@ -274,14 +455,13 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			bad(c.Pos, "command %s uses group %q (declared at %s), which isn't passed to dsl.App", c.Name, o.Name, o.Pos)
 		}
 		// Every command gets the Global groups; using one explicitly as well
-		// is harmless.
+		// is harmless. A group whose ancestor is also used is reached through
+		// that ancestor, so it isn't embedded a second time.
+		var chosen []*GroupModel
 		used := map[string]bool{}
 		for _, gm := range globals {
-			used[gm.Name] = true
-			cm.Groups = append(cm.Groups, gm)
-			for _, k := range gm.Keys {
-				cm.KeyIdx = append(cm.KeyIdx, k.Index)
-			}
+			used[gm.Path] = true
+			chosen = append(chosen, gm)
 		}
 		for _, u := range c.Uses {
 			gm, ok := groups[u]
@@ -297,11 +477,44 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				continue
 			}
 			used[u] = true
+			chosen = append(chosen, gm)
+		}
+		inKeys := map[int]bool{}
+		for _, gm := range chosen {
+			if hasUsedAncestor(gm, used) {
+				continue
+			}
 			cm.Groups = append(cm.Groups, gm)
-			for _, k := range gm.Keys {
-				cm.KeyIdx = append(cm.KeyIdx, k.Index)
+			for _, k := range gm.AllKeys {
+				if !inKeys[k.Index] {
+					inKeys[k.Index] = true
+					cm.KeyIdx = append(cm.KeyIdx, k.Index)
+				}
 			}
 		}
+		// Keys reached only through a tag get forwarding getters, in table
+		// order, and no computed methods (A5).
+		usedTag := map[string]bool{}
+		for _, t := range c.Tags {
+			tm, ok := tagSet[t]
+			if !ok {
+				bad(c.Pos, "command %s uses tag %s, which isn't declared", c.Name, t)
+				continue
+			}
+			if usedTag[t] {
+				bad(c.Pos, "command %s uses tag %s twice", c.Name, t)
+				continue
+			}
+			usedTag[t] = true
+			for _, k := range tm.Keys {
+				if !inKeys[k.Index] {
+					inKeys[k.Index] = true
+					cm.KeyIdx = append(cm.KeyIdx, k.Index)
+					cm.Forward = append(cm.Forward, k)
+				}
+			}
+		}
+		sort.Slice(cm.Forward, func(i, j int) bool { return cm.Forward[i].Index < cm.Forward[j].Index })
 		sort.Ints(cm.KeyIdx)
 		m.Commands = append(m.Commands, cm)
 	}
@@ -310,6 +523,15 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		return nil, probs
 	}
 	return m, nil
+}
+
+func hasUsedAncestor(g *GroupModel, used map[string]bool) bool {
+	for p := g.Parent; p != nil; p = p.Parent {
+		if used[p.Path] {
+			return true
+		}
+	}
+	return false
 }
 
 // checkConfigFile checks App.ConfigFile and App.Formats.

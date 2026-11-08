@@ -9,7 +9,7 @@ import (
 	"github.com/epistemer/cfgx/internal/ir"
 )
 
-func reset() { apps, commands = nil, nil }
+func reset() { apps, commands, tags = nil, nil, nil }
 
 func TestExport(t *testing.T) {
 	reset()

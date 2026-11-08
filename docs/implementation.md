@@ -130,6 +130,28 @@ Any method without parameters is allowed, e.g. `DSN() string` or
 `RetryPolicy() (types.RetryPolicy, error)`. A missing method, a wrong receiver
 or parameters are generate-time errors.
 
+### 2.3a Structure **[decided, M5.1–M5.2]**
+
+- A group has one place in the tree: nesting the same `*GroupDef` twice, or
+  nesting a group that is also passed to `dsl.App`, is an error.
+- A nested group's names extend its parent's: interface `SchedulerRetry`,
+  type `schedulerRetryGroup`, getters `SchedulerRetryMax()`. Its flag prefix
+  starts from the parent's, so under `FlagPrefix("")` a nested `retry` gives
+  `--retry-max`. Env vars and file keys always use the full path.
+- A group's interface lists its own getters, then embeds its children's
+  interfaces; the group type embeds the children's types, so their getters
+  and computed methods are promoted.
+- A command that uses a group and one of its descendants embeds the group
+  once; the descendant comes through it.
+- A key can't sit where the file needs a map: `tls` and `tls.enabled` can't
+  both be keys, and a dotted key can't share its path with a nested group's
+  key. Both are generate-time errors.
+- A tag's interface lists its keys' getters in key-table order. A tag that is
+  on no key is an error, since its empty interface would accept anything.
+- A command that uses a tag gets forwarding getters for the tagged keys its
+  embedded groups don't already provide (A5), so it can embed `smtp` whole and
+  forward only `AuthEmailfrom()`.
+
 ### 2.4 Checks **[decided by interface]**
 
 These all run on the IR before anything is written:

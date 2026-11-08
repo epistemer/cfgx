@@ -242,14 +242,14 @@ check.
 
 | ✓ | ID | Item | Size | Done when |
 |---|----|------|------|-----------|
-| ☐ | M5.1 | Nested groups produce embedded interfaces; dotted names are path-only; `FlagPrefix` (whose `""` can produce `--config`, reserved since M3.2); group `GoName`; initialisms (built-in list plus `App.Initialisms`) | M | Golden tests of interface output |
-| ☐ | M5.2 | Tags produce tag interfaces; `Uses(tag)`; a tag on a group applies to its keys; a group reached only through a tag gets forwarding getters instead of being embedded (A5) | M | The `Mailer` interface from interface.md §5.1 is generated exactly; `TestEmail` has only its own getters |
+| ☑ | M5.1 | Nested groups produce embedded interfaces; dotted names are path-only; `FlagPrefix` (whose `""` can produce `--config`, reserved since M3.2); group `GoName`; initialisms (built-in list plus `App.Initialisms`) | M | Golden tests of interface output |
+| ☑ | M5.2 | Tags produce tag interfaces; `Uses(tag)`; a tag on a group applies to its keys; a group reached only through a tag gets forwarding getters instead of being embedded (A5) | M | The `Mailer` interface from interface.md §5.1 is generated exactly; `TestEmail` has only its own getters |
 | ☐ | M5.3 | Value-based rules (A4): `AtMostOne`, `ExactlyOne`, `AllOrNone`, `Requires`, and `RelevantIf`, which skips loading the dependent key when its condition isn't set; the check that exclusive keys have no non-zero defaults | M | testscript for each rule, including `--tls-enabled=false`, clearing a file value with an empty env var, and TLS off with no key file on disk |
 | ☐ | M5.4 | `Alias` and `Deprecated`: old names accepted on every surface, with warnings | M | The old name works via file, env and flag, and warns |
 | ☐ | M5.5 | Command `Args`: flag-only keys with getters on the command type; collision checks, including with the methods reserved on command types (`Args` from A12; `Store`, `Update`, `Close`, `OnChange`, `Snapshot` from M7), which `GoName` (M4.9) and `Computed` (M5.6) must also respect | S | `Migrate.Down()` and `Migrate.Steps()` work |
 | ☐ | M5.6 | `Computed` (A8): stub pass through `go/packages`' in-memory overlay, type-check, then emit; the receiver naming rule; any signature without parameters; promotion only to commands that use the whole group | M | `DSN()` and a `(T, error)` method appear in their interfaces; `/v2` and aliased imports render correctly; each error case has a test |
 | ☐ | M5.7 | The full list of generate-time checks ([implementation.md §2.4](implementation.md)) | M | One bad schema per check in `testdata`, asserting the message and the schema line |
-| ☐ | M5.8 | `examples/zp` (needs M4): the schema from interface.md §3.1 without the store and mutable keys, which M7.9 adds; stub `mailer`, `server` and database packages that consume the interfaces | M | It builds. Compile-failure tests prove `*settings.Migrate` can't be passed to `mailer.New` and `*settings.TestEmail` has no `AuthJWTPrivate()`. |
+| ☐ | M5.8 | `examples/zp` (needs M4): the schema from interface.md §3.1 without the store and mutable keys, which M7.9 adds; stub `mailer`, `server` and database packages that consume the interfaces. Note: §3.1's key `emailfrom` derives `AuthEmailfrom()`, not §5.1's `AuthEmailFrom()`; the example needs `email_from` or a key `.GoName` (M4.9) | M | It builds. Compile-failure tests prove `*settings.Migrate` can't be passed to `mailer.New` and `*settings.TestEmail` has no `AuthJWTPrivate()`. |
 
 **Exit:** `examples/zp` generates and builds, and the scoping compile-failure
 test passes.
