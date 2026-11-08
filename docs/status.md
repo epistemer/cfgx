@@ -4,6 +4,15 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-08: amendment A12, positional arguments
+
+- **Landed:** you chose the `Args()` method. Every generated command type now
+  has `Args() []string`, returning a copy of the arguments cobra parsed; rules
+  such as `cobra.ExactArgs(1)` work as before. Recorded as A12 in interface §12,
+  with an end-to-end script.
+- **Next:** M3, config files, errors and provenance.
+- **Waiting on you:** nothing.
+
 ## 2026-11-08: M2 walking skeleton done
 
 - **Landed:** M2 through a PR. The first real code: IR, DSL, engine, generator,

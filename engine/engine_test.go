@@ -121,16 +121,19 @@ func TestHelpShowsDefaults(t *testing.T) {
 }
 
 func TestCommand(t *testing.T) {
-	type cfg struct{ v *vals }
+	type cfg struct {
+		v    *vals
+		args []string
+	}
 	var got *cfg
-	cmd := Command(&cobra.Command{Use: "serve"}, table, all,
-		func(v *vals) *cfg { return &cfg{v} },
+	cmd := Command(&cobra.Command{Use: "serve", Args: cobra.MaximumNArgs(2)}, table, all,
+		func(v *vals, args []string) *cfg { return &cfg{v, args} },
 		func(_ context.Context, c *cfg) error { got = c; return nil })
-	cmd.SetArgs([]string{"--server-port", "1"})
+	cmd.SetArgs([]string{"--server-port", "1", "a", "b"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if got == nil || got.v.Port != 1 {
+	if got == nil || got.v.Port != 1 || strings.Join(got.args, ",") != "a,b" {
 		t.Fatalf("run got %+v", got)
 	}
 

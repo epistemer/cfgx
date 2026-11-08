@@ -359,7 +359,9 @@ dsl.Command(goName).Uses(groupsOrTags...).Args(keys...)
   through a tag contributes getters for just the tagged keys (A5).
 - `Args` keys are **flag-only**, belong to no group or tag interface, and get
   getters on the command type (`m.Down()`, `m.Steps()`).
-- Positional arguments stay in cobra.
+- Positional arguments stay with cobra: you set rules such as
+  `cobra.ExactArgs(1)` on the command, and the run function reads them with
+  the generated `Args()` method (§5.2, A12).
 - A command gets the store (§7.3) automatically when its keys include a mutable
   one. `.WithStore()` gives it to a command without mutable keys, for example
   one that only needs `Store().DB()`.
@@ -443,6 +445,10 @@ type Migrate struct{ /* ... */ }      // implements Log, DB; plus Down() bool, S
 func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *cobra.Command
 func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) error) *cobra.Command
 func BindRoot(root *cobra.Command, opts ...cfgx.Option) // --config, Global flags, completion; cfgx.WithLogger(l)
+
+// On every command type: the positional arguments, as cobra parsed them (a
+// copy). Argument rules such as cobra.ExactArgs(1) are set on cmd as usual.
+func (s *Serve) Args() []string
 
 // Programmatic and test loading (no cobra):
 func LoadServe(ctx context.Context, opts ...cfgx.Option) (*Serve, error)
@@ -808,3 +814,4 @@ warning: database.ssl_mode is deprecated, use database.sslmode (config.yaml:9:3)
 | 2026-11-07 | **A9.** `config` subcommands: command-line names; default, file, env and store values only; no command-only `Args`; corrected `explain` example (§8). Review 0001, F08. | Amendment |
 | 2026-11-07 | **A10.** Secret hardening: no secret values in messages; `X` with `X_FILE` is an error; regular files with size limits; no mutable secrets; accurate wording for unexported fields (§3.2, §7.1). Review 0001, F12. | Amendment |
 | 2026-11-07 | **A11.** Paths and discovery: `SecretFile` and `File` resolve like `Path`; an explicit config path must exist; unset variables skip a search path; `.yaml`, `.yml`, `.json` order, and two matches is an error (§3.2, §3.7). Review 0001, F13. | Amendment |
+| 2026-11-08 | **A12.** Every generated command type has `Args() []string`, returning the positional arguments cobra parsed, so run functions keep the signature `func(ctx, *Serve) error` (§3.8, §5.2). Chosen by epistemer over adding an `args` parameter to every run function. | Amendment |

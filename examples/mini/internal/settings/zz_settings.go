@@ -105,16 +105,22 @@ func BindRoot(root *cobra.Command) { _ = root }
 type Serve struct {
 	*serverGroup
 	*databaseGroup
+	args []string
 }
+
+// Args returns the Serve command's positional arguments, as cobra parsed
+// them. The slice is a copy.
+func (c *Serve) Args() []string { return append([]string(nil), c.args...) }
 
 var keysServe = []int{0, 1, 2, 3, 4, 5}
 
-func newServe(v *values) *Serve {
+func newServe(v *values, args []string) *Serve {
 	r := &root{}
 	r.cur.Store(v)
 	return &Serve{
 		serverGroup:   &serverGroup{r: r},
 		databaseGroup: &databaseGroup{r: r},
+		args:          args,
 	}
 }
 
@@ -127,15 +133,21 @@ func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *
 // Migrate is the configuration of the Migrate command.
 type Migrate struct {
 	*databaseGroup
+	args []string
 }
+
+// Args returns the Migrate command's positional arguments, as cobra parsed
+// them. The slice is a copy.
+func (c *Migrate) Args() []string { return append([]string(nil), c.args...) }
 
 var keysMigrate = []int{3, 4, 5}
 
-func newMigrate(v *values) *Migrate {
+func newMigrate(v *values, args []string) *Migrate {
 	r := &root{}
 	r.cur.Store(v)
 	return &Migrate{
 		databaseGroup: &databaseGroup{r: r},
+		args:          args,
 	}
 }
 
