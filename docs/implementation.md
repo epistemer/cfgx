@@ -334,9 +334,10 @@ error.
 **[decided, M3]** Details settled while building it:
 - An app without `ConfigFile` reads no file: it has no `--config` flag, and
   `ZP_CONFIG` is just an unknown env var.
-- An empty `--config` or `ZP_CONFIG` counts as not given, so the search runs.
-- The explicit path's extension must name an accepted format, and it must be a
-  regular file. In a search path, a directory that happens to be named
+- A `--config` that was passed decides, even when empty, so `ZP_CONFIG` isn't
+  consulted; an empty `--config` or `ZP_CONFIG` means "search as usual".
+- The explicit path's extension must name an accepted format (compared
+  ignoring case), and it must be a regular file. In a search path, a directory that happens to be named
   `config.yaml` is skipped.
 - A null value in the file (`port: ~`, `port:`) is absent, not empty: only an
   env var or flag that is present but empty clears a value (A4).
@@ -354,8 +355,10 @@ error.
 - A required key that isn't set says how to set it:
   `database.name: is required; set --database-name, ZP_DATABASE_NAME or
   database.name in the config file`. If a layer set it to the zero value, the
-  problem names that layer: `is required, but is empty (env ZP_DATABASE_NAME)`.
-  `Required` together with a default is a generate-time error.
+  problem names that layer, never the value: `is required, but is empty (env
+  ZP_DATABASE_NAME)`, or `is required, but is set to the zero value` for text
+  such as `0`. `Required` with a non-zero default is allowed and useful: an
+  empty env var or flag clears the default (A4).
 - The unknown-env warning reads `unknown environment variable ZP_DATABSE_HOST;
   did you mean ZP_DATABASE_HOST?`. Warnings carry slog attributes (`key` and
   `source`, or `env`) for custom loggers; the default handler prints only the
@@ -366,8 +369,12 @@ error.
 - `BindRoot` is required when the app has a config file or `Global` groups,
   since they add flags to the root. A binder whose root wasn't bound fails
   with an error saying so, instead of silently ignoring `--config`.
-- `Global` groups must also be passed to `dsl.App`. A command that also lists
-  a global group in `Uses` is fine.
+- `Global` groups must also be passed to `dsl.App`, as in interface §3.1's
+  example, so `dsl.App` stays the one list of groups. A command that also
+  lists a global group in `Uses` is fine.
+- The generator claims the identifiers later milestones generate
+  (`ConfigCommand`, `Test`, `All`, `Values`, `Load<Command>`), so a schema
+  that generates today keeps generating when they arrive.
 
 ### 3.5 Errors and provenance
 

@@ -94,14 +94,18 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 	l := &loader[V]{a: a, res: res}
 
 	if a.ConfigFile != "" {
+		// A --config that was passed decides, even if empty: the env var is
+		// a lower layer. An empty value means "search as usual".
 		var explicit, from string
+		flagSet := false
 		if fs != nil {
-			if f := fs.Lookup("config"); f != nil && f.Changed && f.Value.String() != "" {
+			if f := fs.Lookup("config"); f != nil && f.Changed {
+				flagSet = true
 				explicit, from = f.Value.String(), "--config"
 			}
 		}
-		if explicit == "" {
-			if p, ok := lookup(a.configEnv()); ok && p != "" {
+		if !flagSet {
+			if p, ok := lookup(a.configEnv()); ok {
 				explicit, from = p, a.configEnv()
 			}
 		}
@@ -209,11 +213,12 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 // required is the problem for a required key that isn't set.
 func (l *loader[V]) required(k *Key[V], win *candidate) cfgx.Problem {
 	if win != nil {
-		what := strings.TrimSpace(win.raw)
-		if what == "" {
-			what = "empty"
+		// Never quote the value: for a secret it could be the secret.
+		msg := "is required, but is empty"
+		if strings.TrimSpace(win.raw) != "" {
+			msg = "is required, but is set to the zero value"
 		}
-		return cfgx.Problem{Key: k.Path, Message: "is required, but is " + what, Source: win.origin.String()}
+		return cfgx.Problem{Key: k.Path, Message: msg, Source: win.origin.String()}
 	}
 	var ways []string
 	if k.Flag != "" {

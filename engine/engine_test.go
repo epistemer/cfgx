@@ -324,6 +324,23 @@ func TestRequired(t *testing.T) {
 		t.Errorf("got:\n%s", got)
 	}
 
+	// A non-zero default doesn't make Required pointless: an empty env var
+	// clears it (A4).
+	a := testApp()
+	a.Keys[0].Required = true
+	_, err = load(t, a, server, env{"CFGXT_SERVER_HOST": ""})
+	if got := problems(t, err); !strings.Contains(got, "server.host: is required, but is empty (env CFGXT_SERVER_HOST)") {
+		t.Errorf("got:\n%s", got)
+	}
+
+	// The message never quotes the value.
+	a = testApp()
+	a.Keys[1].Required = true
+	_, err = load(t, a, server, env{"CFGXT_SERVER_PORT": "000"})
+	if got := problems(t, err); !strings.Contains(got, "server.port: is required, but is set to the zero value (env CFGXT_SERVER_PORT)") {
+		t.Errorf("got:\n%s", got)
+	}
+
 	if res := mustLoad(t, testApp(), all, env{"CFGXT_DATABASE_NAME": "db"}); res.Values.Name != "db" {
 		t.Errorf("name = %q", res.Values.Name)
 	}
@@ -369,6 +386,11 @@ func TestDiscovery(t *testing.T) {
 		{name: "explicit file beats the search", files: map[string]string{"config.yaml": "server: {port: 1}", "x.yaml": "server: {port: 12}"},
 			env: func(dir string) env { return env{"CFG": dir, "CFGXT_CONFIG": filepath.Join(dir, "x.yaml")} }, port: 12},
 		{name: "empty env var is no file", files: yaml, env: func(dir string) env { return env{"CFG": dir, "CFGXT_CONFIG": ""} }, port: 1},
+		{name: "an empty --config searches, ignoring the env var", files: yaml,
+			env:  func(dir string) env { return env{"CFG": dir, "CFGXT_CONFIG": filepath.Join(dir, "no.yaml")} },
+			args: func(string) []string { return []string{"--config="} }, port: 1},
+		{name: "extensions ignore case", files: map[string]string{"X.JSON": `{"server": {"port": 13}}`},
+			args: func(dir string) []string { return []string{"--config", filepath.Join(dir, "X.JSON")} }, port: 13},
 		{name: "--config must exist", args: func(dir string) []string { return []string{"--config", filepath.Join(dir, "no.yaml")} },
 			wantErr: "the config file %s/no.yaml (from --config) doesn't exist"},
 		{name: "env file must exist", env: func(dir string) env { return env{"CFGXT_CONFIG": filepath.Join(dir, "no.yaml")} },

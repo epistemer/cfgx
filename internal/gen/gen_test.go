@@ -100,7 +100,9 @@ func TestChecks(t *testing.T) {
 		{"bad derived env prefix", func(a *ir.App) { a.EnvPrefix = ""; a.Name = "123app" }, "derived from the app name"},
 		{"trailing underscore", func(a *ir.App) { a.Groups[0].Keys[0].Name = "host_" }, `key name "host_"`},
 		{"double underscore", func(a *ir.App) { a.Groups[0].Keys[0].Name = "a__b" }, `key name "a__b"`},
-		{"required with default", func(a *ir.App) { a.Groups[0].Keys[0].Required = true }, "Required has no effect"},
+		{"command named Config", func(a *ir.App) { a.Commands[0].Name = "Config" }, "command binder ConfigCommand collides"},
+		{"command named All", func(a *ir.App) { a.Commands[0].Name = "All" }, "command type All collides"},
+		{"group named values", func(a *ir.App) { a.Groups[1].Name = "values" }, "group interface Values collides"},
 		{"global orphan", func(a *ir.App) {
 			a.GlobalOrphans = []ir.Ref{{Name: "extra", Pos: ir.Pos{File: "schema.go", Line: 9}}}
 		}, `Global lists group "extra" (declared at schema.go:9), which isn't passed to dsl.App`},

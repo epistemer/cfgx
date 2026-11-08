@@ -154,7 +154,11 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	m := &Model{Package: pkg, EnvPrefix: prefix, ConfigFile: app.ConfigFile, SearchPaths: app.SearchPaths, Formats: app.Formats}
 	checkConfigFile(app, bad)
 	// Every generated identifier, to catch collisions between them.
-	idents := map[string]ir.Pos{"values": app.Pos, "keys": app.Pos, "root": app.Pos, "app": app.Pos, "BindRoot": app.Pos}
+	// Later milestones generate ConfigCommand (M6.4), Test, All and Values
+	// (M6.5); they are claimed now so no schema that generates today breaks
+	// when they arrive.
+	idents := map[string]ir.Pos{"values": app.Pos, "keys": app.Pos, "root": app.Pos, "app": app.Pos, "BindRoot": app.Pos,
+		"ConfigCommand": app.Pos, "Test": app.Pos, "All": app.Pos, "Values": app.Pos}
 	claim := func(name string, pos ir.Pos, what string) {
 		if prev, ok := idents[name]; ok {
 			bad(pos, "%s %s collides with another generated name (from %s)", what, name, prev)
@@ -210,9 +214,6 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				continue
 			}
 			km.Required = k.Required
-			if k.Required && km.HasDefault {
-				bad(k.Pos, "%s is Required and has a default, so Required has no effect; drop one", km.Path)
-			}
 			for _, c := range []struct {
 				seen map[string]ir.Pos
 				name string
@@ -268,6 +269,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		claim(cm.Name+"Command", c.Pos, "command binder")
 		claim(cm.KeysVar, c.Pos, "command key list")
 		claim("new"+cm.Name, c.Pos, "command constructor")
+		claim("Load"+cm.Name, c.Pos, "command loader (M6.6)")
 		for _, o := range c.Orphans {
 			bad(c.Pos, "command %s uses group %q (declared at %s), which isn't passed to dsl.App", c.Name, o.Name, o.Pos)
 		}

@@ -93,9 +93,12 @@ func isNotDir(dir string) bool {
 }
 
 // checkFormat checks that path's extension names a format the app accepts.
+// Extensions are compared ignoring case, since Windows and macOS file names
+// are case-insensitive.
 func checkFormat[V any](a *App[V], path string) error {
+	ext := strings.ToLower(filepath.Ext(path))
 	for _, e := range extensions {
-		if strings.HasSuffix(path, e.ext) {
+		if ext == e.ext {
 			if !a.allows(e.format) {
 				return fmt.Errorf("is %s, which this app doesn't accept; use %s", strings.ToUpper(e.format), a.accepted())
 			}
@@ -150,9 +153,9 @@ func readConfig(path string) (*configFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading the config file: %v", err)
 	}
-	f := node.YAML
-	if strings.HasSuffix(path, ".json") {
-		f = node.JSON
+	f, ok := node.FormatOf(strings.ToLower(path))
+	if !ok {
+		f = node.YAML
 	}
 	root, err := node.Parse(path, data, f)
 	if err != nil {
