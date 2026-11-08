@@ -197,13 +197,6 @@ func TestRules(t *testing.T) {
 	if fmt.Sprint(m.Keys[1].RelevantIf) != "[3]" {
 		t.Errorf("RelevantIf = %v", m.Keys[1].RelevantIf)
 	}
-	// Migrate uses only database, but loads log.debug as well, the condition
-	// of database.port.
-	for _, c := range m.Commands {
-		if c.Name == "Migrate" && fmt.Sprint(c.KeyIdx) != "[0 1 3]" {
-			t.Errorf("Migrate loads %v", c.KeyIdx)
-		}
-	}
 }
 
 func TestLowerGo(t *testing.T) {
@@ -298,10 +291,13 @@ func TestChecks(t *testing.T) {
 		}, "ExactlyOne can't include database.port, whose default 5432 counts as set"},
 		{"RelevantIf cycle", func(a *ir.App) {
 			a.Rules = []ir.Rule{
+				// database.host only leads into the cycle; the error names a
+				// key on it.
+				{Kind: ir.RuleRelevantIf, Group: "database", Keys: []string{"database.host", "smtp.url"}},
 				{Kind: ir.RuleRelevantIf, Group: "smtp", Keys: []string{"smtp.url", "log.debug"}},
 				{Kind: ir.RuleRelevantIf, Group: "log", Keys: []string{"log.debug", "smtp.url"}},
 			}
-		}, "form a cycle"},
+		}, "RelevantIf rules on smtp.url form a cycle"},
 		{"tag on no keys", func(a *ir.App) { a.Tags = []ir.Tag{{Name: "Mailer", Desc: "x"}} }, "tag Mailer isn't on any key"},
 		{"bad tag name", func(a *ir.App) {
 			a.Tags = []ir.Tag{{Name: "mailer", Desc: "x"}}

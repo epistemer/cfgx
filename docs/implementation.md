@@ -156,11 +156,14 @@ or parameters are generate-time errors.
 
 - A command checks a rule only if it loads every key in it. A rule over a key
   that failed to load is skipped, because that key is already a problem.
-- A command that loads a `RelevantIf` key also loads its conditions, without
-  getters for them, so it can tell whether the key matters.
+- A command that loads a `RelevantIf` key also loads its conditions, with
+  their flags but no getters, so it can tell whether the key matters. Those
+  condition-only keys aren't held to `Required` and take no part in rules:
+  they aren't the command's own keys.
 - A key whose condition isn't set keeps its default and isn't parsed or
   checked (`Required` included). It counts as unset in other rules. If a
-  layer set it anyway, startup warns: `server.tls.cert is set (flag
+  layer set it to a value that counts as set (A4: not empty, not false),
+  startup warns: `server.tls.cert is set (flag
   --tls-cert) but ignored: it only matters when server.tls.enabled is set`. No
   warning is printed when the condition itself failed to load.
 - Rule problems are reported under the declaring group's path, naming keys

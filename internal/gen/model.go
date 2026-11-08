@@ -550,16 +550,6 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			}
 		}
 		sort.Slice(cm.Forward, func(i, j int) bool { return cm.Forward[i].Index < cm.Forward[j].Index })
-		// A command that loads a RelevantIf key also loads its conditions,
-		// without getters for them, so it can tell whether the key matters.
-		for i := 0; i < len(cm.KeyIdx); i++ {
-			for _, c := range m.Keys[cm.KeyIdx[i]].RelevantIf {
-				if !inKeys[c] {
-					inKeys[c] = true
-					cm.KeyIdx = append(cm.KeyIdx, c)
-				}
-			}
-		}
 		sort.Ints(cm.KeyIdx)
 		m.Commands = append(m.Commands, cm)
 	}
@@ -632,10 +622,12 @@ func checkRules(app *ir.App, m *Model, bad func(ir.Pos, string, ...any)) {
 	}
 	// RelevantIf must not loop: a matters if b is set, b if a is set.
 	state := map[int]int{} // 1 visiting, 2 done
+	onCycle := -1          // a key on the cycle found
 	var visit func(i int) bool
 	visit = func(i int) bool {
 		switch state[i] {
 		case 1:
+			onCycle = i
 			return false
 		case 2:
 			return true
@@ -651,9 +643,10 @@ func checkRules(app *ir.App, m *Model, bad func(ir.Pos, string, ...any)) {
 	}
 	for _, k := range m.Keys {
 		if !visit(k.Index) {
+			p := m.Keys[onCycle].Path
 			for _, r := range app.Rules {
-				if r.Kind == ir.RuleRelevantIf && len(r.Keys) == 2 && r.Keys[0] == k.Path {
-					bad(r.Pos, "RelevantIf rules on %s form a cycle", k.Path)
+				if r.Kind == ir.RuleRelevantIf && len(r.Keys) == 2 && r.Keys[0] == p {
+					bad(r.Pos, "RelevantIf rules on %s form a cycle", p)
 					break
 				}
 			}

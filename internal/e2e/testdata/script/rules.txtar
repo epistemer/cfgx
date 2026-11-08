@@ -17,8 +17,12 @@ stdout 'token="t" keys=""'
 rm app.yaml
 
 # RelevantIf: with TLS off the cert keeps its default and isn't checked, even
-# though it is Required and an empty value is passed; setting it warns.
+# though it is Required and an empty value is passed. An empty value doesn't
+# count as setting it; a real one warns.
 exec ./app$exe serve --tls-cert=
+stdout 'tls=false cert="ssl/cert.pem"'
+! stderr .
+exec ./app$exe serve --tls-cert=other.pem
 stdout 'tls=false cert="ssl/cert.pem"'
 stderr '^warning: server.tls.cert is set \(flag --tls-cert\) but ignored: it only matters when server.tls.enabled is set\r?$'
 exec ./app$exe serve --tls-enabled=false --tls-cert=

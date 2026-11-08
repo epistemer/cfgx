@@ -1,12 +1,14 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
@@ -127,14 +129,20 @@ func TestRuleSkipsFailedKeys(t *testing.T) {
 
 func TestRelevantIf(t *testing.T) {
 	idx := []int{2, 3} // the cert is listed before its condition
-	// TLS off: the cert keeps its default, isn't checked (it is Required and
-	// an empty env var would clear it), and setting it warns.
+	// TLS off: the cert keeps its default and isn't checked, though it is
+	// Required and an empty env var would clear it. An empty value doesn't
+	// count as setting it (A4), so there is no warning.
 	res, err := rload(t, rulesApp(), idx, env{"R_SERVER_TLS_CERT": ""})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Values.Cert != "cert.pem" {
-		t.Errorf("cert = %q, want the default", res.Values.Cert)
+	if res.Values.Cert != "cert.pem" || len(res.Warnings) != 0 {
+		t.Errorf("cert = %q, warnings %v; want the default and none", res.Values.Cert, res.Warnings)
+	}
+	// Setting it to a value warns.
+	res, err = rload(t, rulesApp(), idx, env{"R_SERVER_TLS_CERT": "x.pem"})
+	if err != nil {
+		t.Fatal(err)
 	}
 	want := []string{"server.tls.cert is set (env R_SERVER_TLS_CERT) but ignored: it only matters when server.tls.enabled is set"}
 	var got []string
@@ -164,6 +172,30 @@ func TestRelevantIf(t *testing.T) {
 	}
 }
 
+// A command that loads the cert but not its condition still loads the
+// condition, without holding it to Required and without rules.
+func TestConditionOnly(t *testing.T) {
+	a := rulesApp(Rule{Kind: ExactlyOne, Group: "server", Keys: []int{3, 4}})
+	a.Keys[3].Required = true
+	if _, err := rload(t, a, []int{2}, nil); err != nil {
+		t.Errorf("the condition isn't this command's key: %v", err)
+	}
+	_, err := rload(t, a, []int{2}, env{"R_SERVER_TLS_CERT": ""}, "--server-tls-enabled")
+	if err == nil || !strings.Contains(err.Error(), "server.tls.cert: is required, but is empty") {
+		t.Errorf("with the condition set, the cert is checked: %v", err)
+	}
+}
+
+func TestCommandBindsConditionFlags(t *testing.T) {
+	a := rulesApp()
+	a.ConfigFile = ""
+	cmd := Command(&cobra.Command{Use: "x"}, a, []int{2}, func(v *rvals, _ []string) *rvals { return v },
+		func(context.Context, *rvals) error { return nil })
+	if cmd.Flags().Lookup("server-tls-enabled") == nil {
+		t.Error("the condition's flag must be bound, or the cert can never be relevant through flags")
+	}
+}
+
 // An irrelevant key counts as unset in rules.
 func TestIrrelevantKeyIsUnsetInRules(t *testing.T) {
 	a := rulesApp(Rule{Kind: AtMostOne, Group: "auth", Keys: []int{0, 2}})
@@ -172,12 +204,13 @@ func TestIrrelevantKeyIsUnsetInRules(t *testing.T) {
 	}
 }
 
-// newFlagSet binds --config and the flags of the keys at idx.
+// newFlagSet binds --config and the flags of the keys at idx and their
+// RelevantIf conditions, as Command does.
 func newFlagSet[V any](a *App[V], idx []int) *pflag.FlagSet {
 	fs := pflag.NewFlagSet("t", pflag.ContinueOnError)
 	if a.ConfigFile != "" {
 		fs.Var(&rawValue{typ: "path"}, "config", "")
 	}
-	BindFlags(fs, a.Keys, idx)
+	BindFlags(fs, a.Keys, append(append([]int(nil), idx...), conditions(a, idx)...))
 	return fs
 }

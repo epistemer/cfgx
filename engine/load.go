@@ -131,9 +131,17 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 		l.loaded[i] = true
 	}
 	l.state = map[int]keyState{}
+	// RelevantIf conditions the command doesn't load itself are loaded too,
+	// but only to decide relevance: they aren't checked for Required and
+	// take no part in rules.
+	conds := conditions(l.a, idx)
+	l.condOnly = map[int]bool{}
+	for _, c := range conds {
+		l.condOnly[c] = true
+	}
 	// Keys load after the keys their RelevantIf conditions name. The
 	// generator rejects cycles, so every pass makes progress.
-	pending := idx
+	pending := append(append([]int(nil), idx...), conds...)
 	for len(pending) > 0 {
 		var later []int
 		for _, i := range pending {
@@ -161,13 +169,37 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 }
 
 type loader[V any] struct {
-	a       *App[V]
-	res     *Result[V]
-	file    *configFile
-	errs    cfgx.Errors
-	badMaps map[string]bool // file paths already reported as not being maps
-	loaded  map[int]bool    // the command's keys
-	state   map[int]keyState
+	a        *App[V]
+	res      *Result[V]
+	file     *configFile
+	errs     cfgx.Errors
+	badMaps  map[string]bool // file paths already reported as not being maps
+	loaded   map[int]bool    // the command's keys
+	condOnly map[int]bool    // RelevantIf conditions loaded only for relevance
+	state    map[int]keyState
+}
+
+// conditions returns the RelevantIf conditions of the keys at idx, directly
+// or through other conditions, that idx doesn't contain.
+func conditions[V any](a *App[V], idx []int) []int {
+	in := map[int]bool{}
+	for _, i := range idx {
+		in[i] = true
+	}
+	var out []int
+	queue := append([]int(nil), idx...)
+	for len(queue) > 0 {
+		i := queue[0]
+		queue = queue[1:]
+		for _, c := range a.Keys[i].RelevantIf {
+			if !in[c] {
+				in[c] = true
+				out = append(out, c)
+				queue = append(queue, c)
+			}
+		}
+	}
+	return out
 }
 
 // keyState is how loading a key went.
@@ -182,7 +214,7 @@ const (
 // waiting reports whether a condition of key i hasn't been loaded yet.
 func (l *loader[V]) waiting(i int) bool {
 	for _, c := range l.a.Keys[i].RelevantIf {
-		if l.loaded[c] && l.state[c] == 0 {
+		if l.state[c] == 0 {
 			return true
 		}
 	}
@@ -197,7 +229,7 @@ func (l *loader[V]) relevant(v *V, k *Key[V]) (ok bool, cond string, condFailed 
 		switch {
 		case l.state[c] == failed:
 			return false, ck.Path, true
-		case !l.loaded[c] || l.state[c] != loadedOK || !ck.IsSet(v):
+		case l.state[c] != loadedOK || !ck.IsSet(v):
 			return false, ck.Path, false
 		}
 	}
@@ -251,7 +283,7 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 	if ok, cond, condFailed := l.relevant(v, k); !ok {
 		// Not loaded: the default stays, nothing is parsed or checked.
 		l.state[i] = irrelevant
-		if win != nil && !condFailed {
+		if win != nil && !condFailed && setsValue(k, win.raw) {
 			where := win.origin.String()
 			l.warn(fmt.Sprintf("%s is set (%s) but ignored: it only matters when %s is set", k.Path, where, cond),
 				slog.String("key", k.Path), slog.String("source", where))
@@ -275,11 +307,22 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 			return
 		}
 	}
-	if k.Required && !k.IsSet(v) {
+	if k.Required && !k.IsSet(v) && !l.condOnly[i] {
 		l.errs = append(l.errs, l.required(k, win))
 		return
 	}
 	l.state[i] = loadedOK
+}
+
+// setsValue reports whether raw would set key k (A4): an empty value or
+// false doesn't. It parses into a scratch value, so the real one is
+// untouched; a value that doesn't parse counts as set.
+func setsValue[V any](k *Key[V], raw string) bool {
+	scratch := new(V)
+	if err := k.Set(scratch, raw); err != nil {
+		return true
+	}
+	return k.IsSet(scratch)
 }
 
 // checkRules checks every rule whose keys the command loaded, unless one of
