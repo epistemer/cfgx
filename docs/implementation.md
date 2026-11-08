@@ -213,7 +213,24 @@ Settled while building it:
   when the key is set to a value that counts as set (A4), and not when the key
   is irrelevant.
 
-### 2.4 Checks **[decided by interface]**
+### 2.4 Checks **[decided by interface; M5.7 status]**
+
+Every check the generator makes today has a bad schema in
+`cmd/cfgx/testdata/checks/<name>/schema.go`, run through the real DSL and
+loader; a `// want "..."` comment marks the line each problem must point at
+(`TestSchemaChecks`). Checks the DSL can't trigger (an IR naming a group or
+tag that doesn't exist, an unknown rule kind) are covered by
+`internal/gen`'s `TestChecks` instead. Checks on things later milestones add
+(defaults against constraints, function references, mutable secrets, the
+store key, short flags) get their bad schemas with those features.
+
+The generator also has warnings, printed as `cfgx: warning: <pos>: <msg>`
+without failing: today, only a command that lists a `Global` group in `Uses`.
+A problem isn't reported twice: an invalid tag name doesn't also make its
+keys' tag "undeclared", an app without a name doesn't also report its derived
+env prefix, and an argument whose getter clashes isn't reported again by the
+computed-method check.
+
 
 These all run on the IR before anything is written:
 - name collisions on every surface: file key, env, flag, short flag, getter,

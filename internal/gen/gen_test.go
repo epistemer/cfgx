@@ -411,6 +411,16 @@ func TestChecks(t *testing.T) {
 	}
 }
 
+func TestGlobalInUsesWarns(t *testing.T) {
+	m, err := Build(sample(), "settings") // Serve lists the global log group
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Warnings) != 1 || !strings.Contains(m.Warnings[0].Msg, `command Serve uses group "log", which is Global`) {
+		t.Errorf("warnings: %v", m.Warnings)
+	}
+}
+
 func TestDefaultEnvPrefix(t *testing.T) {
 	a := sample()
 	a.EnvPrefix = ""

@@ -48,14 +48,14 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
-	if err := generate(ctx, fs.Arg(0), *timeout); err != nil {
+	if err := generate(ctx, fs.Arg(0), *timeout, stderr); err != nil {
 		fmt.Fprintln(stderr, "cfgx:", err)
 		return 1
 	}
 	return 0
 }
 
-func generate(ctx context.Context, pattern string, timeout time.Duration) error {
+func generate(ctx context.Context, pattern string, timeout time.Duration, stderr io.Writer) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -71,6 +71,9 @@ func generate(ctx context.Context, pattern string, timeout time.Duration) error 
 	model, err := gen.Build(app, pkg)
 	if err != nil {
 		return fmt.Errorf("the schema has problems:\n%v", err)
+	}
+	for _, w := range model.Warnings {
+		fmt.Fprintf(stderr, "cfgx: warning: %s: %s\n", w.Pos, w.Msg)
 	}
 	out := filepath.Join(wd, "zz_"+pkg+".go")
 	if err := gen.ResolveComputed(ctx, model, wd, out); err != nil {

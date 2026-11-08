@@ -27,6 +27,8 @@ type Model struct {
 	Rules       []*RuleModel
 	Commands    []*CommandModel
 	Imports     []ImportModel // set by ResolveComputed
+	// Warnings are schema issues that don't stop generation.
+	Warnings Problems
 }
 
 // RuleModel is a cross-key rule, by key index.
@@ -244,9 +246,12 @@ func envPrefix(app *ir.App) string {
 // Build checks the schema and derives every name. All problems are reported
 // together, each at its schema position.
 func Build(app *ir.App, pkg string) (*Model, error) {
-	var probs Problems
+	var probs, warnings Problems
 	bad := func(pos ir.Pos, format string, args ...any) {
 		probs = append(probs, Problem{pos, fmt.Sprintf(format, args...)})
+	}
+	warn := func(pos ir.Pos, format string, args ...any) {
+		warnings = append(warnings, Problem{pos, fmt.Sprintf(format, args...)})
 	}
 	if app.Name == "" {
 		bad(app.Pos, "the app needs a name")
@@ -255,7 +260,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		bad(app.Pos, "the app needs a description")
 	}
 	prefix := envPrefix(app)
-	if !regexp.MustCompile(`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`).MatchString(prefix) {
+	if (app.Name != "" || app.EnvPrefix != "") && !regexp.MustCompile(`^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$`).MatchString(prefix) {
 		if app.EnvPrefix == "" {
 			bad(app.Pos, "the env prefix derived from the app name %q is %q, which isn't valid; set one with .EnvPrefix, starting with A-Z and using only A-Z, 0-9 and single underscores", app.Name, prefix)
 		} else {
@@ -297,6 +302,8 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	for _, t := range app.Tags {
 		if !token.IsIdentifier(t.Name) || !token.IsExported(t.Name) {
 			bad(t.Pos, "tag name %q must be an exported Go identifier, like Mailer; it names the tag's interface", t.Name)
+			// Known, so its keys don't report it as undeclared too.
+			tagSet[t.Name] = &TagModel{Name: t.Name}
 			continue
 		}
 		if _, dup := tagSet[t.Name]; dup {
@@ -614,6 +621,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				continue
 			}
 			if isGlobal[u] {
+				warn(c.Pos, "command %s uses group %q, which is Global: every command gets it already, so drop it from Uses", c.Name, u)
 				continue
 			}
 			if used[u] {
@@ -738,7 +746,9 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		sort.Ints(cm.KeyIdx)
 		// Go promotes a method only if one embedded group has it, so a
 		// computed method must be unique on the command type.
+		// Getter clashes are reported above; this catches computed ones.
 		owner := map[string]string{"Args": "the command"}
+		computedBy := map[string]bool{}
 		for _, k := range cm.Forward {
 			owner[k.Getter] = "the command"
 		}
@@ -747,16 +757,18 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		}
 		for _, g := range cm.Groups {
 			names := methodNames(g)
+			computed := computedNames(g)
 			sorted := make([]string, 0, len(names))
 			for name := range names {
 				sorted = append(sorted, name)
 			}
 			sort.Strings(sorted)
 			for _, name := range sorted {
-				if prev, ok := owner[name]; ok && prev != g.Path {
+				if prev, ok := owner[name]; ok && prev != g.Path && (computed[name] || computedBy[name]) {
 					bad(c.Pos, "command %s gets method %s from both %s and group %q; Go can't promote it, so rename a computed method", c.Name, name, prev, g.Path)
 				}
 				owner[name] = g.Path
+				computedBy[name] = computedBy[name] || computed[name]
 			}
 		}
 		m.Commands = append(m.Commands, cm)
@@ -765,6 +777,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	if len(probs) > 0 {
 		return nil, probs
 	}
+	m.Warnings = warnings
 	return m, nil
 }
 
@@ -874,6 +887,23 @@ func methodNames(g *GroupModel) map[string]int {
 		}
 		for _, c := range g.Computed {
 			n[c.Name]++
+		}
+		for _, ch := range g.Children {
+			add(ch)
+		}
+	}
+	add(g)
+	return n
+}
+
+// computedNames is the set of computed methods in a group's interface,
+// nested groups included.
+func computedNames(g *GroupModel) map[string]bool {
+	n := map[string]bool{}
+	var add func(g *GroupModel)
+	add = func(g *GroupModel) {
+		for _, c := range g.Computed {
+			n[c.Name] = true
 		}
 		for _, ch := range g.Children {
 			add(ch)
