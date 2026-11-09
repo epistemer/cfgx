@@ -3,6 +3,7 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -98,4 +99,42 @@ func writeTemp(t *testing.T, dir, name, content string) string {
 		t.Fatal(err)
 	}
 	return p
+}
+
+func TestRelative(t *testing.T) {
+	cases := map[string]bool{"keys.csv": true, "a/b": true, "": true}
+	if runtime.GOOS == "windows" {
+		cases[`\secrets\k`] = false
+		cases[`/secrets/k`] = false
+		cases[`D:k`] = false
+		cases[`C:\k`] = false
+	} else {
+		cases["/secrets/k"] = false
+	}
+	for p, want := range cases {
+		if got := relative(p); got != want {
+			t.Errorf("relative(%q) = %t, want %t", p, got, want)
+		}
+	}
+}
+
+func TestBothSetOnIrrelevantKeyWarns(t *testing.T) {
+	a := secretApp()
+	a.Keys = append(a.Keys, Key[secretVals]{
+		Path: "db.on", Env: "CFGXT_DB_ON", Type: "bool", Bool: true,
+		Set:   func(*secretVals, string) error { return nil },
+		IsSet: func(*secretVals) bool { return false },
+	})
+	a.Keys[0].RelevantIf = []int{2}
+	env := map[string]string{"CFGXT_DB_PASSWORD": "x", "CFGXT_DB_PASSWORD_FILE": "pw"}
+	res, err := Load(a, nil, []int{0}, Options{
+		LookupEnv: func(k string) (string, bool) { v, ok := env[k]; return v, ok },
+		Environ:   func() []string { return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0].Msg, "is set (env CFGXT_DB_PASSWORD) but ignored") {
+		t.Errorf("warnings = %+v", res.Warnings)
+	}
 }

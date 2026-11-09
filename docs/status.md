@@ -4,6 +4,33 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M4.4 secret keys
+
+- **Landed:**
+  - `dsl.Secret`: no flag; `<ENV>_FILE` may name a file instead, which loses
+    one trailing newline. Setting both is an error.
+  - `dsl.SecretFile`: the setting is a path, and the getter returns the
+    file's exact contents. A relative path in the config file is relative to
+    the config file.
+  - Files are read only for keys the command loads and that are relevant, so
+    TLS off with no key file on disk works. Only regular files of at most
+    1 MiB are read, so a FIFO can't hang startup.
+  - Messages name keys, paths and sources, never a secret. The e2e script
+    checks that.
+- **Reviewed:** Gemini 3.8 Flash (High) on the diff, about 395k tokens
+  ([review 0011](reviews/0011-gemini-m4.4-review.md)). Two minor findings,
+  both fixed: a missing warning when `X` and `X_FILE` are both set on a key
+  that doesn't matter, and Windows paths such as `\secrets\key.pem` in the
+  config file.
+- **Decided for you** (implementation.md §3.4):
+  - An empty `X_FILE` counts as not set, so a deployment's `X_FILE` can be
+    overridden locally with `X_FILE=` and `X=...`.
+  - A `Secret` may have a default, and can't be a command argument. A
+    `SecretFile` has a flag, since its value is a path.
+- **Next:** M4.5 (`Path`, `File`, `URL`, `Location`), which reuses this
+  file reading; then M4.6–M4.10.
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M4.2 enum keys
 
 - **Landed:**

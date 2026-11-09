@@ -257,8 +257,12 @@ type candidate struct {
 }
 
 // sets reports whether c would set key k (A4). A path counts as set if it
-// isn't empty: the file isn't read for this.
+// isn't empty: the file isn't read for this. A value with a problem, such
+// as X and X_FILE both set, counts as set.
 func sets[V any](k *Key[V], c *candidate) bool {
+	if c.bad != nil {
+		return true
+	}
 	if c.read {
 		return c.raw != ""
 	}

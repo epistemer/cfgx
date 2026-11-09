@@ -43,10 +43,17 @@ func envValue[V any](k *Key[V], env string, lookup func(string) (string, bool)) 
 // resolve is the path c names. A relative path from the config file is
 // relative to the file's directory (A11); others, to the working directory.
 func (l *loader[V]) resolve(c *candidate) string {
-	if c.origin.Layer == LayerFile && !filepath.IsAbs(c.raw) {
+	if c.origin.Layer == LayerFile && relative(c.raw) {
 		return filepath.Join(filepath.Dir(l.file.path), c.raw)
 	}
 	return c.raw
+}
+
+// relative reports whether p is relative to a directory. On Windows, a path
+// rooted without a drive (\x) or on a drive without a root (D:x) isn't:
+// joining it to a directory would change what it means.
+func relative(p string) bool {
+	return !filepath.IsAbs(p) && filepath.VolumeName(p) == "" && (p == "" || !os.IsPathSeparator(p[0]))
 }
 
 // readFile returns the contents of the file c names. It must be a regular
