@@ -338,13 +338,19 @@ func newImporter(schema string) *importer {
 // whose own name is pkg.
 func (im *importer) name(path, pkg string) string {
 	im.used[path] = true
-	im.pkgs[path] = pkg
+	if pkg != "" {
+		im.pkgs[path] = pkg
+	}
 	if n, ok := im.names[path]; ok {
 		return n
 	}
-	n := pkg
+	base := pkg
+	if base == "" {
+		base = guessAlias(path)
+	}
+	n := base
 	for i := 2; im.taken[n]; i++ {
-		n = pkg + strconv.Itoa(i)
+		n = base + strconv.Itoa(i)
 	}
 	im.taken[n] = true
 	im.names[path] = n

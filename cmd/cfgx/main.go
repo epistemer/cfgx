@@ -75,6 +75,9 @@ func generate(ctx context.Context, pattern string, timeout time.Duration, stderr
 	for _, w := range model.Warnings {
 		fmt.Fprintf(stderr, "cfgx: warning: %s: %s\n", w.Pos, w.Msg)
 	}
+	if err := gen.ResolveRefs(ctx, model, wd); err != nil {
+		return fmt.Errorf("the schema has problems:\n%v", err)
+	}
 	out := filepath.Join(wd, "zz_"+pkg+".go")
 	if err := gen.ResolveComputed(ctx, model, wd, out); err != nil {
 		return fmt.Errorf("the schema has problems:\n%v", err)

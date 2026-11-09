@@ -30,6 +30,9 @@ type Model struct {
 	Imports     []ImportModel // for the getters' types and computed methods
 	// Warnings are schema issues that don't stop generation.
 	Warnings Problems
+
+	imp  *importer // names imports; ResolveRefs updates them
+	refs []pkgRef  // packages imported for keys, for ResolveRefs
 }
 
 // RuleModel is a cross-key rule, by key index.
@@ -77,7 +80,15 @@ type KeyModel struct {
 	Enum                  []EnumModel
 	EnumTexts, EnumValues string
 	zero                  string // the canonical text of the zero value
-	Pos                   ir.Pos
+	// Checks are Go expressions of type error, run in order on a set
+	// value; Patterns are the compiled patterns they use. Validate runs
+	// after them.
+	Checks      []string
+	Patterns    []PatternModel
+	Validate    *FuncModel
+	DefaultFrom string     // the DefaultFunc's name, for --help
+	defaultFunc *FuncModel // the DefaultFunc, if any
+	Pos         ir.Pos
 }
 
 // EnumModel is one value of an enum key.
@@ -93,7 +104,7 @@ func fileEnv(km *KeyModel, env string) string {
 
 // nonZeroDefault reports whether the key's default counts as set (A4).
 func (k *KeyModel) nonZeroDefault() bool {
-	return k.HasDefault && k.DefaultText != k.zero
+	return k.defaultFunc != nil || k.HasDefault && k.DefaultText != k.zero
 }
 
 // GroupModel is one group: its interface and the type that implements it.
@@ -318,6 +329,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	}
 	nm := newNamer()
 	imp := newImporter(app.Schema)
+	m.imp = imp
 	for _, w := range app.Initialisms {
 		if !initialismRE.MatchString(w) {
 			bad(app.Pos, "initialism %q must be upper-case letters and digits, starting with a letter, like OTP", w)
@@ -459,6 +471,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				bad(k.Pos, "%v", err)
 				continue
 			}
+			m.keyExtras(km, k, imp, bad)
 			km.Required = k.Required
 			for _, t := range k.Tags {
 				if _, ok := tagSet[t]; !ok {
@@ -781,6 +794,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				bad(k.Pos, "%v", err)
 				continue
 			}
+			m.keyExtras(km, k, imp, bad)
 			km.Required = k.Required
 			if len(k.Aliases) > 0 {
 				bad(k.Pos, "aliases aren't supported on arguments")

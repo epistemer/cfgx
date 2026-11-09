@@ -4,11 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"reflect"
 	"runtime"
 	"strconv"
 	"time"
 
+	"github.com/epistemer/cfgx"
 	"github.com/epistemer/cfgx/internal/ir"
 )
 
@@ -244,63 +246,73 @@ type keyBase struct {
 	typ        *ir.Type       // enums: the values' Go type
 	enum       []ir.EnumValue // enums: the values
 	problems   []string
-	pos        ir.Pos
+	checks     []ir.Check
+	validate   *ir.FuncRef
+	defFunc    *ir.FuncRef
+	// finish checks what can only be checked once every modifier has run,
+	// such as a default against Range; each returns a problem or "".
+	finish []func() string
+	pos    ir.Pos
 }
 
 func (k *keyBase) base() *keyBase { return k }
 func (k *keyBase) member()        {}
 
 // key holds what every key type shares: the modifiers every kind has, each
-// returning the concrete key type K so calls chain. T is the Go type of the
-// key's values; text turns one into the canonical text the IR records.
+// returning the concrete key type K so calls chain. T is the Go type a
+// default is given in; text turns one into the canonical text the IR
+// records. G is the getter's type, which Validate and DefaultFunc see.
 // Schemas never name it: they call String, Int and the other constructors.
-type key[K any, T any] struct {
+type key[K any, T any, G any] struct {
 	keyBase
 	self K
 	text func(T) string
+	dv   *T // the default, for checks
 }
 
-func (k *key[K, T]) init(self K, name, desc string, kind ir.Kind, text func(T) string, pos ir.Pos) {
+func (k *key[K, T, G]) init(self K, name, desc string, kind ir.Kind, text func(T) string, pos ir.Pos) {
 	k.keyBase = keyBase{name: name, desc: desc, kind: kind, pos: pos}
 	k.self, k.text = self, text
 }
 
 // Default sets the key's default.
-func (k *key[K, T]) Default(v T) K {
+func (k *key[K, T, G]) Default(v T) K {
 	s := k.text(v)
-	k.def = &s
+	k.def, k.dv = &s, &v
 	return k.self
 }
 
 // Required makes loading fail when the key isn't set: when its value is the
 // zero value (empty, 0, false) after every source is merged. Only the
 // commands that load the key check it.
-func (k *key[K, T]) Required() K {
+func (k *key[K, T, G]) Required() K {
 	k.required = true
 	return k.self
 }
 
 // Tags adds the key to tag interfaces.
-func (k *key[K, T]) Tags(tags ...*TagDef) K {
+func (k *key[K, T, G]) Tags(tags ...*TagDef) K {
 	k.tags = append(k.tags, tags...)
 	return k.self
 }
 
 // Alias keeps old names working: each old path's file key, env var and flag
 // are still accepted, with a deprecation warning. Renames only.
-func (k *key[K, T]) Alias(oldPaths ...string) K {
+func (k *key[K, T, G]) Alias(oldPaths ...string) K {
 	k.aliases = append(k.aliases, oldPaths...)
 	return k.self
 }
 
 // Deprecated makes setting the key print a warning with msg.
-func (k *key[K, T]) Deprecated(msg string) K {
+func (k *key[K, T, G]) Deprecated(msg string) K {
 	k.deprecated = msg
 	return k.self
 }
 
 // StringKey is a string setting. Create it with String.
-type StringKey struct{ key[*StringKey, string] }
+type StringKey struct {
+	key[*StringKey, string, string]
+}
 
 // String declares a string key.
 func String(name, desc string) *StringKey {
@@ -310,7 +322,7 @@ func String(name, desc string) *StringKey {
 }
 
 // IntKey is an int setting. Create it with Int.
-type IntKey struct{ key[*IntKey, int] }
+type IntKey struct{ ordered[*IntKey, int, int] }
 
 // Int declares an int key.
 func Int(name, desc string) *IntKey {
@@ -320,7 +332,7 @@ func Int(name, desc string) *IntKey {
 }
 
 // BoolKey is a bool setting. Create it with Bool.
-type BoolKey struct{ key[*BoolKey, bool] }
+type BoolKey struct{ key[*BoolKey, bool, bool] }
 
 // Bool declares a bool key; its flag is --x, or --x=false.
 func Bool(name, desc string) *BoolKey {
@@ -330,7 +342,9 @@ func Bool(name, desc string) *BoolKey {
 }
 
 // Int64Key is an int64 setting. Create it with Int64.
-type Int64Key struct{ key[*Int64Key, int64] }
+type Int64Key struct {
+	ordered[*Int64Key, int64, int64]
+}
 
 // Int64 declares an int64 key.
 func Int64(name, desc string) *Int64Key {
@@ -340,7 +354,7 @@ func Int64(name, desc string) *Int64Key {
 }
 
 // UintKey is a uint setting. Create it with Uint.
-type UintKey struct{ key[*UintKey, uint] }
+type UintKey struct{ ordered[*UintKey, uint, uint] }
 
 // Uint declares a uint key.
 func Uint(name, desc string) *UintKey {
@@ -350,7 +364,9 @@ func Uint(name, desc string) *UintKey {
 }
 
 // FloatKey is a float64 setting. Create it with Float.
-type FloatKey struct{ key[*FloatKey, float64] }
+type FloatKey struct {
+	ordered[*FloatKey, float64, float64]
+}
 
 // Float declares a float64 key.
 func Float(name, desc string) *FloatKey {
@@ -361,7 +377,7 @@ func Float(name, desc string) *FloatKey {
 
 // DurationKey is a time.Duration setting. Create it with Duration.
 type DurationKey struct {
-	key[*DurationKey, time.Duration]
+	ordered[*DurationKey, time.Duration, time.Duration]
 }
 
 // Duration declares a time.Duration key. Values need a unit, such as 90s or
@@ -373,7 +389,9 @@ func Duration(name, desc string) *DurationKey {
 }
 
 // ByteSizeKey is a size in bytes, an int64. Create it with ByteSize.
-type ByteSizeKey struct{ key[*ByteSizeKey, int64] }
+type ByteSizeKey struct {
+	ordered[*ByteSizeKey, int64, int64]
+}
 
 // ByteSize declares a size key. Values are bytes, or a whole number with a
 // unit: 512KB (1000s) or 1MiB (1024s).
@@ -385,7 +403,9 @@ func ByteSize(name, desc string) *ByteSizeKey {
 
 // SecretKey is a secret string setting, read as a cfgx.Secret. Create it
 // with Secret.
-type SecretKey struct{ key[*SecretKey, string] }
+type SecretKey struct {
+	key[*SecretKey, string, cfgx.Secret]
+}
 
 // Secret declares a secret key. It has no flag, since a flag's value shows
 // in ps and shell history. Besides <ENV>, <ENV>_FILE may name a file that
@@ -398,7 +418,9 @@ func Secret(name, desc string) *SecretKey {
 }
 
 // SecretFileKey is a secret read from a file. Create it with SecretFile.
-type SecretFileKey struct{ key[*SecretFileKey, string] }
+type SecretFileKey struct {
+	key[*SecretFileKey, string, cfgx.Secret]
+}
 
 // SecretFile declares a key whose setting is a path, and whose value, a
 // cfgx.Secret, is that file's contents, exactly. The file is read while
@@ -413,7 +435,7 @@ func SecretFile(name, desc string) *SecretFileKey {
 }
 
 // PathKey is a path setting, a string. Create it with Path.
-type PathKey struct{ key[*PathKey, string] }
+type PathKey struct{ key[*PathKey, string, string] }
 
 // Path declares a path key. Its value is cleaned, and a relative path in
 // the config file is made relative to the config file's directory; a
@@ -426,7 +448,7 @@ func Path(name, desc string) *PathKey {
 }
 
 // FileKey is a file's contents, a []byte. Create it with File.
-type FileKey struct{ key[*FileKey, string] }
+type FileKey struct{ key[*FileKey, string, []byte] }
 
 // File declares a key whose setting is a path, and whose value is that
 // file's contents, exactly. The file is read while loading, only by
@@ -440,7 +462,7 @@ func File(name, desc string) *FileKey {
 }
 
 // URLKey is a URL setting, a *url.URL. Create it with URL.
-type URLKey struct{ key[*URLKey, string] }
+type URLKey struct{ key[*URLKey, string, *url.URL] }
 
 // URL declares a URL key. Values must be absolute URLs, with a scheme such
 // as https://; unset, the value is nil. Messages show a URL with its
@@ -453,7 +475,9 @@ func URL(name, desc string) *URLKey {
 
 // LocationKey is a time zone setting, a *time.Location. Create it with
 // Location.
-type LocationKey struct{ key[*LocationKey, string] }
+type LocationKey struct {
+	key[*LocationKey, string, *time.Location]
+}
 
 // Location declares a time zone key. Values are IANA names, such as
 // Europe/Paris, or UTC or Local; unset, the value is nil. Zones are loaded
@@ -662,19 +686,31 @@ func (k *keyBase) export(tags []string) ir.Key {
 	if len(k.aliases) > 0 {
 		aliases = append([]string(nil), k.aliases...)
 	}
+	problems := append([]string(nil), k.problems...)
+	for _, f := range k.finish {
+		if p := f(); p != "" {
+			problems = append(problems, p)
+		}
+	}
+	if k.def != nil && k.defFunc != nil {
+		problems = append(problems, "has both Default and DefaultFunc; keep one")
+	}
 	return ir.Key{
-		Name:       k.name,
-		Desc:       k.desc,
-		Kind:       k.kind,
-		Default:    k.def,
-		Required:   k.required,
-		Tags:       tags,
-		Aliases:    aliases,
-		Deprecated: k.deprecated,
-		Type:       k.typ,
-		Enum:       k.enum,
-		Problems:   k.problems,
-		Pos:        k.pos,
+		Name:        k.name,
+		Desc:        k.desc,
+		Kind:        k.kind,
+		Default:     k.def,
+		Required:    k.required,
+		Tags:        tags,
+		Aliases:     aliases,
+		Deprecated:  k.deprecated,
+		Type:        k.typ,
+		Enum:        k.enum,
+		Checks:      k.checks,
+		Validate:    k.validate,
+		DefaultFunc: k.defFunc,
+		Problems:    problems,
+		Pos:         k.pos,
 	}
 }
 

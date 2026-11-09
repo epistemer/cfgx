@@ -35,7 +35,9 @@ func textAll[T any](text func(T) string) func([]T) string {
 }
 
 // StringsKey is a list of strings. Create it with Strings.
-type StringsKey struct{ key[*StringsKey, []string] }
+type StringsKey struct {
+	key[*StringsKey, []string, []string]
+}
 
 // Strings declares a []string key. A flag may be repeated, and each
 // occurrence, like an env var, is a comma-separated list: --tag a --tag b,c
@@ -49,7 +51,7 @@ func Strings(name, desc string) *StringsKey {
 }
 
 // IntsKey is a list of ints. Create it with Ints.
-type IntsKey struct{ key[*IntsKey, []int] }
+type IntsKey struct{ key[*IntsKey, []int, []int] }
 
 // Ints declares a []int key, set like Strings.
 func Ints(name, desc string) *IntsKey {
@@ -60,7 +62,7 @@ func Ints(name, desc string) *IntsKey {
 
 // DurationsKey is a list of durations. Create it with Durations.
 type DurationsKey struct {
-	key[*DurationsKey, []time.Duration]
+	key[*DurationsKey, []time.Duration, []time.Duration]
 }
 
 // Durations declares a []time.Duration key, set like Strings; each item
@@ -73,7 +75,7 @@ func Durations(name, desc string) *DurationsKey {
 
 // StringMapKey is a map of strings. Create it with StringMap.
 type StringMapKey struct {
-	key[*StringMapKey, map[string]string]
+	key[*StringMapKey, map[string]string, map[string]string]
 }
 
 // StringMap declares a map[string]string key. Flags and env vars take

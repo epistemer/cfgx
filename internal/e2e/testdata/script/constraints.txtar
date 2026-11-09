@@ -1,0 +1,134 @@
+# M4.8: constraints, Validate and DefaultFunc. Checks run on a loaded,
+# relevant key that is set, after parsing, and failures name the source.
+# Functions are imported by the generated code; one in the generated package
+# itself is called without an import.
+go generate ./...
+go build -o app$exe .
+grep 'pattern.* = regexp.MustCompile\("\^\(\?:\[a-z\]\+\)\$"\)' internal/settings/zz_settings.go
+grep 'return Even\(v\.SrvBatch\)' internal/settings/zz_settings.go
+! grep '"example.com/e2e/internal/settings"' internal/settings/zz_settings.go
+
+exec ./app$exe run --help
+stdout '--srv-workers int\s+Workers \(default from runtime.NumCPU\)'
+stdout '--srv-port int\s+Port \(default 8080\)'
+
+# DefaultFunc runs when loading; the defaults pass their checks.
+exec ./app$exe run
+stdout '^port=8080 workers=[1-9][0-9]* name= batch=0\r?\n$'
+! stderr .
+
+exec ./app$exe run --srv-port 65535 --srv-name abc --srv-email a@b.c --srv-batch 4 --srv-timeout 1s --srv-workers 3
+stdout '^port=65535 workers=3 name=abc batch=4\r?\n$'
+
+# Unset values aren't checked (A4): Required is for that.
+exec ./app$exe run --srv-name ''
+
+# Every failure is reported with its source; a secret's value never shows.
+env APP_SRV_TOKEN=hunter2
+! exec ./app$exe run --srv-port 70000 --srv-name ABCDEFGHIJKLMNOP --srv-email nobody --srv-batch 3 --srv-timeout 10ms --srv-workers 2000
+cmp stderr want.txt
+! exec ./app$exe run --srv-name ab1
+stderr '^  srv.name: must match the pattern \[a-z\]\+ \(flag --srv-name\)\r?$'
+! stderr hunter2
+
+-- want.txt --
+app: invalid configuration (7 problems)
+  srv.batch: 3 is odd (flag --srv-batch)
+  srv.email: "nobody" isn't an email address (flag --srv-email)
+  srv.name: must be 3 to 10 characters long, not 16 (flag --srv-name)
+  srv.port: must be at most 65535 (flag --srv-port)
+  srv.timeout: must be at least 1s (flag --srv-timeout)
+  srv.token: must be at least 12 characters (env APP_SRV_TOKEN)
+  srv.workers: must be at most 1024 (flag --srv-workers)
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(settings.RunCommand(&cobra.Command{Use: "run"},
+		func(_ context.Context, r *settings.Run) error {
+			fmt.Printf("port=%d workers=%d name=%s batch=%d\n", r.SrvPort(), r.SrvWorkers(), r.SrvName(), r.SrvBatch())
+			return nil
+		}))
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/validate/validate.go --
+package validate
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/epistemer/cfgx"
+)
+
+func Email(s string) error {
+	if !strings.Contains(s, "@") {
+		return fmt.Errorf("%q isn't an email address", s)
+	}
+	return nil
+}
+
+// Token sees the secret, and must not put it in its message.
+func Token(s cfgx.Secret) error {
+	if len(s.Reveal()) < 12 {
+		return errors.New("must be at least 12 characters")
+	}
+	return nil
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/even.go --
+package settings
+
+import "fmt"
+
+// Even lives in the generated package itself.
+func Even(n int) error {
+	if n%2 != 0 {
+		return fmt.Errorf("%d is odd", n)
+	}
+	return nil
+}
+-- internal/settings/schema/schema.go --
+package schema
+
+import (
+	"runtime"
+	"time"
+
+	"github.com/epistemer/cfgx/dsl"
+
+	"example.com/e2e/internal/settings"
+	"example.com/e2e/internal/validate"
+)
+
+var Srv = dsl.Group("srv", "Server",
+	dsl.Int("port", "Port").Default(8080).Range(1, 65535),
+	dsl.Int("workers", "Workers").DefaultFunc(runtime.NumCPU).Range(1, 1024),
+	dsl.String("name", "Name").Len(3, 10).Pattern(`[a-z]+`),
+	dsl.String("email", "Email").Validate(validate.Email),
+	dsl.Int("batch", "Batch size").Validate(settings.Even),
+	dsl.Duration("timeout", "Timeout").Min(time.Second),
+	dsl.Secret("token", "API token").Validate(validate.Token),
+)
+
+var App = dsl.App("app", "Test app", Srv)
+
+var Run = dsl.Command("Run").Uses(Srv)

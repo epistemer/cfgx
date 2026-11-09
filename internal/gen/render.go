@@ -56,6 +56,9 @@ type values struct {
 {{- end}}
 }
 
+{{- range .Keys}}{{range .Patterns}}
+var {{.Var}} = {{.Re}}
+{{end}}{{end}}
 {{- range .Keys}}{{if .Enum}}
 // The values of {{.Path}}, and their texts.
 var (
@@ -93,6 +96,23 @@ var keys = [...]engine.Key[values]{
 		Set: func(v *values, raw string) error { return engine.{{.Parse}}(raw, {{.ParseArgs}}&v.{{.Field}}) },
 		{{- end}}
 		IsSet: func(v *values) bool { return {{.IsSet}} },
+		{{- if or .Checks .Validate}}
+		Check: func(v *values) error {
+		{{- range .Checks}}
+			if err := {{.}}; err != nil {
+				return err
+			}
+		{{- end}}
+		{{- if .Validate}}
+			return {{.Validate.Expr}}(v.{{.Field}})
+		{{- else}}
+			return nil
+		{{- end}}
+		},
+		{{- end}}
+		{{- if .DefaultFrom}}
+		DefaultFrom: {{printf "%q" .DefaultFrom}},
+		{{- end}}
 		{{- if .DefaultLit}}
 		Default: func(v *values) { v.{{.Field}} = {{.DefaultLit}} },
 		{{- end}}

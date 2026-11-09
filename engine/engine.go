@@ -73,6 +73,11 @@ type Key[V any] struct {
 	// IsSet reports whether the key's value is non-zero (true for a bool),
 	// which is what "set" means for Required and rules (A4).
 	IsSet func(v *V) bool
+	// Check runs the key's constraints, then its Validate function, on a
+	// value that is set; nil if it has none.
+	Check func(v *V) error
+	// DefaultFrom names the function DefaultFunc calls, for --help.
+	DefaultFrom string
 }
 
 // App describes the whole application. Generated code declares one.
@@ -157,6 +162,8 @@ func BindFlags[V any](fs *pflag.FlagSet, keys []Key[V], idx []int) {
 				d = strconv.Quote(d)
 			}
 			usage += " (default " + d + ")"
+		} else if k.DefaultFrom != "" {
+			usage += " (default from " + k.DefaultFrom + ")"
 		}
 		f := fs.VarPF(&rawValue{typ: k.Type}, k.Flag, k.Short, usage)
 		if k.Bool {

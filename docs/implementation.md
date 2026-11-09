@@ -544,6 +544,38 @@ unknown.
     `reflect.Value.IsZero`, so T needn't be comparable.
   - The help label is the type's name in lower case (`prefix`), and a
     default is quoted.
+- **[decided, M4.8]** Constraints, `Validate` and `DefaultFunc`:
+  - `Range`, `Min` and `Max` exist on number, duration and size keys;
+    `Len` and `Pattern` on `String` keys. Other keys use `Validate`. A
+    `Pattern` matches the whole value, as `^(?:re)$`; it is compiled by the
+    schema, and the generated code compiles it once into a package-level
+    variable.
+  - The schema checks a default against the constraints, whatever order
+    the modifiers come in, and rejects `Range(max, min)`, a bad `Len` or a
+    pattern that doesn't compile.
+  - Checks run in the engine after parsing, on keys that are loaded,
+    relevant and **set** (A4): the key's constraints in declaration order,
+    then `Validate`. The first failure is the key's problem, with the
+    winning source, or `default`. An unset value isn't checked, so an
+    optional `Range(1, 65535)` port can be left at 0; `Required` is for
+    presence. Messages don't quote the value (`must be at most 65535`), so
+    they are safe for secrets; a `Validate` function's own message is
+    passed through, and must not quote a secret.
+  - `Validate(f)` takes `func(G) error` and `DefaultFunc(f)` takes `func()
+    G`, where G is the getter's type (`cfgx.Secret`, `*url.URL`, `[]byte`),
+    so the DSL's key type carries G. Method expressions can't type-check
+    against those signatures, so only method values, closures, unexported
+    and generic functions need the name rules. `DefaultFunc` is rejected on
+    `File` and `SecretFile` keys, and with `Default`. `--help` shows
+    `(default from runtime.NumCPU)`. In exclusive rules a `DefaultFunc`
+    counts as a non-zero default.
+  - `ResolveRefs` runs after `Build`: one `go list -e` call in the generated
+    package's directory lists every package imported for a key (functions,
+    enum and `Text` types) with its name and dependencies. It rejects
+    `main`, packages that import `cfgx/dsl`, and `internal/` packages the
+    generated package can't import; it calls functions in the generated
+    package itself without an import. Function packages are imported under
+    their real name, or an alias where it differs from the path.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree
