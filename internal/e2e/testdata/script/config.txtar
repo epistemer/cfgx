@@ -48,6 +48,13 @@ stderr '"nope" isn''t a command with a configuration'
 exec ./app$exe config env db migrate
 cmp stdout want-env.txt
 
+# A command's RelevantIf conditions in other groups are listed with it.
+exec ./app$exe config explain web
+stdout '^web.cert +unset \(not relevant\)\r?$'
+stdout '^tls.on +false +unset\r?$'
+exec ./app$exe config env web
+stdout '^APP_TLS_ON +tls.on'
+
 # --config works.
 exec ./app$exe config print --config other.yaml db migrate
 stdout '^  port: 5432\r?$'
@@ -71,20 +78,26 @@ srv:
   zone: "Europe/Paris"
   ca: ""
   wait: "1m0s"
+tls:
+  on: false
+web:
+  cert: ""
 -- want-print-migrate.txt --
 db:
   port: 6543
   password: "******"
   url: "postgres://admin:xxxxx@db/app"
 -- want-explain.txt --
-KEY          VALUE                          SOURCE
-db.port      6543                           app.yaml:2:9
+KEY          VALUE                          SOURCE                DEFAULT
+db.port      6543                           app.yaml:2:9          5432
 db.password  ******                         env APP_DB_PASSWORD
 db.url       postgres://admin:xxxxx@db/app  env APP_DB_URL
 srv.token                                   unset
 srv.zone     Europe/Paris                   app.yaml:4:9
 srv.ca                                      unset
-srv.wait     1m0s                           default
+srv.wait     1m0s                           default               1m0s
+tls.on       false                          unset
+web.cert                                    unset (not relevant)
 -- want-env.txt --
 VARIABLE              KEY          SET  DESCRIPTION
 APP_CONFIG                              the config file to read
@@ -112,6 +125,7 @@ func main() {
 		func(context.Context, *settings.Migrate) error { return nil }))
 	root.AddCommand(
 		settings.ServeCommand(&cobra.Command{Use: "serve"}, func(context.Context, *settings.Serve) error { return nil }),
+		settings.ProxyCommand(&cobra.Command{Use: "web"}, func(context.Context, *settings.Proxy) error { return nil }),
 		db,
 		settings.ConfigCommand(),
 	)
@@ -145,9 +159,18 @@ var Srv = dsl.Group("srv", "Server",
 	dsl.Duration("wait", "Wait").Default(time.Minute),
 )
 
-var App = dsl.App("app", "Test app", DB, Srv).ConfigFile("app", ".")
+var tlsOn = dsl.Bool("on", "TLS on")
+
+var TLS = dsl.Group("tls", "TLS", tlsOn)
+
+var cert = dsl.Path("cert", "Certificate")
+
+var Web = dsl.Group("web", "Web", cert).Rules(dsl.RelevantIf(cert, tlsOn))
+
+var App = dsl.App("app", "Test app", DB, Srv, TLS, Web).ConfigFile("app", ".")
 
 var (
+	Proxy   = dsl.Command("Proxy").Uses(Web)
 	Serve   = dsl.Command("Serve").Uses(DB, Srv)
 	Migrate = dsl.Command("Migrate").Uses(DB).Args(dsl.Int("steps", "Steps").Required())
 )

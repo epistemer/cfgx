@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -126,12 +127,21 @@ func (c *configCmd[V]) load(cmd *cobra.Command, idx []int, partial bool) (*Resul
 	return res, err
 }
 
-// show is a key's value as text: strings as they are, the rest as JSON.
+// show is a key's value as text for a table: strings as they are, the rest
+// as JSON.
 func show(v any) string {
 	if s, ok := v.(string); ok {
-		return s
+		return cell(s)
 	}
 	return jsonText(v)
+}
+
+// cell quotes s if it would break a table row.
+func cell(s string) string {
+	if strings.ContainsAny(s, "\t\n\r") {
+		return strconv.Quote(s)
+	}
+	return s
 }
 
 func jsonText(v any) string {
@@ -172,6 +182,12 @@ func (n *yamlNode) write(b *strings.Builder, indent string) {
 	}
 }
 
+// shown is the keys print, explain and env list: the scope's, then the
+// RelevantIf conditions they depend on, which are loaded with them.
+func (c *configCmd[V]) shown(idx []int) []int {
+	return append(append([]int(nil), idx...), conditions(c.a, idx)...)
+}
+
 // print writes the effective configuration as YAML: every key, at its
 // config file path, with JSON values, which YAML reads too.
 func (c *configCmd[V]) print(cmd *cobra.Command, idx []int) error {
@@ -180,7 +196,7 @@ func (c *configCmd[V]) print(cmd *cobra.Command, idx []int) error {
 		return err
 	}
 	root := &yamlNode{}
-	for _, i := range idx {
+	for _, i := range c.shown(idx) {
 		k := &c.a.Keys[i]
 		segs := strings.Split(k.Path, ".")
 		n := root
@@ -201,10 +217,14 @@ func (c *configCmd[V]) explain(cmd *cobra.Command, idx []int) error {
 	if err != nil {
 		return err
 	}
-	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
-	fmt.Fprintln(tw, "KEY\tVALUE\tSOURCE")
-	for _, i := range idx {
+	tw := newTable(cmd.OutOrStdout())
+	fmt.Fprintln(tw, "KEY\tVALUE\tSOURCE\tDEFAULT")
+	for _, i := range c.shown(idx) {
 		k := &c.a.Keys[i]
+		def := k.DefaultText
+		if k.DefaultFrom != "" {
+			def = k.DefaultFrom + "()"
+		}
 		source := "unset"
 		if o := res.Origins[i]; len(o) > 0 {
 			last := o[len(o)-1]
@@ -216,7 +236,7 @@ func (c *configCmd[V]) explain(cmd *cobra.Command, idx []int) error {
 		if res.Irrelevant[i] {
 			source += " (not relevant)"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\n", k.Path, show(k.Show(res.Values)), source)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", k.Path, show(k.Show(res.Values)), source, cell(def))
 	}
 	return tw.Flush()
 }
@@ -232,7 +252,7 @@ func (c *configCmd[V]) validate(cmd *cobra.Command, idx []int) error {
 
 // env lists the env vars the keys read, and whether each is set now.
 func (c *configCmd[V]) env(cmd *cobra.Command, idx []int) error {
-	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 4, 2, ' ', 0)
+	tw := newTable(cmd.OutOrStdout())
 	fmt.Fprintln(tw, "VARIABLE\tKEY\tSET\tDESCRIPTION")
 	row := func(name, key, desc string) {
 		set := ""
@@ -244,7 +264,7 @@ func (c *configCmd[V]) env(cmd *cobra.Command, idx []int) error {
 	if c.a.ConfigFile != "" {
 		row(c.a.configEnv(), "", "the config file to read")
 	}
-	for _, i := range idx {
+	for _, i := range c.shown(idx) {
 		k := &c.a.Keys[i]
 		if k.Env == "" {
 			continue
@@ -279,5 +299,38 @@ func (c *configCmd[V]) init(cmd *cobra.Command, path string, force bool) error {
 		return err
 	}
 	_, err = fmt.Fprintf(cmd.OutOrStdout(), "Wrote %s.\n", path)
+	return err
+}
+
+// textTable aligns tab-separated columns, without trailing spaces where a row's
+// last cells are empty.
+type textTable struct {
+	*tabwriter.Writer
+	buf bytes.Buffer
+	out io.Writer
+}
+
+func newTable(out io.Writer) *textTable {
+	t := &textTable{out: out}
+	t.Writer = tabwriter.NewWriter(&t.buf, 0, 4, 2, ' ', 0)
+	return t
+}
+
+func (t *textTable) Flush() error {
+	if err := t.Writer.Flush(); err != nil {
+		return err
+	}
+	var b strings.Builder
+	for _, l := range strings.SplitAfter(t.buf.String(), "\n") {
+		trimmed := strings.TrimRight(l, " \n")
+		if trimmed == "" && l == "" {
+			continue
+		}
+		b.WriteString(trimmed)
+		if strings.HasSuffix(l, "\n") {
+			b.WriteString("\n")
+		}
+	}
+	_, err := io.WriteString(t.out, b.String())
 	return err
 }
