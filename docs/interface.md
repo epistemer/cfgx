@@ -244,7 +244,7 @@ with type-checked modifiers.
 | `Location` | `*time.Location` | IANA name, `UTC` or `Local`; nil when unset |
 | `Strings`, `Ints`, `Durations` | `[]T` | flag repeatable or comma-separated (CSV: quote an item holding a comma); env comma-separated; a list in the config file. The layer that sets it replaces the whole list |
 | `StringMap` | `map[string]string` | env/flag `k=v,k2=v2`, flag repeatable; a map in the config file |
-| `Text(name, desc, zero T)` | `T` | any `T` whose pointer implements `encoding.TextUnmarshaler` (`netip.Prefix`, your own types) |
+| `Text(name, desc, zero T)` | `T` | any named `T` whose pointer implements `encoding.TextUnmarshaler` (`netip.Prefix`, your own types); `zero` only names the type. `.Default` needs `encoding.TextMarshaler` too |
 | `Group(name, desc, keys...)` | — | nesting; see §3.4 |
 
 Lists of *objects* (e.g. `upstreams: [{host, port}, …]`) are file-only and come
