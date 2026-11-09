@@ -224,6 +224,11 @@ func allKinds() *ir.App {
 			{Name: "d2", Desc: "odd duration", Kind: ir.KindDuration, Default: str("1500ms")},
 			{Name: "size", Desc: "bytesize", Kind: ir.KindByteSize, Default: str("1048576")},
 			{Name: "none", Desc: "no default", Kind: ir.KindDuration},
+			{Name: "path", Desc: "path", Kind: ir.KindPath, Default: str("data//app.db")},
+			{Name: "file", Desc: "file", Kind: ir.KindFile, Default: str("ca.pem")},
+			{Name: "url", Desc: "url", Kind: ir.KindURL, Default: str("https://example.com/x")},
+			{Name: "loc", Desc: "location", Kind: ir.KindLocation, Default: str("UTC")},
+			{Name: "url2", Desc: "url without default", Kind: ir.KindURL},
 		}}},
 		Commands: []ir.Command{{Name: "Run", Uses: []string{"k"}}},
 	}
@@ -248,6 +253,11 @@ func TestKindsGolden(t *testing.T) {
 		"k.d2":   {"1.5s", "1500 * time.Millisecond"},
 		"k.size": {"1MiB", "1048576"},
 		"k.f":    {"0.25", "0.25"},
+		// Parsed when loading: no Go literal.
+		"k.path": {"data//app.db", ""},
+		"k.file": {"ca.pem", ""},
+		"k.url":  {"https://example.com/x", ""},
+		"k.loc":  {"UTC", ""},
 	} {
 		if got[path] != want {
 			t.Errorf("%s: got %q, want %q", path, got[path], want)
@@ -258,6 +268,7 @@ func TestKindsGolden(t *testing.T) {
 func TestKindDefaults(t *testing.T) {
 	for kind, bad := range map[ir.Kind]string{
 		ir.KindDuration: "30", ir.KindByteSize: "1.5MiB", ir.KindFloat: "NaN", ir.KindUint: "-1", ir.KindInt64: "x",
+		ir.KindURL: "localhost:5432", ir.KindLocation: "Mars/Olympus_Mons",
 	} {
 		a := allKinds()
 		a.Groups[0].Keys = []ir.Key{{Name: "x", Desc: "x", Kind: kind, Default: str(bad)}}

@@ -412,6 +412,60 @@ func SecretFile(name, desc string) *SecretFileKey {
 	return k
 }
 
+// PathKey is a path setting, a string. Create it with Path.
+type PathKey struct{ key[*PathKey, string] }
+
+// Path declares a path key. Its value is cleaned, and a relative path in
+// the config file is made relative to the config file's directory; a
+// relative path from an env var, a flag or the default stays relative to
+// the working directory. The file isn't opened. Default takes a path.
+func Path(name, desc string) *PathKey {
+	k := &PathKey{}
+	k.init(k, name, desc, ir.KindPath, func(v string) string { return v }, caller(1))
+	return k
+}
+
+// FileKey is a file's contents, a []byte. Create it with File.
+type FileKey struct{ key[*FileKey, string] }
+
+// File declares a key whose setting is a path, and whose value is that
+// file's contents, exactly. The file is read while loading, only by
+// commands that load the key and only when it is relevant (RelevantIf). It
+// must be a regular file of at most 16 MiB. Paths resolve as for Path; an
+// empty file counts as not set. Default takes a path.
+func File(name, desc string) *FileKey {
+	k := &FileKey{}
+	k.init(k, name, desc, ir.KindFile, func(v string) string { return v }, caller(1))
+	return k
+}
+
+// URLKey is a URL setting, a *url.URL. Create it with URL.
+type URLKey struct{ key[*URLKey, string] }
+
+// URL declares a URL key. Values must be absolute URLs, with a scheme such
+// as https://; unset, the value is nil. Messages show a URL with its
+// password redacted. Default takes the URL's text.
+func URL(name, desc string) *URLKey {
+	k := &URLKey{}
+	k.init(k, name, desc, ir.KindURL, func(v string) string { return v }, caller(1))
+	return k
+}
+
+// LocationKey is a time zone setting, a *time.Location. Create it with
+// Location.
+type LocationKey struct{ key[*LocationKey, string] }
+
+// Location declares a time zone key. Values are IANA names, such as
+// Europe/Paris, or UTC or Local; unset, the value is nil. Zones are loaded
+// from the system's zoneinfo, so an image without it, such as one built
+// FROM scratch, needs import _ "time/tzdata" in main. Default takes the
+// zone's name, and is loaded when the key is.
+func Location(name, desc string) *LocationKey {
+	k := &LocationKey{}
+	k.init(k, name, desc, ir.KindLocation, func(v string) string { return v }, caller(1))
+	return k
+}
+
 // Usable is something a command can use: a group, nested or not, or a tag.
 type Usable interface {
 	usable()

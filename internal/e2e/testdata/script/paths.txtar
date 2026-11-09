@@ -1,0 +1,155 @@
+# M4.5: Path, File, URL and Location keys. Relative paths in the config file
+# are relative to its directory (A11); defaults take text (A6) and are parsed
+# when loading, so paths are cleaned for the OS the app runs on.
+# testscript can't unset a variable, so the steps that set env vars are ordered.
+go generate ./...
+go build -o app$exe .
+
+exec ./app$exe run --help
+stdout '--store-dir path\s+Data directory \(default "data//db"\)'
+stdout '--store-ca file\s+CA bundle\s'
+stdout '--db-url url\s+Database URL \(default "postgres://localhost:5432/app"\)'
+stdout '--sched-zone location\s+Scheduler time zone \(default Africa/Cairo\)'
+
+# Defaults: the path is cleaned, the URL parsed, the zone loaded. No CA is
+# set, so none is read.
+exec ./app$exe run
+stdout '^dir=data[/\\]db ca="" host=localhost:5432 zone=Africa/Cairo\r?\n$'
+! stderr .
+
+# A relative path from the config file is relative to its directory; an
+# absolute one isn't changed. File reads its file the same way, exactly.
+mkdir conf/certs
+cp files/app.yaml conf/app.yaml
+writebytes conf/certs/ca.pem 'CA\r\n'
+exec ./app$exe run --config conf/app.yaml
+stdout '^dir=conf[/\\]state ca="CA\\r\\n" host=db.internal zone=UTC\r?\n$'
+
+# From a flag or an env var, a relative path is relative to the working
+# directory, and cleaned.
+exec ./app$exe run --config conf/app.yaml --store-dir ./x/../y/ --store-ca conf/certs/ca.pem
+stdout '^dir=y ca="CA\\r\\n" '
+env APP_STORE_DIR=z//
+exec ./app$exe run
+stdout '^dir=z '
+
+# File must exist, be a regular file, and hold at most 16 MiB; an empty one
+# counts as not set.
+! exec ./app$exe run --store-ca missing.pem
+stderr '^  store.ca: missing.pem doesn''t exist \(flag --store-ca\)\r?$'
+writebytes big.pem x 16777217
+! exec ./app$exe run --store-ca big.pem
+stderr '^  store.ca: big.pem is larger than 16MiB \(flag --store-ca\)\r?$'
+writebytes big.pem x 16777216
+exec ./app$exe run --store-ca big.pem
+writebytes empty.pem ''
+! exec ./app$exe check --ca-bundle empty.pem
+stderr '^  ca.bundle: is required, but the file empty.pem is empty \(flag --ca-bundle\)\r?$'
+
+# URLs must be absolute; localhost:5432 parses with localhost as the scheme,
+# so it's rejected. Messages never show a password.
+! exec ./app$exe run --db-url localhost:5432
+stderr '^  db.url: isn''t an absolute URL: localhost: isn''t followed by // or /; write it as localhost://..., such as https://host:port \(flag --db-url\)\r?$'
+! exec ./app$exe run --db-url //admin:hunter2@db/app
+stderr '^  db.url: isn''t an absolute URL; it needs a scheme, such as https:// \(flag --db-url\)\r?$'
+! exec ./app$exe run --db-url 'https://admin:hunter2 db/app'
+stderr '^  db.url: isn''t a valid URL: invalid port \(flag --db-url\)\r?$'
+! exec ./app$exe run --db-url admin:hunter2@db/app
+! exec ./app$exe run --db-url postgres://admin:hunter2@db:port/app
+stderr 'db.url: isn''t a valid URL: invalid port'
+! stderr hunter2
+
+# Zones are IANA names; an empty value clears the default to nil.
+! exec ./app$exe run --sched-zone Mars/Olympus
+stderr '^  sched.zone: "Mars/Olympus" isn''t a time zone this system knows; use an IANA name such as Europe/Paris, or UTC \(flag --sched-zone\)\r?$'
+exec ./app$exe run --sched-zone Europe/Paris
+stdout ' zone=Europe/Paris\r?\n$'
+exec ./app$exe run --sched-zone=
+stdout ' zone=<nil>\r?\n$'
+
+# A key that isn't relevant keeps its default, and isn't checked.
+exec ./app$exe run --sched-enabled=false
+stdout ' zone=Africa/Cairo\r?\n$'
+exec ./app$exe run --sched-enabled=false --sched-zone Mars/Olympus
+stderr '^warning: sched.zone is set \(flag --sched-zone\) but ignored: it only matters when sched.enabled is set\r?$'
+stdout ' zone=Africa/Cairo\r?\n$'
+
+-- files/app.yaml --
+store:
+  dir: state
+  ca: certs/ca.pem
+db:
+  url: postgres://db.internal/app
+sched:
+  zone: UTC
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	_ "time/tzdata" // zones work on a system without zoneinfo, such as Windows CI
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(settings.RunCommand(&cobra.Command{Use: "run"},
+		func(_ context.Context, r *settings.Run) error {
+			host := "<nil>"
+			if u := r.DBURL(); u != nil {
+				host = u.Host
+			}
+			zone := "<nil>"
+			if z := r.SchedZone(); z != nil {
+				zone = z.String()
+			}
+			fmt.Printf("dir=%s ca=%q host=%s zone=%s\n", r.StoreDir(), r.StoreCa(), host, zone)
+			return nil
+		}))
+	root.AddCommand(settings.CheckCommand(&cobra.Command{Use: "check"},
+		func(_ context.Context, c *settings.Check) error { return nil }))
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var Store = dsl.Group("store", "Storage",
+	dsl.Path("dir", "Data directory").Default("data//db"),
+	dsl.File("ca", "CA bundle"),
+)
+
+var DB = dsl.Group("db", "Database",
+	dsl.URL("url", "Database URL").Default("postgres://localhost:5432/app"),
+)
+
+var (
+	schedEnabled = dsl.Bool("enabled", "Run the scheduler").Default(true)
+	schedZone    = dsl.Location("zone", "Scheduler time zone").Default("Africa/Cairo")
+)
+
+var Sched = dsl.Group("sched", "Scheduler", schedEnabled, schedZone).
+	Rules(dsl.RelevantIf(schedZone, schedEnabled))
+
+var CA = dsl.Group("ca", "CA check",
+	dsl.File("bundle", "CA bundle to check").Required(),
+)
+
+var App = dsl.App("app", "Test app", Store, DB, Sched, CA).ConfigFile("app", ".")
+
+var Run = dsl.Command("Run").Uses(Store, DB, Sched)
+
+var Check = dsl.Command("Check").Uses(CA)

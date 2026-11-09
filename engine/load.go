@@ -277,8 +277,8 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 		k.Default(v)
 		origins = append(origins, Origin{Layer: LayerDefault})
 	}
-	if k.File && k.DefaultText != "" {
-		win = &candidate{raw: k.DefaultText, origin: Origin{Layer: LayerDefault}, read: true}
+	if k.Default == nil && k.DefaultText != "" {
+		win = &candidate{raw: k.DefaultText, origin: Origin{Layer: LayerDefault}}
 		origins = append(origins, win.origin)
 	}
 	if !k.FlagOnly && l.file != nil {
@@ -367,16 +367,21 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 	if win != nil && k.File {
 		win.read = true
 	}
-	// set is the candidate that sets the key, if any: a File key's default
-	// path is a candidate, but not one that setting warnings are about.
+	// set is the candidate that sets the key, if any: a default parsed at
+	// load time is a candidate, but not one that setting warnings are about.
 	set := win
 	if set != nil && set.origin.Layer == LayerDefault {
 		set = nil
 	}
 
 	if ok, cond, condFailed := l.relevant(v, k); !ok {
-		// Not loaded: the default stays, nothing is parsed, read or checked.
+		// Not loaded: the default stays, nothing is read or checked. A
+		// default parsed at load time is applied if it parses; a File
+		// key's default path isn't read.
 		l.state[i] = irrelevant
+		if k.Default == nil && !k.File && k.DefaultText != "" {
+			_ = k.Set(v, k.DefaultText)
+		}
 		if set != nil && !condFailed && sets(k, set) {
 			where := set.origin.String()
 			l.warn(fmt.Sprintf("%s is set (%s) but ignored: it only matters when %s is set", k.Path, where, cond),
@@ -401,6 +406,9 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 			return
 		}
 		raw := win.raw
+		if k.Resolve && raw != "" {
+			raw = l.resolve(win)
+		}
 		if win.read && raw != "" {
 			var err error
 			if raw, err = l.readFile(k, win); err != nil {

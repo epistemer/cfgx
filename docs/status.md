@@ -4,6 +4,35 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M4.5 path, file, URL and zone keys
+
+- **Landed:**
+  - `dsl.Path`: cleaned; a relative path in the config file is relative to
+    the config file's directory, and elsewhere to the working directory.
+  - `dsl.File`: like `SecretFile`, but returns `[]byte`, up to 16 MiB.
+  - `dsl.URL` returns a `*url.URL`, and `dsl.Location` a `*time.Location`.
+  - Defaults of these kinds are text the app parses when it loads the key,
+    and only if nothing else sets it. A path default is cleaned for the OS the
+    app runs on, and a zone missing on that machine is a normal config
+    problem rather than a panic.
+- **Reviewed:** Gemini 3.8 Flash (High) on the diff, about 384k tokens
+  ([review 0012](reviews/0012-gemini-m4.5-review.md)). Two findings, both
+  password leaks in URL error messages; both fixed with tests. URL messages
+  now never quote the URL.
+- **Decided for you** (implementation.md §3.4):
+  - URLs must be absolute and not opaque. `localhost:5432` would otherwise
+    parse with `localhost` as the scheme. This also rules out `mailto:` and
+    `urn:`; use a `String` key for those.
+  - An unset `URL` or `Location` is nil.
+  - Zones come from the system. An image built `FROM scratch` needs
+    `import _ "time/tzdata"`, as the DSL docs say.
+  - Getters return shared values (`[]byte`, `*url.URL`); callers mustn't
+    modify them.
+- **Open:** `Test()` does no I/O, but a `Location` default needs
+  `LoadLocation`. To decide when `Test()` lands.
+- **Next:** M4.6 (lists and maps), then M4.7–M4.10.
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M4.4 secret keys
 
 - **Landed:**
