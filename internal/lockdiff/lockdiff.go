@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/epistemer/cfgx/internal/ir"
@@ -69,24 +70,24 @@ func keys(a *ir.App) map[string]ir.Key {
 	}
 	for _, c := range a.Commands {
 		for _, k := range c.Args {
-			flag := k.Flag
-			if flag == "" {
-				flag = strings.NewReplacer(".", "-", "_", "-").Replace(k.Name)
-			}
-			out[c.Name+" --"+flag] = k
+			// By declared name, so a Flag override that changes is a
+			// change to the same argument.
+			out[c.Name+" --"+strings.NewReplacer(".", "-", "_", "-").Replace(k.Name)] = k
 		}
 	}
 	return out
 }
 
+// text shows a default: quoted, or "no default".
 func text(p *string) string {
 	if p == nil {
-		return "none"
+		return "no default"
 	}
-	if *p == "" {
-		return `""`
-	}
-	return *p
+	return strconv.Quote(*p)
+}
+
+func sameDefault(a, b *string) bool {
+	return (a == nil) == (b == nil) && (a == nil || *a == *b)
 }
 
 func enumTexts(k ir.Key) []string {
@@ -139,15 +140,26 @@ func Diff(old, new *ir.App) []Change {
 			renamed[al] = path
 		}
 	}
+	matched := map[string]bool{} // new paths an old key maps to
 	for path, o := range ok {
 		n, still := nk[path]
-		if !still {
-			if to, r := renamed[path]; r {
-				add(Behaviour, path, "renamed to %s; the old name still works, with a warning", to)
-			} else {
-				add(Breaking, path, "removed")
-			}
+		if still {
+			matched[path] = true
+		} else if to, r := renamed[path]; r {
+			// Compare with the key it became; report under the old path.
+			add(Behaviour, path, "renamed to %s; the old name still works, with a warning", to)
+			n, matched[to] = nk[to], true
+		} else {
+			add(Breaking, path, "removed")
 			continue
+		}
+		// F3: an old name dropped stops working.
+		for _, al := range o.Aliases {
+			if !slices.Contains(n.Aliases, al) {
+				if _, now := nk[al]; !now {
+					add(Breaking, path, "old name %s no longer works", al)
+				}
+			}
 		}
 		if typeName(o) != typeName(n) {
 			add(Breaking, path, "type changed from %s to %s", typeName(o), typeName(n))
@@ -173,7 +185,11 @@ func Diff(old, new *ir.App) []Change {
 		for _, f := range []struct{ what, o, n string }{
 			{"env var", o.Env, n.Env}, {"flag", o.Flag, n.Flag}, {"config file key", o.FileKey, n.FileKey}, {"short flag", o.Short, n.Short},
 		} {
-			if f.o != f.n {
+			switch {
+			case f.o == f.n:
+			case f.what == "short flag" && f.o == "":
+				add(Safe, path, "short flag -%s added", f.n)
+			default:
 				add(Breaking, path, "%s override changed from %q to %q", f.what, f.o, f.n)
 			}
 		}
@@ -183,7 +199,7 @@ func Diff(old, new *ir.App) []Change {
 				add(Breaking, path, "can no longer come from the %s", map[string]string{"env": "environment", "file": "config file", "flag": "command line"}[s])
 			}
 		}
-		if text(o.Default) != text(n.Default) {
+		if !sameDefault(o.Default, n.Default) {
 			add(Behaviour, path, "default changed from %s to %s", text(o.Default), text(n.Default))
 		}
 		if (o.DefaultFunc == nil) != (n.DefaultFunc == nil) || o.DefaultFunc != nil && *o.DefaultFunc != *n.DefaultFunc {
@@ -203,7 +219,7 @@ func Diff(old, new *ir.App) []Change {
 		}
 	}
 	for path, n := range nk {
-		if _, was := ok[path]; was {
+		if matched[path] {
 			continue
 		}
 		if n.Required {

@@ -40,8 +40,12 @@ func TestDiff(t *testing.T) {
 		{"env override changed", app(port), app(with(port, func(k *ir.Key) { k.Env = "PGPORT" })), Breaking, "db.port", `env var override changed from "" to "PGPORT"`},
 		{"source dropped", app(port), app(with(port, func(k *ir.Key) { k.Sources = []string{"env", "file"} })), Breaking, "db.port", "can no longer come from the command line"},
 		{"env prefix", app(port), &ir.App{Name: "zp", EnvPrefix: "ZAYN", Groups: app(port).Groups}, Breaking, "app", "env prefix changed from ZP to ZAYN"},
-		{"default changed", app(port), app(with(port, func(k *ir.Key) { k.Default = str("6432") })), Behaviour, "db.port", "default changed from 5432 to 6432"},
-		{"default removed", app(port), app(with(port, func(k *ir.Key) { k.Default = nil })), Behaviour, "db.port", "default changed from 5432 to none"},
+		{"default changed", app(port), app(with(port, func(k *ir.Key) { k.Default = str("6432") })), Behaviour, "db.port", `default changed from "5432" to "6432"`},
+		{"default removed", app(port), app(with(port, func(k *ir.Key) { k.Default = nil })), Behaviour, "db.port", `default changed from "5432" to no default`},
+		{"default none", app(with(port, func(k *ir.Key) { k.Default = nil })), app(with(port, func(k *ir.Key) { k.Default = str("none") })), Behaviour, "db.port", `default changed from no default to "none"`},
+		{"alias dropped", app(with(port, func(k *ir.Key) { k.Aliases = []string{"db.pg_port"} })), app(port), Breaking, "db.port", "old name db.pg_port no longer works"},
+		{"renamed and retyped", app(port), app(with(port, func(k *ir.Key) { k.Name = "server_port"; k.Aliases = []string{"db.port"}; k.Kind = ir.KindString })), Breaking, "db.port", "type changed"},
+		{"short flag added", app(port), app(with(port, func(k *ir.Key) { k.Short = "p" })), Safe, "db.port", "short flag -p added"},
 		{"constraint", app(port), app(with(port, func(k *ir.Key) { k.Checks = []ir.Check{{Kind: ir.CheckMin, Args: []string{"1"}}} })), Behaviour, "db.port", "constraints changed from none to min(1)"},
 		{"renamed with alias", app(port), app(with(port, func(k *ir.Key) { k.Name = "server_port"; k.Aliases = []string{"db.port"} })), Behaviour, "db.port", "renamed to db.server_port"},
 		{"deprecated", app(port), app(with(port, func(k *ir.Key) { k.Deprecated = "use url" })), Behaviour, "db.port", "deprecated: use url"},
@@ -59,6 +63,14 @@ func TestDiff(t *testing.T) {
 			}
 			t.Errorf("want %s %s: %s; got %v", c.class, c.key, c.msg, got)
 		})
+	}
+	// A rename kept working by an alias isn't also an added key, even a
+	// required one.
+	req := with(port, func(k *ir.Key) { k.Required = true })
+	for _, ch := range Diff(app(req), app(with(req, func(k *ir.Key) { k.Name = "server_port"; k.Aliases = []string{"db.port"} }))) {
+		if ch.Key == "db.server_port" || ch.Class == Breaking {
+			t.Errorf("rename: unexpected %s %v", ch.Class, ch)
+		}
 	}
 	if got := Diff(app(port, mode), app(port, mode)); len(got) != 0 {
 		t.Errorf("no change: got %v", got)

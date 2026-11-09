@@ -17,7 +17,7 @@ Breaking:
   db.sslmode: value "allow" removed
 
 Behaviour changes:
-  db.port: default changed from 5432 to 6432
+  db.port: default changed from "5432" to "6432"
 
 Safe:
   db.user: added
