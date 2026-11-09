@@ -1,0 +1,52 @@
+# M6.3: cfgx diff compares lock files, breaking changes first. The new lock
+# defaults to the module's; -fail-breaking exits 1 on a breaking change.
+cd internal/settings
+exec go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+cp ../../cfgx.lock.json ../../old.lock.json
+cp ../../files/schema2.go schema/schema.go
+exec go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+exec go run github.com/epistemer/cfgx/cmd/cfgx diff ../../old.lock.json
+cmp stdout ../../want.txt
+! exec go run github.com/epistemer/cfgx/cmd/cfgx diff -fail-breaking ../../old.lock.json ../../cfgx.lock.json
+exec go run github.com/epistemer/cfgx/cmd/cfgx diff ../../cfgx.lock.json ../../cfgx.lock.json
+stdout '^No changes\.\r?$'
+
+-- want.txt --
+Breaking:
+  db.name: now required
+  db.sslmode: value "allow" removed
+
+Behaviour changes:
+  db.port: default changed from 5432 to 6432
+
+Safe:
+  db.user: added
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var DB = dsl.Group("db", "Database",
+	dsl.Int("port", "Port").Default(5432),
+	dsl.String("name", "Name"),
+	dsl.Enum("sslmode", "SSL mode", "disable", "allow").Default("disable"),
+)
+
+var App = dsl.App("app", "Test app", DB)
+-- files/schema2.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var DB = dsl.Group("db", "Database",
+	dsl.Int("port", "Port").Default(6432),
+	dsl.String("name", "Name").Required(),
+	dsl.Enum("sslmode", "SSL mode", "disable").Default("disable"),
+	dsl.String("user", "User"),
+)
+
+var App = dsl.App("app", "Test app", DB)
