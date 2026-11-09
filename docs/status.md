@@ -4,6 +4,26 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M6.5 test helpers
+
+- **Landed:**
+  - `settings.Test(func(v *settings.Values) {...})` returns an `*All`,
+    which implements every group and tag interface.
+  - It holds every default, changed by plain fields such as
+    `v.SMTP.Host = "localhost"`.
+  - It reads no config file, env var, flag or key file.
+  - `examples/zp` has the library test from interface §5.4.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 207k tokens
+  ([review 0019](reviews/0019-gemini-m6.5-review.md)). No findings. I added
+  a check for a case I found myself.
+- **Decided by you:** keep `dsl.FromFlag`, `dsl.FromEnv` and `dsl.FromFile`,
+  and `dsl.CompleteFunc`.
+- **Decided for you** (implementation.md §3.4): a `Location` default loads
+  its zone in `Test()` too, as `time.LoadLocation` does. Otherwise
+  `t.In(loc)` would panic in tests. It's the one read `Test()` makes.
+- **Next:** M6.6 (`LoadX` without cobra), then M6.1–M6.4.
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M5.8 examples/zp; M5 done
 
 - **Landed:**

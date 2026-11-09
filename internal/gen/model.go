@@ -612,6 +612,19 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			bad(tagPos[tm.Name], "tag %s isn't on any key; tag keys or groups with .Tags(%s)", tm.Name, tm.Name)
 		}
 	}
+	// A group's fields in Values: its keys' and its nested groups'. Only a
+	// key's GoName can make two the same.
+	for _, gm := range m.Groups {
+		leaves := map[string]bool{}
+		for _, k := range gm.Keys {
+			leaves[k.Leaf] = true
+		}
+		for _, c := range gm.Children {
+			if leaves[c.Leaf] {
+				bad(gm.pos, "group %q has a key and a nested group that are both %s in Values; rename one with GoName", gm.Path, c.Leaf)
+			}
+		}
+	}
 	// A computed method can't share a name with a getter or another computed
 	// method in its group's interface, embedded groups included.
 	// Two getters with one name (GoName) are reported as a Go name
