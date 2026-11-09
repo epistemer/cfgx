@@ -16,7 +16,7 @@ import (
 // EnumKey is a setting that takes one of a fixed set of values of type T.
 // Create it with Enum.
 type EnumKey[T comparable] struct {
-	key[*EnumKey[T], T]
+	key[*EnumKey[T], T, T]
 	values []T
 }
 

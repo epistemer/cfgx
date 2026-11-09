@@ -1,0 +1,56 @@
+# M4.8: packages the generated code would import for a key are checked with
+# one go list call: none may import cfgx/dsl, and internal/ packages must be
+# importable from the generated package. Each problem points at the schema
+# line that passed the function or type.
+! go generate ./...
+stderr 'schema.go:13: s.a: Validate function Check is in example.com/e2e/rules, which imports github.com/epistemer/cfgx/dsl; generated code must never import it, so move the Validate to a package that doesn''t'
+stderr 'schema.go:14: s.b: Validate function Check is in example.com/e2e/internal/settings/schema/internal/hidden, an internal package the generated package example.com/e2e/internal/settings can''t import'
+stderr 'schema.go:15: s.mode: type rules.Mode is in example.com/e2e/rules, which imports github.com/epistemer/cfgx/dsl'
+stderr 'schema.go:17: s.status: type settings.Status is declared in the generated package example.com/e2e/internal/settings, which can''t import itself'
+! stderr 'schema.go:16'
+
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+
+type Status string
+-- rules/rules.go --
+package rules
+
+import "github.com/epistemer/cfgx/dsl"
+
+var _ = dsl.String
+
+type Mode string
+
+func Check(string) error { return nil }
+-- internal/settings/schema/internal/hidden/hidden.go --
+package hidden
+
+func Check(string) error { return nil }
+-- internal/ok/ok.go --
+package ok
+
+func Check(string) error { return nil }
+-- internal/settings/schema/schema.go --
+package schema
+
+import (
+	"github.com/epistemer/cfgx/dsl"
+
+	"example.com/e2e/internal/ok"
+	"example.com/e2e/internal/settings"
+	"example.com/e2e/rules"
+	"example.com/e2e/internal/settings/schema/internal/hidden"
+)
+
+var S = dsl.Group("s", "S",
+	dsl.String("a", "A").Validate(rules.Check),
+	dsl.String("b", "B").Validate(hidden.Check),
+	dsl.Enum("mode", "Mode", rules.Mode("x")),
+	dsl.String("c", "C").Validate(ok.Check),
+	dsl.Enum("status", "Status", settings.Status("ok")),
+)
+
+var App = dsl.App("app", "Test app", S)

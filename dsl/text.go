@@ -13,7 +13,7 @@ import (
 // TextKey is a setting of any type that parses itself from text. Create it
 // with Text.
 type TextKey[T any] struct {
-	key[*TextKey[T], T]
+	key[*TextKey[T], T, T]
 }
 
 var textUnmarshaler = reflect.TypeFor[encoding.TextUnmarshaler]()

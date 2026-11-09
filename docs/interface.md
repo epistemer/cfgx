@@ -262,9 +262,9 @@ zone name (A6).
 | `.DefaultFunc(f)` | default computed at startup by a top-level `func() T` (e.g. `runtime.NumCPU`) |
 | `.Example(v)` | shown in example files instead of the default |
 | `.Required()` | must be *set* (§3.5) after merging |
-| `.Range(min, max)`, `.Min`, `.Max` | numeric/duration bounds |
-| `.Len(min, max)`, `.Pattern(re)` | string constraints |
-| `.Validate(f)` | top-level `func(T) error`; closures rejected at generate time |
+| `.Range(min, max)`, `.Min`, `.Max` | numeric/duration bounds, checked when the key is set |
+| `.Len(min, max)`, `.Pattern(re)` | string constraints, checked when the key is set; `Pattern` matches the whole value |
+| `.Validate(f)` | top-level `func(T) error`, where T is the getter's type; runs after the constraints, when the key is set; closures rejected at generate time |
 | `.Tags(t...)` | add to tag interfaces |
 | `.Short('p')` | short flag |
 | `.Flag(name)`, `.Env(name)`, `.Key(name)` | override derived names |

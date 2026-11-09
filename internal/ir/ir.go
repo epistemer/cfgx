@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 13
+const Version = 14
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -116,10 +116,41 @@ type Key struct {
 	Type *Type `json:"type,omitempty"`
 	// Enum lists an enum's values, in declaration order.
 	Enum []EnumValue `json:"enum,omitempty"`
+	// Checks are the key's constraints, in declaration order.
+	Checks []Check `json:"checks,omitempty"`
+	// Validate and DefaultFunc are functions the generated code calls.
+	Validate    *FuncRef `json:"validate,omitempty"`
+	DefaultFunc *FuncRef `json:"defaultFunc,omitempty"`
 	// Problems were found while the schema ran, such as a MarshalText
 	// error; the generator reports them at Pos.
 	Problems []string `json:"problems,omitempty"`
 	Pos      Pos      `json:"pos"`
+}
+
+// The kinds of checks.
+const (
+	CheckMin     = "min"     // Args: the minimum, in the key's text form
+	CheckMax     = "max"     // Args: the maximum
+	CheckLen     = "len"     // Args: the least and most characters
+	CheckPattern = "pattern" // Args: a regular expression the whole value matches
+)
+
+// Check is a constraint on a key's value.
+type Check struct {
+	Kind string   `json:"kind"`
+	Args []string `json:"args"`
+}
+
+// FuncRef names a top-level function the schema passed, from
+// runtime.FuncForPC.
+type FuncRef struct {
+	// Path is the function's package path, unescaped; Name its name.
+	Path string `json:"path"`
+	Name string `json:"name"`
+	// Problem is why the function can't be referenced, found by the DSL:
+	// a closure, a method, an unexported or generic function.
+	Problem string `json:"problem,omitempty"`
+	Pos     Pos    `json:"pos"`
 }
 
 // Type is a Go type the generated code names.

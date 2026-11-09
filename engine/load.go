@@ -459,6 +459,16 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 			return
 		}
 	}
+	if k.Check != nil && k.IsSet(v) {
+		if err := k.Check(v); err != nil {
+			src := "default"
+			if win != nil {
+				src = win.origin.String()
+			}
+			l.errs = append(l.errs, cfgx.Problem{Key: k.Path, Message: err.Error(), Source: src})
+			return
+		}
+	}
 	if k.Required && !k.IsSet(v) && !l.condOnly[i] {
 		if win != nil && win.read && win.raw != "" {
 			l.errs = append(l.errs, cfgx.Problem{Key: k.Path, Message: "is required, but the file " + l.resolve(win) + " is empty", Source: win.origin.String()})

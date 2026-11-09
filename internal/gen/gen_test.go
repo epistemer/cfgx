@@ -236,6 +236,15 @@ func allKinds() *ir.App {
 			{Name: "none2", Desc: "empty list", Kind: ir.KindStrings, Default: str("")},
 			{Name: "cidr", Desc: "text", Kind: ir.KindText, Default: str("10.0.0.0/8"),
 				Type: &ir.Type{Path: "net/netip", Pkg: "netip", Name: "Prefix", Kind: "struct"}},
+			{Name: "port", Desc: "checked int", Kind: ir.KindInt, Default: str("80"),
+				Checks: []ir.Check{{Kind: ir.CheckMin, Args: []string{"1"}}, {Kind: ir.CheckMax, Args: []string{"65535"}}}},
+			// The golden file is compiled, so Validate names a real function
+			// of the right type; what it does doesn't matter here.
+			{Name: "name", Desc: "checked string", Kind: ir.KindString,
+				Checks:   []ir.Check{{Kind: ir.CheckLen, Args: []string{"1", "8"}}, {Kind: ir.CheckPattern, Args: []string{"[a-z]+"}}},
+				Validate: &ir.FuncRef{Path: "errors", Name: "New"}},
+			{Name: "cpus", Desc: "computed default", Kind: ir.KindInt, DefaultFunc: &ir.FuncRef{Path: "runtime", Name: "NumCPU"}},
+			{Name: "wait", Desc: "checked duration", Kind: ir.KindDuration, Checks: []ir.Check{{Kind: ir.CheckMin, Args: []string{"1500ms"}}}},
 		}}},
 		Commands: []ir.Command{{Name: "Run", Uses: []string{"k"}}},
 	}
@@ -643,5 +652,37 @@ var (
 				t.Fatalf("generated code doesn't vet: %v\n%s\n%s", err, out, src)
 			}
 		})
+	}
+}
+
+func TestFuncRefRules(t *testing.T) {
+	for _, c := range []struct {
+		from, to string
+		ok       bool
+	}{
+		{"m/a", "m/internal/x", true},
+		{"m/internal/settings", "m/internal/x", true},
+		{"m/internal/settings", "m/internal/settings/schema/internal/x", false},
+		{"other/a", "m/internal/x", false},
+		{"m/a", "internal/abi", false},
+		{"m/a", "m/x", true},
+	} {
+		if got := internalOK(c.from, c.to); got != c.ok {
+			t.Errorf("internalOK(%s, %s) = %v", c.from, c.to, got)
+		}
+	}
+	for p, want := range map[string]string{"gopkg.in/yaml.v3": "yaml", "x/go-cmp": "go_cmp", "math/rand/v2": "v2", "x/2fa": "pkg", "runtime": "runtime"} {
+		if got := guessAlias(p); got != want {
+			t.Errorf("guessAlias(%s) = %s, want %s", p, got, want)
+		}
+	}
+	a := allKinds()
+	a.Groups[0].Keys = []ir.Key{{Name: "x", Desc: "x", Kind: ir.KindInt, Validate: &ir.FuncRef{Path: "main", Name: "Check"}}}
+	if _, err := Build(a, "settings"); err == nil || !strings.Contains(err.Error(), "k.x: Validate: main.Check is in package main") {
+		t.Errorf("a function in main: %v", err)
+	}
+	a.Groups[0].Keys = []ir.Key{{Name: "x", Desc: "x", Kind: ir.KindString, Checks: []ir.Check{{Kind: ir.CheckMin, Args: []string{"1"}}}}}
+	if _, err := Build(a, "settings"); err == nil || !strings.Contains(err.Error(), "Min, Max and Range need a number or duration key") {
+		t.Errorf("Min on a string: %v", err)
 	}
 }
