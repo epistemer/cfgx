@@ -4,6 +4,31 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M4.10 completion; M4 done
+
+- **Landed:** `Complete(dsl.Files("*.pem"))`, `dsl.Dirs()` and
+  `dsl.CompleteFunc(f)`. Enums complete their values automatically, and
+  `--config` completes the app's file formats. A testscript runs cobra's
+  `__complete` and checks the candidates.
+- **M4 is done.** Every key kind and modifier in interface §3.2–3.3 that M4
+  covers has golden and e2e tests. Only the store and reload modifiers
+  (`Mutable`, `Epoch`, `Reloadable`) are left, for M7.
+- **Reviewed:** Gemini 3.8 Flash (High)
+  ([review 0017](reviews/0017-gemini-m4.10-review.md)). All 3 findings
+  fixed: completion on alias flags, `Files` patterns, and `Complete` on an
+  enum. This review cost about 1.04M tokens because Gemini read the repo
+  despite the diff-only folder. I'll watch for that.
+- **Decided for you** (implementation.md §3.4): a custom completion is
+  `dsl.CompleteFunc(f)`, with `f` a top-level `func(toComplete string)
+  []string`. Go can't pass a bare function where `Files` and `Dirs` values
+  go.
+- **Pending:** M4's milestone review on Argon High, together with the
+  second review of M3, once Argon's quota resets (about 2026-11-14).
+- **Next:** M5.8 (`examples/zp`, which needed M4), then M6, the developer
+  surface.
+- **Waiting on you:** the same naming veto as M4.9 (`dsl.FromFlag`/
+  `FromEnv`/`FromFile`), plus `dsl.CompleteFunc`.
+
 ## 2026-11-09: M4.9 naming and source modifiers
 
 - **Landed:** `Short`, `Flag`, `Env`, `Key`, `GoName`, `Sources`, `Hidden`

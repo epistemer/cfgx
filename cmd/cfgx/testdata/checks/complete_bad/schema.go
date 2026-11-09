@@ -10,4 +10,9 @@ var G = dsl.Group("g", "G",
 	dsl.Secret("c", "C").Complete(dsl.Dirs()),              // want "g.c has a completion but no flag"
 )
 
-var App = dsl.App("app", "A", G)
+var H = dsl.Group("h", "H",
+	dsl.Path("a", "A").Complete(dsl.Files("*..pem", "*.tar.gz")), // want "h.a: Files pattern \"*..pem\" must be *.ext"
+	dsl.Enum("env", "Env", "dev", "prod").Complete(dsl.Dirs()),   // want "h.env: an enum completes its values"
+)
+
+var App = dsl.App("app", "A", G, H)

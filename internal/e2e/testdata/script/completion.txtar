@@ -9,6 +9,9 @@ exec ./app$exe __complete run --log-level ''
 cmp stdout want-level.txt
 exec ./app$exe __complete run --log-level w
 cmp stdout want-level-w.txt
+# An alias flag completes like the key's own.
+exec ./app$exe __complete run --log-verbosity w
+cmp stdout want-level-w.txt
 
 exec ./app$exe __complete run --tls-cert ''
 cmp stdout want-cert.txt
@@ -100,7 +103,7 @@ import (
 )
 
 var Log = dsl.Group("log", "Logging",
-	dsl.Enum("level", "Level", "debug", "info", "warn").Default("info"),
+	dsl.Enum("level", "Level", "debug", "info", "warn").Default("info").Alias("log.verbosity"),
 )
 
 var TLS = dsl.Group("tls", "TLS",

@@ -21,8 +21,17 @@ func bindCompletions[V any](cmd *cobra.Command, keys []Key[V], idx []int) {
 		if k.Flag == "" {
 			continue
 		}
-		if fn := completion(k); fn != nil {
-			_ = cmd.RegisterFlagCompletionFunc(k.Flag, fn)
+		fn := completion(k)
+		if fn == nil {
+			continue
+		}
+		_ = cmd.RegisterFlagCompletionFunc(k.Flag, fn)
+		// Alias flags, still accepted, complete the same way; one that
+		// another key registered first keeps that key's completion.
+		for _, a := range k.Aliases {
+			if a.Flag != "" {
+				_ = cmd.RegisterFlagCompletionFunc(a.Flag, fn)
+			}
 		}
 	}
 }

@@ -2,6 +2,7 @@ package dsl
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/epistemer/cfgx/internal/ir"
@@ -14,13 +15,16 @@ type Completion struct {
 	problems []string
 }
 
+// extRE is a file extension shells can filter on: pem, tar.gz.
+var extRE = regexp.MustCompile(`^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*$`)
+
 // Files completes file names; with patterns such as "*.pem", only files
 // with those extensions.
 func Files(patterns ...string) Completion {
 	var c Completion
 	for _, p := range patterns {
 		ext, ok := strings.CutPrefix(p, "*.")
-		if !ok || ext == "" || strings.ContainsAny(ext, "*?[]/\\") {
+		if !ok || !extRE.MatchString(ext) {
 			c.problems = append(c.problems, fmt.Sprintf("Files pattern %q must be *.ext, such as *.pem", p))
 			continue
 		}
@@ -45,6 +49,9 @@ func CompleteFunc(f func(toComplete string) []string) Completion {
 // Complete sets how the key's flag completes in the shell.
 func (k *key[K, T, G]) Complete(c Completion) K {
 	k.problems = append(k.problems, c.problems...)
+	if k.kind == ir.KindEnum {
+		k.problems = append(k.problems, "an enum completes its values; it can't have another completion")
+	}
 	cc := c.c
 	k.complete = &cc
 	return k.self
