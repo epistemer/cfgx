@@ -22,7 +22,9 @@ import (
 	"time"
 
 	"github.com/epistemer/cfgx/internal/gen"
+	"github.com/epistemer/cfgx/internal/ir"
 	"github.com/epistemer/cfgx/internal/loader"
+	"github.com/epistemer/cfgx/internal/lockdiff"
 )
 
 func main() {
@@ -30,14 +32,22 @@ func main() {
 }
 
 const usage = `usage: cfgx gen [-check] [-timeout d] [-artifacts dir] <schema package>
+       cfgx diff [-fail-breaking] <old cfgx.lock.json> [<new cfgx.lock.json>]
 
 Runs the schema package and writes zz_<package>.go in the current directory,
 and the example config, its JSON Schema, .env.example, docs/CONFIG.md and
 cfgx.lock.json under the module root, or under -artifacts dir ("-" for none).
 With -check, it writes nothing and fails if any of them is stale.
+
+diff lists what changed between two lock files, breaking changes first; the
+new one defaults to the module's cfgx.lock.json. With -fail-breaking, it
+exits 1 when a change is breaking.
 `
 
 func run(ctx context.Context, args []string, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "diff" {
+		return diff(ctx, args[1:], os.Stdout, stderr)
+	}
 	if len(args) == 0 || args[0] != "gen" {
 		fmt.Fprint(stderr, usage)
 		return 2
@@ -173,4 +183,49 @@ func packageName(ctx context.Context, dir string) (string, error) {
 		return "", fmt.Errorf("can't tell which package %s is; run cfgx through go generate, or from a directory with Go files", dir)
 	}
 	return name, nil
+}
+
+// diff runs cfgx diff.
+func diff(ctx context.Context, args []string, stdout, stderr io.Writer) int {
+	fs := flag.NewFlagSet("cfgx diff", flag.ContinueOnError)
+	fs.SetOutput(stderr)
+	failBreaking := fs.Bool("fail-breaking", false, "exit 1 if a change is breaking")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if fs.NArg() < 1 || fs.NArg() > 2 {
+		fmt.Fprint(stderr, usage)
+		return 2
+	}
+	newPath := fs.Arg(1)
+	if newPath == "" {
+		wd, err := os.Getwd()
+		if err == nil {
+			var root string
+			if root, err = moduleRoot(ctx, wd); err == nil {
+				newPath = filepath.Join(root, "cfgx.lock.json")
+			}
+		}
+		if err != nil {
+			fmt.Fprintln(stderr, "cfgx:", err)
+			return 1
+		}
+	}
+	var apps [2]*ir.App
+	for i, p := range []string{fs.Arg(0), newPath} {
+		data, err := os.ReadFile(p)
+		if err == nil {
+			apps[i], err = lockdiff.Parse(data)
+		}
+		if err != nil {
+			fmt.Fprintf(stderr, "cfgx: %s: %v\n", p, err)
+			return 1
+		}
+	}
+	changes := lockdiff.Diff(apps[0], apps[1])
+	fmt.Fprint(stdout, lockdiff.Report(changes))
+	if *failBreaking && len(changes) > 0 && changes[0].Class == lockdiff.Breaking {
+		return 1
+	}
+	return 0
 }

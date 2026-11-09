@@ -4,6 +4,24 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M6.3 cfgx diff
+
+- **Landed:** `cfgx diff old.lock [new.lock]` lists what changed for
+  operators, under Breaking, Behaviour changes and Safe.
+  - Breaking: removed or retyped keys, removed enum values, newly required
+    keys.
+  - Behaviour changes: changed defaults.
+  - Safe: added keys, new enum values, description edits.
+
+  A rename kept working by an alias counts as a behaviour change.
+  `-fail-breaking` exits 1, for CI.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 62k tokens
+  ([review 0023](reviews/0023-gemini-m6.3-review.md)). 5 of 6 findings
+  fixed, mostly around renames.
+- **Next:** M6.4, the `config` subcommand, the last coding item in M6.
+  M6.7 is the manual VS Code check, which is yours.
+- **Waiting on you:** nothing yet.
+
 ## 2026-11-09: M6.2 gen -check
 
 - **Landed:** `cfgx gen -check` writes nothing and fails, naming every

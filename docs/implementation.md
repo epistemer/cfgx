@@ -678,6 +678,18 @@ unknown.
   checks exactly what `go generate` would write. `examples/zp` calls it, so
   the examples test, which runs the example's tests, fails on a stale file
   twice over.
+- **[decided, M6.3]** `cfgx diff old.lock [new.lock]` (new defaults to the
+  module's `cfgx.lock.json`) compares keys by declared path, and command
+  arguments as `Command --flag`. Breaking: a key removed (unless an alias
+  in the new lock keeps its old path, which is a behaviour change), a type
+  or enum type changed, an enum value removed, a key newly required or
+  added as required, an `Env`/`Flag`/`Key`/`Short` override changed, a
+  source dropped, the env prefix or config file name changed. Behaviour:
+  a default, `DefaultFunc`, constraint or `Validate` changed, a key newly
+  deprecated, the search paths changed. Safe: optional keys and enum values
+  added, `Required` dropped, descriptions changed. The report groups them
+  under those headings; `-fail-breaking` exits 1 on a breaking change, for
+  CI. A lock file of any IR version parses; unknown fields are ignored.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree
