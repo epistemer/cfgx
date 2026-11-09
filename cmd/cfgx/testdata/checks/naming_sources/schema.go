@@ -10,4 +10,13 @@ var G = dsl.Group("g", "G",
 	dsl.Secret("e", "E").Short('e'),                         // want "g.e is a Secret, which never has a flag"
 )
 
-var App = dsl.App("app", "A", G)
+type CIDR struct{ s string }
+
+func (c *CIDR) UnmarshalText(b []byte) error { c.s = string(b); return nil }
+
+var H = dsl.Group("h", "H",
+	dsl.String("twice", "T").Sources(dsl.FromFile, dsl.FromFile), // want "h.twice can only come from the config file, but the app has none"
+	dsl.Text("cidr", "C", CIDR{}).Example(CIDR{"x"}),             // want "h.cidr: an example needs schema.CIDR to implement encoding.TextMarshaler"
+)
+
+var App = dsl.App("app", "A", G, H)

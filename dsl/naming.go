@@ -2,6 +2,7 @@ package dsl
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/epistemer/cfgx/internal/ir"
 )
@@ -79,7 +80,9 @@ func (k *key[K, T, G]) Sources(sources ...Source) K {
 			k.problems = append(k.problems, fmt.Sprintf("Sources: unknown source %d", s))
 			continue
 		}
-		k.sources = append(k.sources, name)
+		if !slices.Contains(k.sources, name) {
+			k.sources = append(k.sources, name)
+		}
 	}
 	if k.kind == ir.KindSecret {
 		for _, s := range k.sources {

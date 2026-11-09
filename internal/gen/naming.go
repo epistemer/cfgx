@@ -68,7 +68,8 @@ func afterKind(km *KeyModel, k ir.Key, app *ir.App, prefix string, bad func(ir.P
 		}
 		if !slices.Contains(k.Sources, "file") {
 			km.NoFile = true
-		} else if app.ConfigFile == "" && len(k.Sources) == 1 {
+		}
+		if app.ConfigFile == "" && km.Flag == "" && km.Env == "" && !km.NoFile {
 			bad(k.Pos, "%s can only come from the config file, but the app has none (App.ConfigFile)", km.Path)
 		}
 		if (k.Flag != "" || k.Short != "") && km.Flag == "" {
