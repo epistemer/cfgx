@@ -51,7 +51,9 @@ stderr '^  ca.bundle: is required, but the file empty.pem is empty \(flag --ca-b
 ! exec ./app$exe run --db-url localhost:5432
 stderr '^  db.url: isn''t an absolute URL: localhost: isn''t followed by // or /; write it as localhost://..., such as https://host:port \(flag --db-url\)\r?$'
 ! exec ./app$exe run --db-url //admin:hunter2@db/app
-stderr 'db.url: "//admin:xxxxx@db/app" isn''t an absolute URL; it needs a scheme'
+stderr '^  db.url: isn''t an absolute URL; it needs a scheme, such as https:// \(flag --db-url\)\r?$'
+! exec ./app$exe run --db-url 'https://admin:hunter2 db/app'
+stderr '^  db.url: isn''t a valid URL: invalid port \(flag --db-url\)\r?$'
 ! exec ./app$exe run --db-url admin:hunter2@db/app
 ! exec ./app$exe run --db-url postgres://admin:hunter2@db:port/app
 stderr 'db.url: isn''t a valid URL: invalid port'

@@ -33,13 +33,16 @@ func TestParsePathURLLocation(t *testing.T) {
 	}
 	// No message shows a password.
 	for raw, want := range map[string]string{
-		"//u:hunter2@host/db":      `"//u:xxxxx@host/db" isn't an absolute URL; it needs a scheme`,
-		"user:hunter2@host/db":     "isn't an absolute URL: user: isn't followed by // or /",
-		"https://u:hunter2@h:port": "isn't a valid URL: invalid port",
-		"localhost:5432":           "isn't an absolute URL: localhost: isn't followed",
+		"//u:hunter2@host/db":                 "isn't an absolute URL; it needs a scheme",
+		"db/app?password=hunter2":             "isn't an absolute URL; it needs a scheme",
+		"user:hunter2@host/db":                "isn't an absolute URL: user: isn't followed by // or /",
+		"https://u:hunter2@h:port":            "isn't a valid URL: invalid port",
+		"https://user:hunter2 host.internal/": "isn't a valid URL: invalid port",
+		"https://h/\x01hunter2":               "isn't a valid URL: invalid control character in URL",
+		"localhost:5432":                      "isn't an absolute URL: localhost: isn't followed",
 	} {
 		err := ParseURL(raw, &u)
-		if err == nil || !strings.Contains(err.Error(), want) || strings.Contains(err.Error(), "hunter2") {
+		if err == nil || !strings.HasPrefix(err.Error(), want) || strings.Contains(err.Error(), "hunter2") {
 			t.Errorf("ParseURL(%q) = %v; want %q, without the password", raw, err, want)
 		}
 	}

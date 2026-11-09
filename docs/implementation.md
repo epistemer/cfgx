@@ -490,8 +490,10 @@ unknown.
   - `URL` must be absolute and not opaque: `localhost:5432` and
     `user:pw@host` parse with the first word as the scheme, so they're
     rejected, as are `mailto:` and `urn:` URLs (use a `String` key for
-    those). Messages quote a URL only through `Redacted()`, or not at all,
-    since a URL may hold a password.
+    those). Messages never quote a URL, nor the quoted parts of `url.Parse`'s
+    errors (`invalid port ":pw host"` becomes `invalid port`): a password
+    can sit in the user info, the query, or anywhere in a malformed URL, and
+    `Redacted()` only hides a parsed user info's.
   - `Location` takes `time.LoadLocation` names: IANA names, `UTC`, `Local`.
     An empty value is nil, so a `Location` without a default or `Required`
     may be nil. Zones come from the system's zoneinfo; an image without it

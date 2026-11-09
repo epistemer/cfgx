@@ -236,8 +236,9 @@ func ParseBytes(raw string, dst *[]byte) error {
 // ParseURL parses an absolute URL, such as https://host/path or
 // file:///path; empty means nil. Opaque URLs, such as mailto:x, are
 // rejected: that is how localhost:5432 parses, with localhost as the
-// scheme. A URL may hold a password, so messages show it redacted, or not
-// at all.
+// scheme. A URL may hold a password, in its user info, its query or, when
+// it is malformed, anywhere, so messages never quote it, or the parts of
+// url.Parse's message that quote it.
 func ParseURL(raw string, dst **url.URL) error {
 	s := strings.TrimSpace(raw)
 	if s == "" {
@@ -250,10 +251,13 @@ func ParseURL(raw string, dst **url.URL) error {
 		if errors.As(err, &ue) {
 			err = ue.Err
 		}
-		return fmt.Errorf("isn't a valid URL: %v", err)
+		// "invalid port \":pw host\" after host" becomes "invalid port".
+		msg, _, _ := strings.Cut(err.Error(), `"`)
+		msg = strings.TrimPrefix(strings.TrimSpace(msg), "net/url: ")
+		return fmt.Errorf("isn't a valid URL: %s", msg)
 	}
 	if u.Scheme == "" {
-		return fmt.Errorf("%q isn't an absolute URL; it needs a scheme, such as https://", u.Redacted())
+		return errors.New("isn't an absolute URL; it needs a scheme, such as https://")
 	}
 	if u.Opaque != "" {
 		// What follows the scheme may be a password: user:pw@host.
