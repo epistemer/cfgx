@@ -62,6 +62,8 @@ type KeyModel struct {
 	Quote, Bool              bool
 	Required, Global         bool
 	FlagOnly                 bool
+	FileEnv, File            bool  // see engine.Key
+	MaxFileSize              int64 // see engine.Key
 	Tags                     []string
 	Aliases                  []AliasModel
 	Deprecated               string
@@ -79,6 +81,14 @@ type KeyModel struct {
 
 // EnumModel is one value of an enum key.
 type EnumModel struct{ Text, Lit string }
+
+// fileEnv is env's _FILE variant if km has one, else "".
+func fileEnv(km *KeyModel, env string) string {
+	if !km.FileEnv {
+		return ""
+	}
+	return env + "_FILE"
+}
 
 // nonZeroDefault reports whether the key's default counts as set (A4).
 func (k *KeyModel) nonZeroDefault() bool {
@@ -463,7 +473,10 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				seen map[string]ir.Pos
 				name string
 				what string
-			}{{flags, km.Flag, "flag --"}, {envs, km.Env, "env var "}, {fields, km.Field, "Go name "}, {paths, km.Path, "file key "}} {
+			}{{flags, km.Flag, "flag --"}, {envs, km.Env, "env var "}, {envs, fileEnv(km, km.Env), "env var "}, {fields, km.Field, "Go name "}, {paths, km.Path, "file key "}} {
+				if c.name == "" {
+					continue
+				}
 				if prev, ok := c.seen[c.name]; ok {
 					bad(k.Pos, "%s%s of %s collides with another key or group (declared at %s)", c.what, c.name, km.Path, prev)
 				}
@@ -491,12 +504,18 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 					continue
 				}
 				aliasEnv := prefix + "_" + strings.ToUpper(strings.ReplaceAll(alias, ".", "_"))
-				aliasFlag := dashed(alias)
+				aliasFlag := ""
+				if km.Flag != "" {
+					aliasFlag = dashed(alias)
+				}
 				for _, c := range []struct {
 					seen map[string]ir.Pos
 					name string
 					what string
-				}{{flags, aliasFlag, "flag --"}, {envs, aliasEnv, "env var "}, {paths, alias, "file key "}} {
+				}{{flags, aliasFlag, "flag --"}, {envs, aliasEnv, "env var "}, {envs, fileEnv(km, aliasEnv), "env var "}, {paths, alias, "file key "}} {
+					if c.name == "" {
+						continue
+					}
 					if prev, ok := c.seen[c.name]; ok {
 						bad(k.Pos, "%s%s of %s collides with another key or group (declared at %s)", c.what, c.name, km.Path, prev)
 					}
@@ -751,6 +770,10 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 				for _, p := range k.Problems {
 					bad(k.Pos, "%s: %s", km.Path, p)
 				}
+				continue
+			}
+			if k.Kind == ir.KindSecret {
+				bad(k.Pos, "argument %s of %s is a Secret, which never has a flag, and arguments are flag-only", km.Path, c.Name)
 				continue
 			}
 			if err := kindInfo(km, k, imp); err != nil {

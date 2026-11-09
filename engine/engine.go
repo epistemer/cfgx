@@ -36,6 +36,14 @@ type Key[V any] struct {
 	Enum        []string // an enum's values, in order; listed in --help
 	Aliases     []Alias
 	Deprecated  string
+	// FileEnv makes <Env>_FILE name a file holding the value, minus one
+	// trailing newline (Secret). Setting both is a problem.
+	FileEnv bool
+	// File makes the value a path, and the key's value that file's contents
+	// (SecretFile). DefaultText is then the default path, and Default is nil.
+	File bool
+	// MaxFileSize caps what FileEnv and File read, in bytes.
+	MaxFileSize int64
 	// RelevantIf lists keys that must all be set for this key to matter.
 	// Otherwise it keeps its default, isn't validated, and setting it warns.
 	RelevantIf []int

@@ -244,23 +244,39 @@ func (l *loader[V]) at(p node.Pos) string {
 	return fmt.Sprintf("%s:%d:%d", l.file.path, p.Line, p.Col)
 }
 
-// candidate is one layer's value for a key. bad, if set, is why the file's
-// value can't be used; it is reported only if this layer wins.
+// candidate is one layer's value for a key. bad, if set, is why the
+// value can't be used; it is reported only if this layer wins. If read is
+// set, raw is a path, and the value is that file's contents.
 type candidate struct {
 	raw    string
 	origin Origin
 	keyPos node.Pos
 	bad    *cfgx.Problem
+	read   bool
+	trim   bool // remove one trailing newline from what is read
+}
+
+// sets reports whether c would set key k (A4). A path counts as set if it
+// isn't empty: the file isn't read for this.
+func sets[V any](k *Key[V], c *candidate) bool {
+	if c.read {
+		return c.raw != ""
+	}
+	return setsValue(k, c.raw)
 }
 
 func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) (string, bool)) {
 	k := &l.a.Keys[i]
 	var origins []Origin
+	var win *candidate
 	if k.Default != nil {
 		k.Default(v)
 		origins = append(origins, Origin{Layer: LayerDefault})
 	}
-	var win *candidate
+	if k.File && k.DefaultText != "" {
+		win = &candidate{raw: k.DefaultText, origin: Origin{Layer: LayerDefault}, read: true}
+		origins = append(origins, win.origin)
+	}
 	if !k.FlagOnly && l.file != nil {
 		if c := l.fromFile(k.Path); c != nil {
 			win = c
@@ -290,25 +306,24 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 		}
 	}
 	if !k.FlagOnly && k.Env != "" {
-		if raw, ok := lookup(k.Env); ok {
-			win = &candidate{raw: raw, origin: Origin{LayerEnv, k.Env}}
+		if c := envValue(k, k.Env, lookup); c != nil {
+			win = c
 			origins = append(origins, win.origin)
 			for _, a := range k.Aliases {
 				if a.Env != "" {
-					if _, aok := lookup(a.Env); aok {
-						orig := Origin{LayerEnv, a.Env}
-						l.warn(fmt.Sprintf("%s is ignored: %s is set too", a.Env, k.Env),
-							slog.String("key", k.Path), slog.String("source", orig.String()))
+					if ac := envValue(k, a.Env, lookup); ac != nil {
+						l.warn(fmt.Sprintf("%s is ignored: %s is set too", ac.origin.Where, c.origin.Where),
+							slog.String("key", k.Path), slog.String("source", ac.origin.String()))
 					}
 				}
 			}
 		} else {
 			for _, a := range k.Aliases {
 				if a.Env != "" {
-					if raw, ok := lookup(a.Env); ok {
-						win = &candidate{raw: raw, origin: Origin{LayerEnv, a.Env}}
+					if ac := envValue(k, a.Env, lookup); ac != nil {
+						win = ac
 						origins = append(origins, win.origin)
-						l.warn(fmt.Sprintf("%s is deprecated, use %s", a.Env, k.Env),
+						l.warn(fmt.Sprintf("%s is deprecated, use %s", ac.origin.Where, strings.Replace(ac.origin.Where, a.Env, k.Env, 1)),
 							slog.String("key", k.Path), slog.String("source", win.origin.String()))
 						break
 					}
@@ -345,20 +360,29 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 		}
 	}
 	l.res.Origins[i] = origins
+	if win != nil && k.File {
+		win.read = true
+	}
+	// set is the candidate that sets the key, if any: a File key's default
+	// path is a candidate, but not one that setting warnings are about.
+	set := win
+	if set != nil && set.origin.Layer == LayerDefault {
+		set = nil
+	}
 
 	if ok, cond, condFailed := l.relevant(v, k); !ok {
-		// Not loaded: the default stays, nothing is parsed or checked.
+		// Not loaded: the default stays, nothing is parsed, read or checked.
 		l.state[i] = irrelevant
-		if win != nil && !condFailed && setsValue(k, win.raw) {
-			where := win.origin.String()
+		if set != nil && !condFailed && sets(k, set) {
+			where := set.origin.String()
 			l.warn(fmt.Sprintf("%s is set (%s) but ignored: it only matters when %s is set", k.Path, where, cond),
 				slog.String("key", k.Path), slog.String("source", where))
 		}
 		return
 	}
-	if win != nil && k.Deprecated != "" && setsValue(k, win.raw) {
-		l.warn(fmt.Sprintf("%s is deprecated: %s (%s)", k.Path, k.Deprecated, win.origin.String()),
-			slog.String("key", k.Path), slog.String("source", win.origin.String()))
+	if set != nil && k.Deprecated != "" && sets(k, set) {
+		l.warn(fmt.Sprintf("%s is deprecated: %s (%s)", k.Path, k.Deprecated, set.origin.String()),
+			slog.String("key", k.Path), slog.String("source", set.origin.String()))
 	}
 	l.state[i] = failed
 	if win != nil {
@@ -372,12 +396,24 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 			}
 			return
 		}
-		if err := k.Set(v, win.raw); err != nil {
+		raw := win.raw
+		if win.read && raw != "" {
+			var err error
+			if raw, err = l.readFile(k, win); err != nil {
+				l.errs = append(l.errs, cfgx.Problem{Key: k.Path, Message: err.Error(), Source: win.origin.String()})
+				return
+			}
+		}
+		if err := k.Set(v, raw); err != nil {
 			l.errs = append(l.errs, cfgx.Problem{Key: k.Path, Message: err.Error(), Source: win.origin.String()})
 			return
 		}
 	}
 	if k.Required && !k.IsSet(v) && !l.condOnly[i] {
+		if win != nil && win.read && win.raw != "" {
+			l.errs = append(l.errs, cfgx.Problem{Key: k.Path, Message: "is required, but the file " + l.resolve(win) + " is empty", Source: win.origin.String()})
+			return
+		}
 		l.errs = append(l.errs, l.required(k, win))
 		return
 	}
@@ -494,6 +530,9 @@ func (l *loader[V]) required(k *Key[V], win *candidate) cfgx.Problem {
 	}
 	if !k.FlagOnly && k.Env != "" {
 		ways = append(ways, k.Env)
+		if k.FileEnv {
+			ways = append(ways, k.Env+"_FILE")
+		}
 	}
 	if !k.FlagOnly && l.a.ConfigFile != "" {
 		ways = append(ways, k.Path+" in the config file")
@@ -624,6 +663,14 @@ func (l *loader[V]) unknownEnv(environ []string) {
 		add(k.Env)
 		for _, a := range k.Aliases {
 			add(a.Env)
+		}
+		if k.FileEnv {
+			add(k.Env + "_FILE")
+			for _, a := range k.Aliases {
+				if a.Env != "" {
+					add(a.Env + "_FILE")
+				}
+			}
 		}
 	}
 	if l.a.ConfigFile != "" {
