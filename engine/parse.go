@@ -75,7 +75,8 @@ func ParseUint(raw string, dst *uint) error {
 		*dst = 0
 		return nil
 	}
-	n, err := strconv.ParseUint(s, 10, strconv.IntSize)
+	// strconv.ParseUint rejects a sign; accept "+" as the other parsers do.
+	n, err := strconv.ParseUint(strings.TrimPrefix(s, "+"), 10, strconv.IntSize)
 	if err != nil {
 		return numErr(raw, err, "a non-negative integer")
 	}

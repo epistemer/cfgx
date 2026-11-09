@@ -22,6 +22,8 @@ func TestParseNumbers(t *testing.T) {
 		{"int64 junk", func() error { return ParseInt64("1e3", &i64) }, false, `"1e3" is not an integer`},
 		{"uint", func() error { return ParseUint("42", &u) }, true, ""},
 		{"uint negative", func() error { return ParseUint("-1", &u) }, false, "is not a non-negative integer"},
+		{"uint plus minus", func() error { return ParseUint("+-1", &u) }, false, "is not a non-negative integer"},
+		{"uint plus", func() error { return ParseUint("+42", &u) }, true, ""},
 		{"float", func() error { return ParseFloat("1.5e3", &f) }, true, ""},
 		{"float NaN", func() error { return ParseFloat("NaN", &f) }, false, "is not a finite number"},
 		{"float Inf", func() error { return ParseFloat("+Inf", &f) }, false, "is not a finite number"},
