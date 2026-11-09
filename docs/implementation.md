@@ -576,6 +576,29 @@ unknown.
     generated package can't import; it calls functions in the generated
     package itself without an import. Function packages are imported under
     their real name, or an alias where it differs from the path.
+- **[decided, M4.9]** Naming and source modifiers:
+  - `Flag(name)` and `Env(name)` replace the derived name whole: the flag
+    prefix and the env prefix aren't added. `Key(name)` replaces the key's
+    name in the config file (its path within the group); the env var,
+    flag, getter and rules keep using the declared name. `GoName(name)`
+    replaces the key's segment of Go names, as `Group.GoName` does.
+    `Short(r)` takes one ASCII letter or digit.
+  - Every override goes through the same collision checks as derived names,
+    app-wide, short flags included. Reserved: `--help` and `-h` always;
+    `--config` and `<PREFIX>_CONFIG` when the app has a config file.
+  - `Sources(dsl.FromFlag, dsl.FromEnv, dsl.FromFile)` drops the flag or
+    env var a key would otherwise have. The interface wrote the sources as
+    `dsl.Flag`, `dsl.Env`, `dsl.File`, but `dsl.File` is the File key
+    constructor (M4.5), so they're `From…`. A key that can't come from the
+    config file and is found there is ignored with a warning (not reported
+    as unknown), and its required message doesn't offer the file. A
+    `Secret` can't list `FromFlag`; a key naming a flag or env var that
+    `Sources` drops, a file-only key in an app without a config file, and
+    an empty `Sources()` are problems.
+  - Arguments take `Short`, `Flag`, `GoName` and `Hidden`; `Env`, `Key` and
+    `Sources` don't apply to them.
+  - `Hidden` sets pflag's `Hidden`. `Example` is checked like a default and
+    recorded for M6's example files.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree

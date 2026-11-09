@@ -4,6 +4,30 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M4.9 naming and source modifiers
+
+- **Landed:** `Short`, `Flag`, `Env`, `Key`, `GoName`, `Sources`, `Hidden`
+  and `Example`. Overrides go through the same collision checks as derived
+  names, short flags included. The generator also checks the names cfgx
+  reserves: `--help`, `-h`, and, when the app has a config file, `--config`
+  and `<PREFIX>_CONFIG`.
+- **Reviewed:** Gemini 3.8 Flash (High), about 203k tokens
+  ([review 0016](reviews/0016-gemini-m4.9-review.md)). 2 of 5 findings
+  fixed; 3 were already handled by code outside the diff.
+- **Decided for you** (implementation.md §3.4):
+  - `Flag` and `Env` replace the whole name, with no prefix added.
+  - `Key` renames the key only in the config file.
+  - `GoName` replaces the key's segment of the getter name, as
+    `Group.GoName` does.
+  - A key that `Sources` keeps out of the config file is ignored there, with
+    a warning.
+- **Waiting on you:** one naming call you may want to veto. The interface
+  wrote `.Sources(dsl.Flag, dsl.Env, dsl.File)`, but `dsl.File` is already
+  the File key constructor, so the sources are `dsl.FromFlag`,
+  `dsl.FromEnv` and `dsl.FromFile`. Renaming them is a one-line change if
+  you'd rather have something else.
+- **Next:** M4.10 (completion), which ends M4.
+
 ## 2026-11-09: M4.8 constraints and function references
 
 - **Landed:**

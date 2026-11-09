@@ -78,6 +78,11 @@ type Key[V any] struct {
 	Check func(v *V) error
 	// DefaultFrom names the function DefaultFunc calls, for --help.
 	DefaultFrom string
+	// Hidden leaves the flag out of --help.
+	Hidden bool
+	// NoFile keeps the key out of the config file (Sources): a value there
+	// is ignored, with a warning.
+	NoFile bool
 }
 
 // App describes the whole application. Generated code declares one.
@@ -169,6 +174,7 @@ func BindFlags[V any](fs *pflag.FlagSet, keys []Key[V], idx []int) {
 		if k.Bool {
 			f.NoOptDefVal = "true"
 		}
+		f.Hidden = k.Hidden
 		for _, a := range k.Aliases {
 			if a.Flag == "" || fs.Lookup(a.Flag) != nil {
 				continue

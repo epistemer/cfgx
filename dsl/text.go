@@ -30,7 +30,13 @@ var textUnmarshaler = reflect.TypeFor[encoding.TextUnmarshaler]()
 //		Default(netip.MustParsePrefix("10.0.0.0/8"))
 func Text[T any](name, desc string, zero T) *TextKey[T] {
 	k := &TextKey[T]{}
-	k.init(k, name, desc, ir.KindText, nil, caller(1))
+	k.init(k, name, desc, ir.KindText, func(v T) string {
+		if m, ok := any(&v).(encoding.TextMarshaler); ok {
+			b, _ := m.MarshalText()
+			return string(b)
+		}
+		return ""
+	}, caller(1))
 	t := reflect.TypeFor[T]()
 	k.typ = &ir.Type{Name: t.Name(), Kind: t.Kind().String()}
 	if t.PkgPath() != "" {
@@ -85,5 +91,23 @@ func (k *TextKey[T]) Default(v T) *TextKey[T] {
 		}
 	}
 	k.def = &text
+	return k
+}
+
+// Example is shown in example files instead of the default, as its
+// MarshalText text, which T (or *T) must implement.
+func (k *TextKey[T]) Example(v T) *TextKey[T] {
+	m, ok := any(&v).(encoding.TextMarshaler)
+	if !ok {
+		k.problems = append(k.problems, fmt.Sprintf("an example needs %s to implement encoding.TextMarshaler", reflect.TypeFor[T]()))
+		return k
+	}
+	b, err := m.MarshalText()
+	if err != nil {
+		k.problems = append(k.problems, fmt.Sprintf("example: MarshalText failed: %v", err))
+		return k
+	}
+	s := string(b)
+	k.example = &s
 	return k
 }

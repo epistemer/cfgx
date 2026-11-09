@@ -1,0 +1,89 @@
+# M4.9: naming and source modifiers. Short, Flag, Env, Key and GoName change
+# one surface each; Sources limits where a value may come from; Hidden
+# leaves a flag out of --help.
+go generate ./...
+go build -o app$exe .
+
+exec ./app$exe run --help
+stdout '-p, --port int\s+Listen port \(default 7777\)'
+stdout '--listen-host string\s+Host'
+! stdout 'debug-addr'
+! stdout '--srv-secret'
+! stdout '--srv-token'
+
+# A key that can't come from the config file is ignored there, with a
+# warning, and its required message doesn't offer the file.
+cp files/bad.yaml app.yaml
+! exec ./app$exe run
+stderr '^warning: srv.secret in app.yaml:2:3 is ignored: it can''t be set in the config file\r?$'
+stderr '^  srv.secret: is required; set APP_SRV_SECRET or APP_SRV_SECRET_FILE\r?$'
+env APP_SRV_SECRET=s
+exec ./app$exe run
+stdout ' token=$'
+
+rm app.yaml
+
+# Each override, through its own surface; the getter is Addr().
+cp files/app.yaml app.yaml
+env DATABASE_URL=postgres://db
+exec ./app$exe run -p 8080 --debug-addr :6060
+stdout '^port=8080 host=from-file url=postgres://db debug=:6060 token=from-file\r?\n$'
+
+# A key with no flag (Sources) rejects one.
+! exec ./app$exe run --srv-token x
+stderr 'unknown flag: --srv-token'
+
+-- files/app.yaml --
+srv:
+  hostname: from-file
+  token: from-file
+  secret: ignored
+-- files/bad.yaml --
+srv:
+  secret: from-file
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(settings.RunCommand(&cobra.Command{Use: "run"},
+		func(_ context.Context, r *settings.Run) error {
+			fmt.Printf("port=%d host=%s url=%s debug=%s token=%s\n", r.SrvPort(), r.SrvAddr(), r.SrvDBURL(), r.SrvDebug(), r.SrvToken())
+			return nil
+		}))
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var Srv = dsl.Group("srv", "Server",
+	dsl.Int("port", "Listen port").Default(7777).Short('p').Flag("port"),
+	dsl.String("host", "Host").Key("hostname").Flag("listen-host").GoName("Addr"),
+	dsl.String("db_url", "Database URL").Env("DATABASE_URL"),
+	dsl.String("debug", "Debug listener").Hidden().Flag("debug-addr"),
+	dsl.String("token", "Token").Sources(dsl.FromFile, dsl.FromEnv),
+	dsl.Secret("secret", "Secret").Sources(dsl.FromEnv).Required(),
+)
+
+var App = dsl.App("app", "Test app", Srv).ConfigFile("app", ".")
+
+var Run = dsl.Command("Run").Uses(Srv)

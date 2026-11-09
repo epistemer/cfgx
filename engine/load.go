@@ -319,7 +319,7 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 		win = &candidate{raw: k.DefaultText, origin: Origin{Layer: LayerDefault}}
 		origins = append(origins, win.origin)
 	}
-	if !k.FlagOnly && l.file != nil {
+	if !k.FlagOnly && !k.NoFile && l.file != nil {
 		if c := l.fromFile(k, k.Path); c != nil {
 			win = c
 			origins = append(origins, c.origin)
@@ -594,7 +594,7 @@ func (l *loader[V]) required(k *Key[V], win *candidate) cfgx.Problem {
 			ways = append(ways, k.Env+"_FILE")
 		}
 	}
-	if !k.FlagOnly && l.a.ConfigFile != "" {
+	if !k.FlagOnly && !k.NoFile && l.a.ConfigFile != "" {
 		ways = append(ways, k.Path+" in the config file")
 	}
 	msg := "is required"
@@ -712,13 +712,14 @@ func (l *loader[V]) fileItems(k *Key[V], path string, p *node.Pair, origin Origi
 
 // trie holds the app's key paths, to find unknown keys in the file.
 type trie struct {
-	kids map[string]*trie
-	leaf bool
+	kids   map[string]*trie
+	leaf   bool
+	noFile bool // a key that can't be set in the config file (Sources)
 }
 
 func (l *loader[V]) unknownFileKeys() {
 	root := &trie{}
-	addPath := func(path string) {
+	addPath := func(path string, noFile bool) {
 		t := root
 		for _, seg := range strings.Split(path, ".") {
 			if t.kids == nil {
@@ -732,15 +733,16 @@ func (l *loader[V]) unknownFileKeys() {
 			t = next
 		}
 		t.leaf = true
+		t.noFile = t.noFile || noFile
 	}
 	for _, k := range l.a.Keys {
 		if k.FlagOnly {
 			continue
 		}
-		addPath(k.Path)
+		addPath(k.Path, k.NoFile)
 		for _, a := range k.Aliases {
 			if a.Path != "" {
-				addPath(a.Path)
+				addPath(a.Path, k.NoFile)
 			}
 		}
 	}
@@ -762,6 +764,12 @@ func (l *loader[V]) walkUnknown(t *trie, n *node.Node, prefix string) {
 				msg += fmt.Sprintf("; did you mean %q?", prefix+s)
 			}
 			l.warn(msg, slog.String("key", prefix+p.Key), slog.String("source", where))
+			continue
+		}
+		if kid.leaf && kid.noFile {
+			where := l.at(p.KeyPos)
+			l.warn(fmt.Sprintf("%s in %s is ignored: it can't be set in the config file", prefix+p.Key, where),
+				slog.String("key", prefix+p.Key), slog.String("source", where))
 			continue
 		}
 		if !kid.leaf && p.Value.Kind == node.Map {

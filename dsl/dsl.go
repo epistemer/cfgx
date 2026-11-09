@@ -246,6 +246,13 @@ type keyBase struct {
 	typ        *ir.Type       // enums: the values' Go type
 	enum       []ir.EnumValue // enums: the values
 	problems   []string
+	short      rune
+	flag, env  string
+	fileKey    string
+	goName     string
+	sources    []string
+	hidden     bool
+	example    *string
 	checks     []ir.Check
 	validate   *ir.FuncRef
 	defFunc    *ir.FuncRef
@@ -706,6 +713,14 @@ func (k *keyBase) export(tags []string) ir.Key {
 		Deprecated:  k.deprecated,
 		Type:        k.typ,
 		Enum:        k.enum,
+		Short:       shortText(k.short),
+		Flag:        k.flag,
+		Env:         k.env,
+		FileKey:     k.fileKey,
+		GoName:      k.goName,
+		Sources:     k.sources,
+		Hidden:      k.hidden,
+		Example:     k.example,
 		Checks:      k.checks,
 		Validate:    k.validate,
 		DefaultFunc: k.defFunc,
