@@ -4,6 +4,21 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M4.7 Text keys
+
+- **Landed:** `dsl.Text("allow", "...", netip.Prefix{})` takes any named
+  type whose pointer implements `encoding.TextUnmarshaler`, and the getter
+  returns that type. The schema checks the type, and a default must write
+  text that parses back to the same value.
+- **Reviewed:** Gemini 3.8 Flash (High), about 299k tokens
+  ([review 0014](reviews/0014-gemini-m4.7-review.md)). No findings. I found
+  and fixed one edge case myself: a default that writes empty text.
+- **Decided for you** (implementation.md §3.4): the third argument only
+  names the type and must be its zero value; `.Default` needs
+  `MarshalText`. The text reaches `UnmarshalText` exactly, untrimmed.
+- **Next:** M4.8 (constraints and function references), M4.9, M4.10.
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M4.6 list and map keys
 
 - **Landed:**

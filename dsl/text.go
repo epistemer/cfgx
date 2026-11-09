@@ -70,6 +70,12 @@ func (k *TextKey[T]) Default(v T) *TextKey[T] {
 		return k
 	}
 	text := string(b)
+	if text == "" && !rv.IsZero() {
+		// Empty text means not set (A4), so this default would load as
+		// the zero value.
+		k.problems = append(k.problems, "default writes empty text, which means not set; give it non-empty text or drop the default")
+		return k
+	}
 	if u, ok := any(new(T)).(encoding.TextUnmarshaler); ok {
 		switch err := u.UnmarshalText(b); {
 		case err != nil:
