@@ -1,0 +1,35 @@
+# M6.2: cfgx gen -check writes nothing and fails, naming the files, when any
+# generated file is stale or missing.
+cd internal/settings
+exec go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+exec go run github.com/epistemer/cfgx/cmd/cfgx gen -check ./schema
+! stderr .
+
+# A stale code file and a missing artifact are both named; nothing is written.
+cp ../../files/old.go zz_settings.go
+rm ../../.env.example
+! exec go run github.com/epistemer/cfgx/cmd/cfgx gen -check ./schema
+stderr 'generated files are stale: (\.\.[/\\]\.\.[/\\])?\.env\.example, zz_settings\.go; run go generate'
+! exists ../../.env.example
+cmp zz_settings.go ../../files/old.go
+
+# -artifacts - leaves the artifacts out of the check too.
+exec go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+exec go run github.com/epistemer/cfgx/cmd/cfgx gen -check -artifacts - ./schema
+
+-- files/old.go --
+package settings
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var G = dsl.Group("g", "G", dsl.String("host", "Host").Default("localhost"))
+
+var App = dsl.App("app", "Test app", G).ConfigFile("app", ".")
+
+var Run = dsl.Command("Run").Uses(G)

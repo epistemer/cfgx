@@ -4,6 +4,20 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M6.2 gen -check
+
+- **Landed:** `cfgx gen -check` writes nothing and fails, naming every
+  stale or missing generated file. `cfgxtest.AssertGenerated(t)` reruns the
+  package's own `go:generate` line with `-check`, so an app's `go test`
+  catches stale code. `examples/zp` uses it.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 80k tokens
+  ([review 0022](reviews/0022-gemini-m6.2-review.md)). 3 of 4 findings
+  fixed, all in how `go:generate` lines are parsed.
+- **Also:** M6.5's zp test assumed `/` in a cleaned path and failed on
+  Windows CI. The test is fixed; cfgx's behaviour was right.
+- **Next:** M6.3 (`cfgx diff`), M6.4 (`config` subcommand).
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M6.1 generated files
 
 - **Landed:** `cfgx gen` now also writes, under the module root (or
