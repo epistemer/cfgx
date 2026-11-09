@@ -2,9 +2,11 @@ package cfgxtest
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -36,20 +38,21 @@ func generateLine(dir string) ([]string, error) {
 		return nil, err
 	}
 	for _, f := range files {
-		if strings.HasSuffix(f, "_test.go") {
-			continue
-		}
 		fh, err := os.Open(f)
 		if err != nil {
 			return nil, err
 		}
 		sc := bufio.NewScanner(fh)
 		for sc.Scan() {
-			line, ok := strings.CutPrefix(sc.Text(), "//go:generate ")
-			if !ok {
+			text := sc.Text()
+			if !strings.HasPrefix(text, "//go:generate ") && !strings.HasPrefix(text, "//go:generate\t") {
 				continue
 			}
-			fields := strings.Fields(line)
+			fields, err := splitDirective(text[len("//go:generate "):])
+			if err != nil {
+				fh.Close()
+				return nil, err
+			}
 			for i, w := range fields {
 				if w == "gen" && i > 0 && strings.Contains(fields[i-1], "cfgx") {
 					fh.Close()
@@ -68,4 +71,41 @@ type noLineError struct{ dir string }
 func (e *noLineError) Error() string {
 	abs, _ := filepath.Abs(e.dir)
 	return "no //go:generate line running cfgx gen in " + abs
+}
+
+// splitDirective splits a go:generate line into words as go generate does:
+// at spaces and tabs, with double-quoted words in Go syntax.
+func splitDirective(line string) ([]string, error) {
+	var words []string
+	for {
+		line = strings.TrimLeft(line, " \t")
+		if line == "" {
+			return words, nil
+		}
+		if line[0] == '"' {
+			end := 1
+			for end < len(line) && line[end] != '"' {
+				if line[end] == '\\' {
+					end++
+				}
+				end++
+			}
+			if end >= len(line) {
+				return nil, fmt.Errorf("unterminated quoted string in //go:generate %s", line)
+			}
+			w, err := strconv.Unquote(line[:end+1])
+			if err != nil {
+				return nil, fmt.Errorf("bad quoted string in //go:generate: %v", err)
+			}
+			words = append(words, w)
+			line = line[end+1:]
+			continue
+		}
+		end := strings.IndexAny(line, " \t")
+		if end < 0 {
+			end = len(line)
+		}
+		words = append(words, line[:end])
+		line = line[end:]
+	}
 }
