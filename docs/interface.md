@@ -507,9 +507,11 @@ m := mailer.New(settings.Test(func(v *settings.Values) {
 }))
 ```
 
-`Test()` does no I/O. `Values` fields have the getter types (`cfgx.Secret`,
-`[]byte`, `*time.Location`), and fields of `SecretFile` and `File` keys stay
-empty unless the test sets them: their default paths are never read (A6).
+`Test()` does no I/O: it reads no config file, env var or flag. `Values` fields
+have the getter types (`cfgx.Secret`, `[]byte`, `*time.Location`), and fields of
+`SecretFile` and `File` keys stay empty unless the test sets them: their default
+paths are never read (A6). The one read it makes is a `Location` default's zone,
+which loads like `time.LoadLocation`.
 
 ---
 

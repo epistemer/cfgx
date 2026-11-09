@@ -395,6 +395,133 @@ func (g *kGroup) KDir() string { return g.r.cur.Load().KDir }
 // KFk returns k.file_key: env only, renamed in the file
 func (g *kGroup) KFk() string { return g.r.cur.Load().KFk }
 
+// Values holds every setting of the app as plain fields, nested like the
+// groups, for Test.
+type Values struct {
+	K KValues
+}
+
+// KValues holds the k settings, for Test.
+type KValues struct {
+	S       string
+	B       bool
+	I       int
+	I64     int64
+	U       uint
+	F       float64
+	D       time.Duration
+	D2      time.Duration
+	Size    int64
+	None    time.Duration
+	Path    string
+	File    []byte
+	URL     *url.URL
+	Loc     *time.Location
+	Url2    *url.URL
+	Tags    []string
+	Ports   []int
+	Backoff []time.Duration
+	Labels  map[string]string
+	None2   []string
+	Cidr    netip.Prefix
+	Port    int
+	Name    string
+	Cpus    int
+	Wait    time.Duration
+	Renamed string
+	Dir     string
+	Fk      string
+}
+
+// load copies v into tv.
+func (tv *Values) load(v *values) {
+	tv.K.S = v.KS
+	tv.K.B = v.KB
+	tv.K.I = v.KI
+	tv.K.I64 = v.KI64
+	tv.K.U = v.KU
+	tv.K.F = v.KF
+	tv.K.D = v.KD
+	tv.K.D2 = v.KD2
+	tv.K.Size = v.KSize
+	tv.K.None = v.KNone
+	tv.K.Path = v.KPath
+	tv.K.File = v.KFile
+	tv.K.URL = v.KURL
+	tv.K.Loc = v.KLoc
+	tv.K.Url2 = v.KUrl2
+	tv.K.Tags = v.KTags
+	tv.K.Ports = v.KPorts
+	tv.K.Backoff = v.KBackoff
+	tv.K.Labels = v.KLabels
+	tv.K.None2 = v.KNone2
+	tv.K.Cidr = v.KCidr
+	tv.K.Port = v.KPort
+	tv.K.Name = v.KName
+	tv.K.Cpus = v.KCpus
+	tv.K.Wait = v.KWait
+	tv.K.Renamed = v.KRenamed
+	tv.K.Dir = v.KDir
+	tv.K.Fk = v.KFk
+}
+
+// store copies tv into v.
+func (tv *Values) store(v *values) {
+	v.KS = tv.K.S
+	v.KB = tv.K.B
+	v.KI = tv.K.I
+	v.KI64 = tv.K.I64
+	v.KU = tv.K.U
+	v.KF = tv.K.F
+	v.KD = tv.K.D
+	v.KD2 = tv.K.D2
+	v.KSize = tv.K.Size
+	v.KNone = tv.K.None
+	v.KPath = tv.K.Path
+	v.KFile = tv.K.File
+	v.KURL = tv.K.URL
+	v.KLoc = tv.K.Loc
+	v.KUrl2 = tv.K.Url2
+	v.KTags = tv.K.Tags
+	v.KPorts = tv.K.Ports
+	v.KBackoff = tv.K.Backoff
+	v.KLabels = tv.K.Labels
+	v.KNone2 = tv.K.None2
+	v.KCidr = tv.K.Cidr
+	v.KPort = tv.K.Port
+	v.KName = tv.K.Name
+	v.KCpus = tv.K.Cpus
+	v.KWait = tv.K.Wait
+	v.KRenamed = tv.K.Renamed
+	v.KDir = tv.K.Dir
+	v.KFk = tv.K.Fk
+}
+
+// All implements every group and tag interface. Test returns one.
+type All struct {
+	*kGroup
+}
+
+// Test returns configuration for tests: every key's default, changed by
+// edit, which may be nil. It reads no config file, env var or flag, and no
+// SecretFile or File key's default path: those stay empty unless edit sets
+// them.
+func Test(edit func(v *Values)) *All {
+	v := &values{}
+	engine.TestDefaults(&app, v)
+	var tv Values
+	tv.load(v)
+	if edit != nil {
+		edit(&tv)
+	}
+	tv.store(v)
+	r := &root{}
+	r.cur.Store(v)
+	return &All{
+		kGroup: &kGroup{r: r},
+	}
+}
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.

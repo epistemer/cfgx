@@ -3,6 +3,7 @@
 package engine
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -187,6 +188,24 @@ func BindFlags[V any](fs *pflag.FlagSet, keys []Key[V], idx []int) {
 				af.NoOptDefVal = "true"
 			}
 			_ = fs.MarkHidden(a.Flag)
+		}
+	}
+}
+
+// TestDefaults stores every key's default in v, for a generated Test: its
+// Default, or its default text parsed with Set. A File or SecretFile key's
+// default is a path, which isn't read. A default that doesn't parse, such
+// as a zone the system doesn't know, panics.
+func TestDefaults[V any](a *App[V], v *V) {
+	for i := range a.Keys {
+		k := &a.Keys[i]
+		switch {
+		case k.Default != nil:
+			k.Default(v)
+		case k.DefaultText != "" && !k.File && k.Set != nil:
+			if err := k.Set(v, k.DefaultText); err != nil {
+				panic(fmt.Sprintf("cfgx: default of %s: %v", k.Path, err))
+			}
 		}
 	}
 }

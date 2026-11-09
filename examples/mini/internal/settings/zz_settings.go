@@ -131,6 +131,84 @@ type logGroup struct{ r *root }
 // LogVerbose returns log.verbose: Log more
 func (g *logGroup) LogVerbose() bool { return g.r.cur.Load().LogVerbose }
 
+// Values holds every setting of the app as plain fields, nested like the
+// groups, for Test.
+type Values struct {
+	Server   ServerValues
+	Database DatabaseValues
+	Log      LogValues
+}
+
+// ServerValues holds the server settings, for Test.
+type ServerValues struct {
+	Host string
+	Port int
+	TLS  bool
+}
+
+// DatabaseValues holds the database settings, for Test.
+type DatabaseValues struct {
+	URL     string
+	Timeout int
+	Debug   bool
+}
+
+// LogValues holds the log settings, for Test.
+type LogValues struct {
+	Verbose bool
+}
+
+// load copies v into tv.
+func (tv *Values) load(v *values) {
+	tv.Server.Host = v.ServerHost
+	tv.Server.Port = v.ServerPort
+	tv.Server.TLS = v.ServerTLS
+	tv.Database.URL = v.DatabaseURL
+	tv.Database.Timeout = v.DatabaseTimeout
+	tv.Database.Debug = v.DatabaseDebug
+	tv.Log.Verbose = v.LogVerbose
+}
+
+// store copies tv into v.
+func (tv *Values) store(v *values) {
+	v.ServerHost = tv.Server.Host
+	v.ServerPort = tv.Server.Port
+	v.ServerTLS = tv.Server.TLS
+	v.DatabaseURL = tv.Database.URL
+	v.DatabaseTimeout = tv.Database.Timeout
+	v.DatabaseDebug = tv.Database.Debug
+	v.LogVerbose = tv.Log.Verbose
+}
+
+// All implements every group and tag interface. Test returns one.
+type All struct {
+	*serverGroup
+	*databaseGroup
+	*logGroup
+}
+
+// Test returns configuration for tests: every key's default, changed by
+// edit, which may be nil. It reads no config file, env var or flag, and no
+// SecretFile or File key's default path: those stay empty unless edit sets
+// them.
+func Test(edit func(v *Values)) *All {
+	v := &values{}
+	engine.TestDefaults(&app, v)
+	var tv Values
+	tv.load(v)
+	if edit != nil {
+		edit(&tv)
+	}
+	tv.store(v)
+	r := &root{}
+	r.cur.Store(v)
+	return &All{
+		serverGroup:   &serverGroup{r: r},
+		databaseGroup: &databaseGroup{r: r},
+		logGroup:      &logGroup{r: r},
+	}
+}
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
