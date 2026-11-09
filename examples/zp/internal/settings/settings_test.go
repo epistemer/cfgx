@@ -1,6 +1,7 @@
 package settings_test
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -21,7 +22,8 @@ func TestDefaults(t *testing.T) {
 	if loc := all.SchedulerLocation(); loc == nil || loc.String() != "Africa/Cairo" {
 		t.Errorf("location = %v", loc)
 	}
-	if all.AuthJWTPrivate().IsSet() || all.ServerTLSCert() != "ssl/cert.pem" {
+	// A Path is cleaned for the OS: ssl\cert.pem on Windows.
+	if all.AuthJWTPrivate().IsSet() || all.ServerTLSCert() != filepath.FromSlash("ssl/cert.pem") {
 		t.Errorf("file keys: the key file must not be read, the path default applies")
 	}
 	p, err := all.RetryPolicy()
