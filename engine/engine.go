@@ -100,6 +100,9 @@ type App[V any] struct {
 	Keys        []Key[V] // every key of the app
 	Global      []int    // indexes of the keys in Global groups
 	Rules       []Rule   // cross-key rules
+	// ExampleConfig and JSONSchema are the generated example config file
+	// and its JSON Schema, for the config subcommand (M6.4).
+	ExampleConfig, JSONSchema string
 }
 
 // RuleKind is a kind of cross-key rule (interface §3.5).

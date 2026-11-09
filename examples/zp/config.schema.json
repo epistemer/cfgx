@@ -1,0 +1,371 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "ZaynPay backend",
+  "properties": {
+    "auth": {
+      "additionalProperties": false,
+      "description": "Authentication",
+      "properties": {
+        "emailfrom": {
+          "description": "Sender address for auth emails",
+          "type": "string"
+        },
+        "jwt": {
+          "additionalProperties": false,
+          "properties": {
+            "private": {
+              "default": "keys/priv.pem",
+              "description": "JWT private key (PEM)",
+              "type": "string"
+            },
+            "public": {
+              "default": "keys/pub.pem",
+              "description": "JWT public key (PEM)",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "keys": {
+          "description": "CSV file of API keys",
+          "type": "string"
+        },
+        "mfa": {
+          "description": "Require multi-factor authentication",
+          "type": "boolean"
+        },
+        "otp": {
+          "additionalProperties": false,
+          "properties": {
+            "length": {
+              "default": 6,
+              "description": "OTP length",
+              "maximum": 10,
+              "minimum": 4,
+              "type": "integer"
+            },
+            "ttl": {
+              "anyOf": [
+                {
+                  "pattern": "^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$",
+                  "type": "string"
+                },
+                {
+                  "const": 0
+                }
+              ],
+              "default": "5m0s",
+              "description": "OTP validity"
+            }
+          },
+          "type": "object"
+        },
+        "session": {
+          "additionalProperties": false,
+          "properties": {
+            "ttl": {
+              "anyOf": [
+                {
+                  "pattern": "^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$",
+                  "type": "string"
+                },
+                {
+                  "const": 0
+                }
+              ],
+              "default": "24h0m0s",
+              "description": "Session lifetime"
+            }
+          },
+          "type": "object"
+        },
+        "token": {
+          "description": "Static API token",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "database": {
+      "additionalProperties": false,
+      "description": "Database connection",
+      "properties": {
+        "host": {
+          "default": "localhost",
+          "description": "Database server host",
+          "type": "string"
+        },
+        "name": {
+          "description": "Database name",
+          "type": "string"
+        },
+        "password": {
+          "description": "Database password",
+          "type": "string"
+        },
+        "port": {
+          "default": 5432,
+          "description": "Database server port",
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "ssl_mode": {
+          "deprecated": true,
+          "description": "Deprecated: use database.sslmode. SSL mode",
+          "enum": [
+            "disable",
+            "require",
+            "verify-full"
+          ]
+        },
+        "sslmode": {
+          "default": "disable",
+          "description": "SSL mode",
+          "enum": [
+            "disable",
+            "require",
+            "verify-full"
+          ]
+        },
+        "user": {
+          "default": "postgres",
+          "description": "Database user",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "log": {
+      "additionalProperties": false,
+      "description": "Logging",
+      "properties": {
+        "color": {
+          "description": "Force colored output even without a TTY",
+          "type": "boolean"
+        },
+        "format": {
+          "default": "text",
+          "description": "Output format",
+          "enum": [
+            "text",
+            "json"
+          ]
+        },
+        "level": {
+          "default": "info",
+          "description": "Minimum log level",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "scheduler": {
+      "additionalProperties": false,
+      "description": "Task scheduler",
+      "properties": {
+        "execmode": {
+          "default": "sequential",
+          "description": "Task execution mode",
+          "enum": [
+            "sequential",
+            "parallel"
+          ]
+        },
+        "location": {
+          "default": "Africa/Cairo",
+          "description": "Scheduler timezone",
+          "type": "string"
+        },
+        "retry": {
+          "additionalProperties": false,
+          "description": "Retry policy",
+          "properties": {
+            "delay": {
+              "anyOf": [
+                {
+                  "pattern": "^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$",
+                  "type": "string"
+                },
+                {
+                  "const": 0
+                }
+              ],
+              "default": "1m0s",
+              "description": "Delay between retries"
+            },
+            "max": {
+              "default": 3,
+              "description": "Maximum retries",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "workers": {
+          "description": "Concurrent workers",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "server": {
+      "additionalProperties": false,
+      "description": "HTTP server",
+      "properties": {
+        "host": {
+          "default": "0.0.0.0",
+          "description": "Listen address",
+          "type": "string"
+        },
+        "max_header": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+ ?([kKMGTPE]i?)?B?$",
+              "type": "string"
+            }
+          ],
+          "default": "1MiB",
+          "description": "Maximum request header size"
+        },
+        "port": {
+          "default": 7777,
+          "description": "Listen port",
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "rate": {
+          "additionalProperties": false,
+          "properties": {
+            "burst": {
+              "default": 20,
+              "description": "Burst capacity per IP",
+              "type": "integer"
+            },
+            "limit": {
+              "default": 100,
+              "description": "Requests per second per IP",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "timeout": {
+          "additionalProperties": false,
+          "properties": {
+            "read": {
+              "anyOf": [
+                {
+                  "pattern": "^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$",
+                  "type": "string"
+                },
+                {
+                  "const": 0
+                }
+              ],
+              "default": "20s",
+              "description": "Read timeout"
+            },
+            "write": {
+              "anyOf": [
+                {
+                  "pattern": "^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$",
+                  "type": "string"
+                },
+                {
+                  "const": 0
+                }
+              ],
+              "default": "1m0s",
+              "description": "Write timeout"
+            }
+          },
+          "type": "object"
+        },
+        "tls": {
+          "additionalProperties": false,
+          "properties": {
+            "cert": {
+              "default": "ssl/cert.pem",
+              "description": "TLS certificate",
+              "type": "string"
+            },
+            "enabled": {
+              "description": "Serve HTTPS",
+              "type": "boolean"
+            },
+            "key": {
+              "default": "ssl/key.pem",
+              "description": "TLS private key",
+              "type": "string"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "smtp": {
+      "additionalProperties": false,
+      "description": "Outgoing mail",
+      "properties": {
+        "auth": {
+          "default": "PLAIN",
+          "description": "SMTP auth mechanism",
+          "enum": [
+            "PLAIN",
+            "LOGIN",
+            "CRAM-MD5"
+          ]
+        },
+        "host": {
+          "description": "SMTP server host",
+          "type": "string"
+        },
+        "password": {
+          "description": "SMTP password",
+          "type": "string"
+        },
+        "port": {
+          "default": 587,
+          "description": "SMTP server port",
+          "type": "integer"
+        },
+        "tls": {
+          "description": "Use implicit TLS",
+          "type": "boolean"
+        },
+        "user": {
+          "description": "SMTP user",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "storage": {
+      "additionalProperties": false,
+      "description": "Local storage",
+      "properties": {
+        "bolt": {
+          "default": "bolt.db",
+          "description": "Bolt database file; also holds runtime settings",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "zp configuration",
+  "type": "object"
+}

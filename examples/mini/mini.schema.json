@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Minimal cfgx example",
+  "properties": {
+    "database": {
+      "additionalProperties": false,
+      "description": "Database connection",
+      "properties": {
+        "debug": {
+          "default": false,
+          "description": "Log SQL queries",
+          "type": "boolean"
+        },
+        "timeout": {
+          "description": "Query timeout in seconds",
+          "type": "integer"
+        },
+        "url": {
+          "description": "Database connection URL",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "log": {
+      "additionalProperties": false,
+      "description": "Logging",
+      "properties": {
+        "verbose": {
+          "description": "Log more",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "server": {
+      "additionalProperties": false,
+      "description": "HTTP server",
+      "properties": {
+        "host": {
+          "default": "localhost",
+          "description": "Listen host",
+          "type": "string"
+        },
+        "port": {
+          "default": 8080,
+          "description": "Listen port",
+          "type": "integer"
+        },
+        "tls": {
+          "description": "Enable TLS",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "mini configuration",
+  "type": "object"
+}

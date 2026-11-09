@@ -637,6 +637,36 @@ unknown.
   Warnings go to `WithLogger`'s logger, or to stderr as a command's do;
   problems come back as the error. Bad flags are an error, not a panic or
   exit.
+- **[decided, M6.1]** Generated files: `cfgx gen` writes them under the
+  module root (from `go env GOMOD`), or under `-artifacts dir` (`-` for
+  none), only when their contents change:
+  - `<config>.example.yaml` and `<config>.schema.json`, named after
+    `App.ConfigFile`, only when the app has a config file.
+  - `.env.example`, `docs/CONFIG.md` and `cfgx.lock.json`.
+
+  The details:
+  - The example config comments every key out at its example or default
+    (`# port: 7777`), under its group's description. Each key gets its
+    description, `Required.`, where else it can be set, and the commands
+    that use it ("Used by Serve, Migrate", or "every command" for global
+    keys), by schema command name, since cfgx doesn't know cobra's. A copy
+    of it changes nothing until a line is uncommented, so `config init`
+    pins no defaults. Values are JSON, which is YAML; secrets and
+    `DefaultFunc` defaults are never written. Hidden keys and keys
+    `Sources` keeps out of the file are left out.
+  - The JSON Schema (draft 2020-12) has `additionalProperties: false`, so
+    an editor flags a typo as cfgx warns about it. Kinds map to types,
+    `anyOf` where the file also takes a CSV string or a duration's `0`;
+    enums, `minimum`/`maximum`, `minLength`/`maxLength` and `pattern` come
+    from the key; defaults and examples are typed; aliases are deprecated
+    properties.
+  - `docs/CONFIG.md` has a table per group (hidden keys included), the
+    rules, and each command's arguments.
+  - `cfgx.lock.json` is the IR as JSON, without positions, keys sorted.
+  - The example config and the schema are also embedded in the generated
+    file, as `engine.App.ExampleConfig` and `JSONSchema` (raw string
+    literals where possible), for `config init` and `config schema`
+    (M6.4). Per-key metadata for `explain` comes with M6.4, which uses it.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree

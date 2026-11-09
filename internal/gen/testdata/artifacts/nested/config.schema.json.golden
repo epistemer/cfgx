@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Nested",
+  "properties": {
+    "auth": {
+      "additionalProperties": false,
+      "description": "Authentication",
+      "properties": {
+        "emailfrom": {
+          "description": "Sender address for auth emails",
+          "type": "string"
+        },
+        "keys": {
+          "description": "API keys file",
+          "type": "string"
+        },
+        "otp": {
+          "additionalProperties": false,
+          "properties": {
+            "length": {
+              "description": "OTP length",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "token": {
+          "description": "Static API token",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "database": {
+      "additionalProperties": false,
+      "description": "Database connection",
+      "properties": {
+        "host": {
+          "deprecated": true,
+          "description": "Host Deprecated: use host instead",
+          "type": "string"
+        },
+        "hostname": {
+          "deprecated": true,
+          "description": "Deprecated: use database.host. Host",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "scheduler": {
+      "additionalProperties": false,
+      "description": "Task scheduler",
+      "properties": {
+        "retry": {
+          "additionalProperties": false,
+          "description": "Retry policy",
+          "properties": {
+            "max": {
+              "default": 3,
+              "description": "Maximum retries",
+              "type": "integer"
+            }
+          },
+          "type": "object"
+        },
+        "workers": {
+          "description": "Workers",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "server": {
+      "additionalProperties": false,
+      "description": "HTTP server",
+      "properties": {
+        "port": {
+          "default": 7777,
+          "description": "Port",
+          "type": "integer"
+        },
+        "tls": {
+          "additionalProperties": false,
+          "properties": {
+            "cert": {
+              "default": "cert.pem",
+              "description": "TLS certificate",
+              "type": "string"
+            },
+            "enabled": {
+              "description": "Serve HTTPS",
+              "type": "boolean"
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "smtp": {
+      "additionalProperties": false,
+      "description": "Outgoing mail",
+      "properties": {
+        "host": {
+          "description": "SMTP server host",
+          "type": "string"
+        },
+        "port": {
+          "default": 587,
+          "description": "SMTP server port",
+          "type": "integer"
+        },
+        "tls": {
+          "description": "Use implicit TLS",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "zp configuration",
+  "type": "object"
+}

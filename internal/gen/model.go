@@ -31,6 +31,12 @@ type Model struct {
 	// Warnings are schema issues that don't stop generation.
 	Warnings Problems
 
+	AppName, AppDesc string
+	// ExampleConfig and JSONSchema are embedded in the generated file for
+	// the config subcommand (M6.4); Artifacts fills them in.
+	ExampleConfig, JSONSchema string
+
+	app  *ir.App
 	imp  *importer // names imports; ResolveRefs updates them
 	refs []pkgRef  // packages imported for keys, for ResolveRefs
 }
@@ -97,6 +103,7 @@ type KeyModel struct {
 	Example  string
 	declPath string // the path the schema declared, which rules name
 	Leaf     string // the key's field in its group's Values struct
+	ir       ir.Key // the key as the schema declared it
 	// Complete is set when the schema gave the flag a completion: file
 	// extensions, directories, or a function.
 	Complete     bool
@@ -331,7 +338,8 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		bad(app.Pos, "the generated code's package name %q isn't a valid Go package name", pkg)
 	}
 
-	m := &Model{Package: pkg, EnvPrefix: prefix, ConfigFile: app.ConfigFile, SearchPaths: app.SearchPaths, Formats: app.Formats}
+	m := &Model{Package: pkg, EnvPrefix: prefix, ConfigFile: app.ConfigFile, SearchPaths: app.SearchPaths, Formats: app.Formats,
+		AppName: app.Name, AppDesc: app.Desc, app: app}
 	checkConfigFile(app, bad)
 	// Every generated identifier, to catch collisions between them.
 	// Later milestones generate ConfigCommand (M6.4), Test, All and Values
@@ -478,7 +486,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			}
 			seen[k.Name] = true
 			km := &KeyModel{Index: len(m.Keys), Path: path + "." + k.Name, Desc: k.Desc, Pos: k.Pos}
-			km.declPath = km.Path
+			km.declPath, km.ir = km.Path, k
 			if strings.TrimSpace(k.Desc) == "" {
 				bad(k.Pos, "key %s needs a description", km.Path)
 			}
@@ -811,7 +819,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			if strings.TrimSpace(k.Desc) == "" {
 				bad(k.Pos, "key %s needs a description", km.Path)
 			}
-			km.declPath = km.Path
+			km.declPath, km.ir = km.Path, k
 			km.Getter = nm.pascal(k.Name)
 			km.Field = c.Name + km.Getter
 			km.Flag = dashed(k.Name)

@@ -7,6 +7,8 @@ The store and mutable keys follow in roadmap item M7.9.
 - `internal/settings/schema` is the schema; `internal/settings/zz_settings.go`
   is generated from it by `go generate ./...`, and `internal/settings/settings.go`
   holds the computed `DSN()` and `RetryPolicy()`.
+- `config.example.yaml`, `config.schema.json`, `.env.example`,
+  `docs/CONFIG.md` and `cfgx.lock.json` are generated too, at the module root.
 - `internal/mailer`, `internal/server` and `internal/db` stand in for zp's
   libraries. Each takes a generated interface (`settings.Mailer`,
   `settings.Server`, `settings.DB`), never a config struct.

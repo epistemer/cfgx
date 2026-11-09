@@ -1,0 +1,584 @@
+{
+  "commands": [
+    {
+      "name": "Serve",
+      "uses": [
+        "database",
+        "smtp",
+        "auth",
+        "server",
+        "scheduler"
+      ]
+    },
+    {
+      "args": [
+        {
+          "desc": "Roll back instead of applying",
+          "kind": "bool",
+          "name": "down"
+        },
+        {
+          "checks": [
+            {
+              "args": [
+                "0"
+              ],
+              "kind": "min"
+            }
+          ],
+          "desc": "Number of migrations; 0 means all",
+          "kind": "int",
+          "name": "steps"
+        }
+      ],
+      "name": "Migrate",
+      "uses": [
+        "database"
+      ]
+    },
+    {
+      "args": [
+        {
+          "default": "John Doe",
+          "desc": "Recipient name",
+          "kind": "string",
+          "name": "to.name"
+        },
+        {
+          "desc": "Recipient address",
+          "kind": "string",
+          "name": "to.address",
+          "required": true,
+          "validate": {
+            "name": "Email",
+            "path": "zp/internal/validate"
+          }
+        },
+        {
+          "default": "new-account",
+          "desc": "Template to render",
+          "kind": "string",
+          "name": "template"
+        }
+      ],
+      "name": "TestEmail",
+      "tags": [
+        "Mailer"
+      ],
+      "uses": []
+    }
+  ],
+  "configFile": "config",
+  "desc": "ZaynPay backend",
+  "envPrefix": "ZP",
+  "global": [
+    "log"
+  ],
+  "groups": [
+    {
+      "desc": "Logging",
+      "keys": [
+        {
+          "default": "info",
+          "desc": "Minimum log level",
+          "enum": [
+            {
+              "lit": "\"debug\"",
+              "text": "debug"
+            },
+            {
+              "lit": "\"info\"",
+              "text": "info"
+            },
+            {
+              "lit": "\"warn\"",
+              "text": "warn"
+            },
+            {
+              "lit": "\"error\"",
+              "text": "error"
+            }
+          ],
+          "kind": "enum",
+          "name": "level",
+          "type": {
+            "kind": "string",
+            "name": "string"
+          }
+        },
+        {
+          "default": "text",
+          "desc": "Output format",
+          "enum": [
+            {
+              "lit": "\"text\"",
+              "text": "text"
+            },
+            {
+              "lit": "\"json\"",
+              "text": "json"
+            }
+          ],
+          "kind": "enum",
+          "name": "format",
+          "type": {
+            "kind": "string",
+            "name": "string"
+          }
+        },
+        {
+          "desc": "Force colored output even without a TTY",
+          "kind": "bool",
+          "name": "color"
+        }
+      ],
+      "name": "log"
+    },
+    {
+      "computed": [
+        "DSN"
+      ],
+      "desc": "Database connection",
+      "goName": "DB",
+      "keys": [
+        {
+          "default": "localhost",
+          "desc": "Database server host",
+          "kind": "string",
+          "name": "host"
+        },
+        {
+          "checks": [
+            {
+              "args": [
+                "1"
+              ],
+              "kind": "min"
+            },
+            {
+              "args": [
+                "65535"
+              ],
+              "kind": "max"
+            }
+          ],
+          "default": "5432",
+          "desc": "Database server port",
+          "kind": "int",
+          "name": "port"
+        },
+        {
+          "desc": "Database name",
+          "kind": "string",
+          "name": "name",
+          "required": true
+        },
+        {
+          "default": "postgres",
+          "desc": "Database user",
+          "kind": "string",
+          "name": "user"
+        },
+        {
+          "desc": "Database password",
+          "kind": "secret",
+          "name": "password",
+          "required": true
+        },
+        {
+          "aliases": [
+            "database.ssl_mode"
+          ],
+          "default": "disable",
+          "desc": "SSL mode",
+          "enum": [
+            {
+              "lit": "\"disable\"",
+              "text": "disable"
+            },
+            {
+              "lit": "\"require\"",
+              "text": "require"
+            },
+            {
+              "lit": "\"verify-full\"",
+              "text": "verify-full"
+            }
+          ],
+          "kind": "enum",
+          "name": "sslmode",
+          "type": {
+            "kind": "string",
+            "name": "string"
+          }
+        }
+      ],
+      "name": "database"
+    },
+    {
+      "desc": "Outgoing mail",
+      "keys": [
+        {
+          "desc": "SMTP server host",
+          "kind": "string",
+          "name": "host",
+          "required": true
+        },
+        {
+          "default": "587",
+          "desc": "SMTP server port",
+          "kind": "int",
+          "name": "port"
+        },
+        {
+          "desc": "SMTP user",
+          "kind": "string",
+          "name": "user"
+        },
+        {
+          "desc": "SMTP password",
+          "kind": "secret",
+          "name": "password"
+        },
+        {
+          "default": "PLAIN",
+          "desc": "SMTP auth mechanism",
+          "enum": [
+            {
+              "lit": "\"PLAIN\"",
+              "text": "PLAIN"
+            },
+            {
+              "lit": "\"LOGIN\"",
+              "text": "LOGIN"
+            },
+            {
+              "lit": "\"CRAM-MD5\"",
+              "text": "CRAM-MD5"
+            }
+          ],
+          "kind": "enum",
+          "name": "auth",
+          "type": {
+            "kind": "string",
+            "name": "string"
+          }
+        },
+        {
+          "desc": "Use implicit TLS",
+          "kind": "bool",
+          "name": "tls"
+        }
+      ],
+      "name": "smtp",
+      "tags": [
+        "Mailer"
+      ]
+    },
+    {
+      "desc": "Authentication",
+      "keys": [
+        {
+          "desc": "Sender address for auth emails",
+          "goName": "EmailFrom",
+          "kind": "string",
+          "name": "emailfrom",
+          "tags": [
+            "Mailer"
+          ],
+          "validate": {
+            "name": "Email",
+            "path": "zp/internal/validate"
+          }
+        },
+        {
+          "default": "5m0s",
+          "desc": "OTP validity",
+          "kind": "duration",
+          "name": "otp.ttl"
+        },
+        {
+          "checks": [
+            {
+              "args": [
+                "4"
+              ],
+              "kind": "min"
+            },
+            {
+              "args": [
+                "10"
+              ],
+              "kind": "max"
+            }
+          ],
+          "default": "6",
+          "desc": "OTP length",
+          "kind": "int",
+          "name": "otp.length"
+        },
+        {
+          "default": "24h0m0s",
+          "desc": "Session lifetime",
+          "kind": "duration",
+          "name": "session.ttl",
+          "tags": [
+            "Tokens"
+          ]
+        },
+        {
+          "default": "keys/priv.pem",
+          "desc": "JWT private key (PEM)",
+          "kind": "secretfile",
+          "name": "jwt.private",
+          "tags": [
+            "Tokens"
+          ]
+        },
+        {
+          "default": "keys/pub.pem",
+          "desc": "JWT public key (PEM)",
+          "kind": "secretfile",
+          "name": "jwt.public",
+          "tags": [
+            "Tokens"
+          ]
+        },
+        {
+          "desc": "Static API token",
+          "kind": "secret",
+          "name": "token"
+        },
+        {
+          "complete": {
+            "exts": [
+              "csv"
+            ]
+          },
+          "desc": "CSV file of API keys",
+          "kind": "secretfile",
+          "name": "keys"
+        },
+        {
+          "desc": "Require multi-factor authentication",
+          "kind": "bool",
+          "name": "mfa"
+        }
+      ],
+      "name": "auth"
+    },
+    {
+      "desc": "HTTP server",
+      "flagPrefix": "",
+      "keys": [
+        {
+          "default": "0.0.0.0",
+          "desc": "Listen address",
+          "kind": "string",
+          "name": "host"
+        },
+        {
+          "checks": [
+            {
+              "args": [
+                "1"
+              ],
+              "kind": "min"
+            },
+            {
+              "args": [
+                "65535"
+              ],
+              "kind": "max"
+            }
+          ],
+          "default": "7777",
+          "desc": "Listen port",
+          "kind": "int",
+          "name": "port",
+          "short": "p"
+        },
+        {
+          "desc": "Serve HTTPS",
+          "kind": "bool",
+          "name": "tls.enabled"
+        },
+        {
+          "complete": {
+            "exts": [
+              "pem"
+            ]
+          },
+          "default": "ssl/cert.pem",
+          "desc": "TLS certificate",
+          "kind": "path",
+          "name": "tls.cert"
+        },
+        {
+          "default": "ssl/key.pem",
+          "desc": "TLS private key",
+          "kind": "secretfile",
+          "name": "tls.key"
+        },
+        {
+          "default": "20s",
+          "desc": "Read timeout",
+          "kind": "duration",
+          "name": "timeout.read"
+        },
+        {
+          "default": "1m0s",
+          "desc": "Write timeout",
+          "kind": "duration",
+          "name": "timeout.write"
+        },
+        {
+          "default": "1048576",
+          "desc": "Maximum request header size",
+          "kind": "bytesize",
+          "name": "max_header"
+        },
+        {
+          "default": "100",
+          "desc": "Requests per second per IP",
+          "kind": "int",
+          "name": "rate.limit"
+        },
+        {
+          "default": "20",
+          "desc": "Burst capacity per IP",
+          "kind": "int",
+          "name": "rate.burst"
+        }
+      ],
+      "name": "server"
+    },
+    {
+      "computed": [
+        "RetryPolicy"
+      ],
+      "desc": "Task scheduler",
+      "groups": [
+        {
+          "desc": "Retry policy",
+          "keys": [
+            {
+              "default": "3",
+              "desc": "Maximum retries",
+              "kind": "int",
+              "name": "max"
+            },
+            {
+              "default": "1m0s",
+              "desc": "Delay between retries",
+              "kind": "duration",
+              "name": "delay"
+            }
+          ],
+          "name": "retry"
+        }
+      ],
+      "keys": [
+        {
+          "default": "Africa/Cairo",
+          "desc": "Scheduler timezone",
+          "kind": "location",
+          "name": "location"
+        },
+        {
+          "default": "sequential",
+          "desc": "Task execution mode",
+          "enum": [
+            {
+              "lit": "\"sequential\"",
+              "text": "sequential"
+            },
+            {
+              "lit": "\"parallel\"",
+              "text": "parallel"
+            }
+          ],
+          "kind": "enum",
+          "name": "execmode",
+          "type": {
+            "kind": "string",
+            "name": "ZpTaskExecutionMode",
+            "path": "zp/models",
+            "pkg": "models"
+          }
+        },
+        {
+          "defaultFunc": {
+            "name": "NumCPU",
+            "path": "runtime"
+          },
+          "desc": "Concurrent workers",
+          "kind": "int",
+          "name": "workers"
+        }
+      ],
+      "name": "scheduler"
+    },
+    {
+      "desc": "Local storage",
+      "keys": [
+        {
+          "default": "bolt.db",
+          "desc": "Bolt database file; also holds runtime settings",
+          "kind": "path",
+          "name": "bolt"
+        }
+      ],
+      "name": "storage"
+    }
+  ],
+  "initialisms": [
+    "OTP",
+    "JWT",
+    "SMTP",
+    "MFA"
+  ],
+  "name": "zp",
+  "rules": [
+    {
+      "group": "auth",
+      "keys": [
+        "auth.token",
+        "auth.keys"
+      ],
+      "kind": "AtMostOne"
+    },
+    {
+      "group": "server",
+      "keys": [
+        "server.tls.cert",
+        "server.tls.enabled"
+      ],
+      "kind": "RelevantIf"
+    },
+    {
+      "group": "server",
+      "keys": [
+        "server.tls.key",
+        "server.tls.enabled"
+      ],
+      "kind": "RelevantIf"
+    }
+  ],
+  "searchPaths": [
+    ".",
+    "$HOME/.zp",
+    "/etc/zp"
+  ],
+  "tags": [
+    {
+      "desc": "Everything the mailer needs",
+      "name": "Mailer"
+    },
+    {
+      "desc": "Signing keys and lifetimes",
+      "name": "Tokens"
+    }
+  ],
+  "version": 16
+}

@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Kinds",
+  "properties": {
+    "k": {
+      "additionalProperties": false,
+      "description": "Every kind",
+      "properties": {
+        "b": {
+          "default": true,
+          "description": "bool",
+          "type": "boolean"
+        },
+        "backoff": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$",
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": [
+            "1s",
+            "1m0s"
+          ],
+          "description": "durations"
+        },
+        "cidr": {
+          "default": "10.0.0.0/8",
+          "description": "text",
+          "type": "string"
+        },
+        "cpus": {
+          "description": "computed default",
+          "type": "integer"
+        },
+        "d": {
+          "anyOf": [
+            {
+              "pattern": "^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$",
+              "type": "string"
+            },
+            {
+              "const": 0
+            }
+          ],
+          "default": "5m0s",
+          "description": "duration"
+        },
+        "d2": {
+          "anyOf": [
+            {
+              "pattern": "^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$",
+              "type": "string"
+            },
+            {
+              "const": 0
+            }
+          ],
+          "default": "1.5s",
+          "description": "odd duration"
+        },
+        "dir": {
+          "description": "directory",
+          "type": "string"
+        },
+        "f": {
+          "default": 0.25,
+          "description": "float",
+          "type": "number"
+        },
+        "file": {
+          "default": "ca.pem",
+          "description": "file",
+          "type": "string"
+        },
+        "i": {
+          "default": -3,
+          "description": "int",
+          "type": "integer"
+        },
+        "i64": {
+          "default": 9223372036854775807,
+          "description": "int64",
+          "type": "integer"
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": {
+            "a": "x=y",
+            "b": "2"
+          },
+          "description": "stringmap"
+        },
+        "loc": {
+          "default": "UTC",
+          "description": "location",
+          "type": "string"
+        },
+        "name": {
+          "description": "checked string",
+          "maxLength": 8,
+          "minLength": 1,
+          "pattern": "^(?:[a-z]+)$",
+          "type": "string"
+        },
+        "nm": {
+          "description": "renamed",
+          "type": "string"
+        },
+        "none": {
+          "anyOf": [
+            {
+              "pattern": "^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$",
+              "type": "string"
+            },
+            {
+              "const": 0
+            }
+          ],
+          "description": "no default"
+        },
+        "none2": {
+          "anyOf": [
+            {
+              "items": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "empty list"
+        },
+        "path": {
+          "default": "data//app.db",
+          "description": "path",
+          "type": "string"
+        },
+        "port": {
+          "default": 80,
+          "description": "checked int",
+          "maximum": 65535,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "ports": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "integer"
+              },
+              "type": "array"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": [
+            80,
+            443
+          ],
+          "description": "ints"
+        },
+        "s": {
+          "default": "x",
+          "description": "string",
+          "type": "string"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "pattern": "^[0-9]+ ?([kKMGTPE]i?)?B?$",
+              "type": "string"
+            }
+          ],
+          "default": "1MiB",
+          "description": "bytesize"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "default": [
+            "a",
+            "b,c",
+            ""
+          ],
+          "description": "strings"
+        },
+        "u": {
+          "default": 7,
+          "description": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "url": {
+          "default": "https://example.com/x",
+          "description": "url",
+          "format": "uri",
+          "type": "string"
+        },
+        "url2": {
+          "description": "url without default",
+          "format": "uri",
+          "type": "string"
+        },
+        "wait": {
+          "anyOf": [
+            {
+              "pattern": "^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$",
+              "type": "string"
+            },
+            {
+              "const": 0
+            }
+          ],
+          "description": "checked duration"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "kinds configuration",
+  "type": "object"
+}

@@ -1,0 +1,256 @@
+{
+  "commands": [
+    {
+      "name": "Run",
+      "uses": [
+        "k"
+      ]
+    }
+  ],
+  "configFile": "config",
+  "desc": "Kinds",
+  "envPrefix": "K",
+  "groups": [
+    {
+      "desc": "Every kind",
+      "keys": [
+        {
+          "default": "x",
+          "desc": "string",
+          "kind": "string",
+          "name": "s"
+        },
+        {
+          "default": "true",
+          "desc": "bool",
+          "kind": "bool",
+          "name": "b"
+        },
+        {
+          "default": "-3",
+          "desc": "int",
+          "kind": "int",
+          "name": "i"
+        },
+        {
+          "default": "9223372036854775807",
+          "desc": "int64",
+          "kind": "int64",
+          "name": "i64"
+        },
+        {
+          "default": "7",
+          "desc": "uint",
+          "kind": "uint",
+          "name": "u"
+        },
+        {
+          "default": "0.25",
+          "desc": "float",
+          "kind": "float",
+          "name": "f"
+        },
+        {
+          "default": "300000000000ns",
+          "desc": "duration",
+          "kind": "duration",
+          "name": "d"
+        },
+        {
+          "default": "1500ms",
+          "desc": "odd duration",
+          "kind": "duration",
+          "name": "d2"
+        },
+        {
+          "default": "1048576",
+          "desc": "bytesize",
+          "kind": "bytesize",
+          "name": "size"
+        },
+        {
+          "desc": "no default",
+          "kind": "duration",
+          "name": "none"
+        },
+        {
+          "default": "data//app.db",
+          "desc": "path",
+          "kind": "path",
+          "name": "path"
+        },
+        {
+          "default": "ca.pem",
+          "desc": "file",
+          "kind": "file",
+          "name": "file"
+        },
+        {
+          "default": "https://example.com/x",
+          "desc": "url",
+          "kind": "url",
+          "name": "url"
+        },
+        {
+          "default": "UTC",
+          "desc": "location",
+          "kind": "location",
+          "name": "loc"
+        },
+        {
+          "desc": "url without default",
+          "kind": "url",
+          "name": "url2"
+        },
+        {
+          "default": "a,\"b,c\",\"\"",
+          "desc": "strings",
+          "kind": "strings",
+          "name": "tags"
+        },
+        {
+          "default": "80, 443",
+          "desc": "ints",
+          "kind": "ints",
+          "name": "ports"
+        },
+        {
+          "default": "1000ms,1m",
+          "desc": "durations",
+          "kind": "durations",
+          "name": "backoff"
+        },
+        {
+          "default": "b=2,a=x=y",
+          "desc": "stringmap",
+          "kind": "stringmap",
+          "name": "labels"
+        },
+        {
+          "default": "",
+          "desc": "empty list",
+          "kind": "strings",
+          "name": "none2"
+        },
+        {
+          "default": "10.0.0.0/8",
+          "desc": "text",
+          "kind": "text",
+          "name": "cidr",
+          "type": {
+            "kind": "struct",
+            "name": "Prefix",
+            "path": "net/netip",
+            "pkg": "netip"
+          }
+        },
+        {
+          "checks": [
+            {
+              "args": [
+                "1"
+              ],
+              "kind": "min"
+            },
+            {
+              "args": [
+                "65535"
+              ],
+              "kind": "max"
+            }
+          ],
+          "default": "80",
+          "desc": "checked int",
+          "kind": "int",
+          "name": "port"
+        },
+        {
+          "checks": [
+            {
+              "args": [
+                "1",
+                "8"
+              ],
+              "kind": "len"
+            },
+            {
+              "args": [
+                "[a-z]+"
+              ],
+              "kind": "pattern"
+            }
+          ],
+          "desc": "checked string",
+          "kind": "string",
+          "name": "name",
+          "validate": {
+            "name": "New",
+            "path": "errors"
+          }
+        },
+        {
+          "defaultFunc": {
+            "name": "NumCPU",
+            "path": "runtime"
+          },
+          "desc": "computed default",
+          "kind": "int",
+          "name": "cpus"
+        },
+        {
+          "checks": [
+            {
+              "args": [
+                "1500ms"
+              ],
+              "kind": "min"
+            }
+          ],
+          "desc": "checked duration",
+          "kind": "duration",
+          "name": "wait"
+        },
+        {
+          "complete": {
+            "exts": [
+              "pem",
+              "crt"
+            ]
+          },
+          "desc": "renamed",
+          "env": "NAME_ENV",
+          "flag": "name-flag",
+          "goName": "Renamed",
+          "hidden": true,
+          "kind": "string",
+          "name": "nm",
+          "short": "n"
+        },
+        {
+          "complete": {
+            "dirs": true
+          },
+          "desc": "directory",
+          "kind": "path",
+          "name": "dir"
+        },
+        {
+          "desc": "env only, renamed in the file",
+          "fileKey": "file_key",
+          "kind": "string",
+          "name": "fk",
+          "sources": [
+            "env"
+          ]
+        }
+      ],
+      "name": "k"
+    }
+  ],
+  "name": "kinds",
+  "searchPaths": [
+    ".",
+    "$HOME/.zp"
+  ],
+  "version": 16
+}
