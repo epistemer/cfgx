@@ -4,6 +4,22 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M6.6 LoadX without cobra
+
+- **Landed:** `settings.LoadMigrate(ctx, cfgx.WithEnv(env),
+  cfgx.WithArgs("--steps", "3", "extra"))` loads a command's configuration
+  without cobra. `WithArgs` is parsed like the command's own flags, `Args()`
+  returns `["extra"]`, and `WithFile` acts as `--config`. `examples/zp` tests
+  it.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 79k tokens
+  ([review 0020](reviews/0020-gemini-m6.6-review.md)). No findings. A
+  short brief kept this the cheapest review so far.
+- **Decided for you** (implementation.md §3.4): `WithEnv` replaces the whole
+  environment, `$VAR`s in search paths included. Warnings go to stderr unless
+  `WithLogger` is given, as for commands.
+- **Next:** M6.1 (generated files), M6.2, M6.3, M6.4.
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M6.5 test helpers
 
 - **Landed:**
