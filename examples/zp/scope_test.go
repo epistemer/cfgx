@@ -22,11 +22,14 @@ func TestScopeIsEnforcedByTheCompiler(t *testing.T) {
 			"*settings.Migrate does not implement settings.Mailer"},
 		{"test-email has only the Mailer keys of auth", `func f(t *settings.TestEmail) { _ = t.AuthJWTPrivate() }`,
 			"t.AuthJWTPrivate undefined"},
+		{"test-email isn't an Auth", `func f(t *settings.TestEmail) { var _ settings.Auth = t }`,
+			"*settings.TestEmail does not implement settings.Auth"},
 		{"test-email has the mailer", `func f(t *settings.TestEmail) { mailer.New(t); _ = t.AuthEmailFrom() }`, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			// Inside the module, so the package may import zp/internal/...
-			dir, err := os.MkdirTemp(".", "zzscope")
+			// Inside the module, so the package may import zp/internal/...;
+			// the leading _ keeps ./... from matching it.
+			dir, err := os.MkdirTemp(".", "_zzscope")
 			if err != nil {
 				t.Fatal(err)
 			}

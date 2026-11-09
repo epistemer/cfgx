@@ -31,19 +31,31 @@ func TestExamples(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			// Whatever happens, leave the committed files as they were; a
+			// failure says how to update them.
+			t.Cleanup(func() {
+				for f, old := range before {
+					if now, err := os.ReadFile(f); err != nil || !bytes.Equal(old, now) {
+						_ = os.WriteFile(f, old, 0o644)
+					}
+				}
+			})
 			goCmd(t, dir, "generate", "./...")
+			stale := false
 			for f, old := range before {
 				now, err := os.ReadFile(f)
 				if err != nil {
 					t.Fatal(err)
 				}
 				if !bytes.Equal(old, now) {
-					// Leave the committed file as it was; the failure says
-					// how to update it.
-					_ = os.WriteFile(f, old, 0o644)
+					stale = true
 					t.Errorf("%s is stale; run go generate ./... in %s", f, dir)
 				}
 			}
+			if stale {
+				return // vet and test would only repeat it
+			}
+			goCmd(t, dir, "build", "./...")
 			goCmd(t, dir, "vet", "./...")
 			goCmd(t, dir, "test", "./...")
 		})
