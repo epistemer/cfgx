@@ -1,0 +1,123 @@
+# M4.7: Text keys: any named type whose pointer implements
+# encoding.TextUnmarshaler. The default is its MarshalText text, parsed when
+# loading; empty text is the zero value, which counts as not set.
+go generate ./...
+go build -o app$exe .
+
+exec ./app$exe run --help
+stdout '--net-allow prefix\s+Allowed client range \(default "10.0.0.0/8"\)'
+stdout '--net-peer addrport\s+Peer address\s'
+stdout '--net-level level\s+Level \(default "high"\)'
+
+exec ./app$exe run
+stdout '^allow=10.0.0.0/8 peer=invalid AddrPort level=2\r?\n$'
+
+# Each layer gives text; the type parses it.
+cp files/app.yaml app.yaml
+exec ./app$exe run --net-peer 192.0.2.1:443
+stdout '^allow=192.168.0.0/16 peer=192.0.2.1:443 level=1\r?\n$'
+rm app.yaml
+env APP_NET_ALLOW=::1/128
+exec ./app$exe run
+stdout '^allow=::1/128 '
+
+# An empty value is the zero value, so a Required key fails.
+env APP_NET_ALLOW=
+exec ./app$exe run
+stdout '^allow=invalid Prefix '
+! exec ./app$exe need
+stderr '^  must.peer: is required; set --must-peer, APP_MUST_PEER or must.peer in the config file\r?$'
+
+# The type's own error is reported, with the source.
+! exec ./app$exe run --net-allow 10.0.0.0 --net-level extreme
+cmp stderr want.txt
+
+-- want.txt --
+app: invalid configuration (2 problems)
+  net.allow: "10.0.0.0" isn't valid: netip.ParsePrefix("10.0.0.0"): no '/' (flag --net-allow)
+  net.level: "extreme" isn't valid: unknown level (flag --net-level)
+-- files/app.yaml --
+net:
+  allow: 192.168.0.0/16
+  level: low
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(settings.RunCommand(&cobra.Command{Use: "run"},
+		func(_ context.Context, r *settings.Run) error {
+			fmt.Printf("allow=%v peer=%v level=%d\n", r.NetAllow(), r.NetPeer(), r.NetLevel())
+			return nil
+		}))
+	root.AddCommand(settings.NeedCommand(&cobra.Command{Use: "need"},
+		func(_ context.Context, n *settings.Need) error { return nil }))
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/levels/levels.go --
+package levels
+
+import "errors"
+
+// Level parses its text through a pointer method, and marshals it through
+// a value method.
+type Level int
+
+func (l Level) MarshalText() ([]byte, error) {
+	return []byte([...]string{"", "low", "high"}[l]), nil
+}
+
+func (l *Level) UnmarshalText(b []byte) error {
+	switch string(b) {
+	case "low":
+		*l = 1
+	case "high":
+		*l = 2
+	default:
+		return errors.New("unknown level")
+	}
+	return nil
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import (
+	"net/netip"
+
+	"github.com/epistemer/cfgx/dsl"
+
+	"example.com/e2e/internal/levels"
+)
+
+var Net = dsl.Group("net", "Network",
+	dsl.Text("allow", "Allowed client range", netip.Prefix{}).Default(netip.MustParsePrefix("10.0.0.0/8")),
+	dsl.Text("peer", "Peer address", netip.AddrPort{}),
+	dsl.Text("level", "Level", levels.Level(0)).Default(levels.Level(2)),
+)
+
+var Must = dsl.Group("must", "Required",
+	dsl.Text("peer", "Peer address", netip.AddrPort{}).Required(),
+)
+
+var App = dsl.App("app", "Test app", Net, Must).ConfigFile("app", ".")
+
+var Run = dsl.Command("Run").Uses(Net)
+
+var Need = dsl.Command("Need").Uses(Must)

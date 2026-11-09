@@ -234,6 +234,8 @@ func allKinds() *ir.App {
 			{Name: "backoff", Desc: "durations", Kind: ir.KindDurations, Default: str("1000ms,1m")},
 			{Name: "labels", Desc: "stringmap", Kind: ir.KindStringMap, Default: str("b=2,a=x=y")},
 			{Name: "none2", Desc: "empty list", Kind: ir.KindStrings, Default: str("")},
+			{Name: "cidr", Desc: "text", Kind: ir.KindText, Default: str("10.0.0.0/8"),
+				Type: &ir.Type{Path: "net/netip", Pkg: "netip", Name: "Prefix", Kind: "struct"}},
 		}}},
 		Commands: []ir.Command{{Name: "Run", Uses: []string{"k"}}},
 	}
@@ -268,6 +270,7 @@ func TestKindsGolden(t *testing.T) {
 		"k.backoff": {"[1s,1m0s]", "[]time.Duration{1 * time.Second, 1 * time.Minute}"},
 		"k.labels":  {"[a=x=y,b=2]", `map[string]string{"a": "x=y", "b": "2"}`},
 		"k.none2":   {"", "nil"},
+		"k.cidr":    {"10.0.0.0/8", ""},
 	} {
 		if got[path] != want {
 			t.Errorf("%s: got %q, want %q", path, got[path], want)

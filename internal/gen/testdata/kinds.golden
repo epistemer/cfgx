@@ -4,6 +4,7 @@ package settings
 
 import (
 	"context"
+	"net/netip"
 	"net/url"
 	"slices"
 	"time"
@@ -38,6 +39,7 @@ type values struct {
 	KBackoff []time.Duration
 	KLabels  map[string]string
 	KNone2   []string
+	KCidr    netip.Prefix
 }
 
 var keys = [...]engine.Key[values]{
@@ -175,6 +177,12 @@ var keys = [...]engine.Key[values]{
 		IsSet:    func(v *values) bool { return len(v.KNone2) != 0 },
 		Default:  func(v *values) { v.KNone2 = nil },
 	},
+	{
+		Path: "k.cidr", Env: "K_K_CIDR", Flag: "k-cidr",
+		Type: "prefix", Desc: "text", DefaultText: "10.0.0.0/8", Quote: true,
+		Set:   func(v *values, raw string) error { return engine.ParseText(raw, &v.KCidr) },
+		IsSet: func(v *values) bool { return engine.NonZero(v.KCidr) },
+	},
 }
 
 // app describes the whole application to the engine.
@@ -208,6 +216,7 @@ type K interface {
 	KBackoff() []time.Duration
 	KLabels() map[string]string
 	KNone2() []string
+	KCidr() netip.Prefix
 }
 
 type kGroup struct{ r *root }
@@ -272,6 +281,9 @@ func (g *kGroup) KLabels() map[string]string { return g.r.cur.Load().KLabels }
 // KNone2 returns k.none2: empty list
 func (g *kGroup) KNone2() []string { return g.r.cur.Load().KNone2 }
 
+// KCidr returns k.cidr: text
+func (g *kGroup) KCidr() netip.Prefix { return g.r.cur.Load().KCidr }
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -287,7 +299,7 @@ type Run struct {
 // them. The slice is a copy.
 func (c *Run) Args() []string { return slices.Clone(c.args) }
 
-var keysRun = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}
+var keysRun = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
 
 func newRun(v *values, args []string) *Run {
 	r := &root{}

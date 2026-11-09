@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 12
+const Version = 13
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -53,6 +53,8 @@ const (
 	KindInts      Kind = "ints"
 	KindDurations Kind = "durations"
 	KindStringMap Kind = "stringmap"
+	// M4.7
+	KindText Kind = "text"
 )
 
 // App is a whole schema.
@@ -110,7 +112,7 @@ type Key struct {
 	Tags       []string `json:"tags,omitempty"`
 	Aliases    []string `json:"aliases,omitempty"`
 	Deprecated string   `json:"deprecated,omitempty"`
-	// Type is the Go type of an enum's values.
+	// Type is the Go type of an enum's values, or of a Text key.
 	Type *Type `json:"type,omitempty"`
 	// Enum lists an enum's values, in declaration order.
 	Enum []EnumValue `json:"enum,omitempty"`

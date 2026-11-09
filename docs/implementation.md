@@ -528,6 +528,22 @@ unknown.
   - Help labels: `strings`, `ints`, `durations`, `key=value`.
   - The engine's `Key` gets `SetItems` in place of `Set` for these kinds, and
     `Map` for `StringMap`.
+- **[decided, M4.7]** `Text` keys:
+  - The schema checks T with reflect: a named, exported, non-generic type
+    from a package, whose pointer implements `encoding.TextUnmarshaler`. The
+    generator rejects a type declared in the schema package, as for enums.
+    The third argument only names T and must be its zero value; a default
+    goes through `Default`.
+  - `Default` needs T or `*T` to implement `encoding.TextMarshaler`. The
+    schema marshals the value, parses the text back with `UnmarshalText`,
+    and requires the same value (`reflect.DeepEqual`), so the default the
+    app loads is the one the schema wrote. Like `URL` and `Location`
+    defaults, the text is parsed when loading (M4.5).
+  - The text reaches `UnmarshalText` exactly, without trimming; empty text
+    is T's zero value, which counts as not set (A4), checked with
+    `reflect.Value.IsZero`, so T needn't be comparable.
+  - The help label is the type's name in lower case (`prefix`), and a
+    default is quoted.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree

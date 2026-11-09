@@ -199,8 +199,11 @@ func durationLit(d time.Duration) string {
 // kindInfo fills in km's type-dependent fields from its kind. Packages the
 // key's type needs are named through imp.
 func kindInfo(km *KeyModel, k ir.Key, imp *importer) error {
-	if k.Kind == ir.KindEnum {
+	switch k.Kind {
+	case ir.KindEnum:
 		return enumInfo(km, k, imp)
+	case ir.KindText:
+		return textInfo(km, k, imp)
 	}
 	spec, ok := kinds[k.Kind]
 	if !ok {
@@ -274,6 +277,27 @@ func enumInfo(km *KeyModel, k ir.Key, imp *importer) error {
 		if t.Path != "" {
 			km.DefaultLit = km.GoType + "(" + km.DefaultLit + ")"
 		}
+	}
+	return nil
+}
+
+// textInfo fills in a Text key's fields: its Go type, named through imp.
+// The default's text was checked by the schema, which parsed it back with
+// the type's own UnmarshalText; the engine parses it when loading.
+func textInfo(km *KeyModel, k ir.Key, imp *importer) error {
+	t := k.Type
+	if t == nil || t.Path == "" {
+		return fmt.Errorf("text key %s has no type in the IR (a cfgx bug)", km.Path)
+	}
+	if t.Path == imp.schema {
+		return fmt.Errorf("text type %s.%s of %s is declared in the schema package, which the generated code can't import; declare it in another package", t.Pkg, t.Name, km.Path)
+	}
+	km.GoType = imp.name(t.Path, t.Pkg) + "." + t.Name
+	km.FlagType, km.Parse, km.Quote = strings.ToLower(t.Name), "ParseText", true
+	km.IsSet = fmt.Sprintf("engine.NonZero(v.%s)", km.Field)
+	km.HasDefault = k.Default != nil
+	if km.HasDefault {
+		km.DefaultText = *k.Default
 	}
 	return nil
 }
