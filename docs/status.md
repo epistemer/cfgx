@@ -4,6 +4,32 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M6.1 generated files
+
+- **Landed:** `cfgx gen` now also writes, under the module root (or
+  `-artifacts dir`):
+  - `config.example.yaml`: every key commented out at its default, with
+    where else it can be set and which commands use it.
+  - `config.schema.json` (draft 2020-12), so editors complete keys and flag
+    typos.
+  - `.env.example`, `docs/CONFIG.md` and `cfgx.lock.json`.
+
+  The example config and the schema are embedded in the generated code for
+  the `config` subcommand. Both examples ship the files, and the examples
+  test fails if any generated file is stale.
+- **Reviewed:** Gemini 3.8 Flash (High), about 97k tokens
+  ([review 0021](reviews/0021-gemini-m6.1-review.md)). 7 of 10 findings
+  fixed. The important one: a `Secret`'s default showed in the lock file.
+- **Decided for you** (implementation.md §3.4):
+  - The example config comments everything out, so `config init` pins no
+    defaults.
+  - "Used by" names the schema's commands (`Serve`), since cfgx doesn't know
+    cobra's names.
+  - The JSON Schema is stricter than cfgx about quoting numbers.
+- **Next:** M6.2 (`gen --check`), M6.3 (`cfgx diff`), M6.4 (`config`
+  subcommand).
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M6.6 LoadX without cobra
 
 - **Landed:** `settings.LoadMigrate(ctx, cfgx.WithEnv(env),

@@ -1,0 +1,221 @@
+{
+  "commands": [
+    {
+      "name": "Serve",
+      "tags": [
+        "Mailer"
+      ],
+      "uses": [
+        "database",
+        "server",
+        "scheduler",
+        "scheduler.retry",
+        "auth",
+        "smtp"
+      ]
+    },
+    {
+      "name": "Retry",
+      "uses": [
+        "scheduler.retry"
+      ]
+    },
+    {
+      "args": [
+        {
+          "desc": "Recipient",
+          "kind": "string",
+          "name": "to.address",
+          "required": true
+        }
+      ],
+      "name": "TestEmail",
+      "tags": [
+        "Mailer"
+      ],
+      "uses": []
+    },
+    {
+      "name": "Notify",
+      "tags": [
+        "Mailer"
+      ],
+      "uses": [
+        "smtp"
+      ]
+    },
+    {
+      "args": [
+        {
+          "desc": "Apply down migrations",
+          "kind": "bool",
+          "name": "down"
+        },
+        {
+          "desc": "Number of steps",
+          "kind": "int",
+          "name": "steps"
+        }
+      ],
+      "name": "Migrate",
+      "uses": []
+    }
+  ],
+  "configFile": "config",
+  "desc": "Nested",
+  "envPrefix": "ZP",
+  "groups": [
+    {
+      "desc": "Database connection",
+      "goName": "DB",
+      "keys": [
+        {
+          "aliases": [
+            "database.hostname"
+          ],
+          "deprecated": "use host instead",
+          "desc": "Host",
+          "kind": "string",
+          "name": "host"
+        }
+      ],
+      "name": "database"
+    },
+    {
+      "desc": "HTTP server",
+      "flagPrefix": "",
+      "keys": [
+        {
+          "default": "7777",
+          "desc": "Port",
+          "kind": "int",
+          "name": "port"
+        },
+        {
+          "desc": "Serve HTTPS",
+          "kind": "bool",
+          "name": "tls.enabled"
+        },
+        {
+          "default": "cert.pem",
+          "desc": "TLS certificate",
+          "kind": "string",
+          "name": "tls.cert"
+        }
+      ],
+      "name": "server"
+    },
+    {
+      "desc": "Task scheduler",
+      "groups": [
+        {
+          "desc": "Retry policy",
+          "keys": [
+            {
+              "default": "3",
+              "desc": "Maximum retries",
+              "kind": "int",
+              "name": "max"
+            }
+          ],
+          "name": "retry"
+        }
+      ],
+      "keys": [
+        {
+          "desc": "Workers",
+          "kind": "int",
+          "name": "workers"
+        }
+      ],
+      "name": "scheduler"
+    },
+    {
+      "desc": "Authentication",
+      "keys": [
+        {
+          "desc": "OTP length",
+          "kind": "int",
+          "name": "otp.length"
+        },
+        {
+          "desc": "Sender address for auth emails",
+          "kind": "string",
+          "name": "emailfrom",
+          "tags": [
+            "Mailer"
+          ]
+        },
+        {
+          "desc": "Static API token",
+          "kind": "string",
+          "name": "token"
+        },
+        {
+          "desc": "API keys file",
+          "kind": "string",
+          "name": "keys"
+        }
+      ],
+      "name": "auth"
+    },
+    {
+      "desc": "Outgoing mail",
+      "keys": [
+        {
+          "desc": "SMTP server host",
+          "kind": "string",
+          "name": "host"
+        },
+        {
+          "default": "587",
+          "desc": "SMTP server port",
+          "kind": "int",
+          "name": "port"
+        },
+        {
+          "desc": "Use implicit TLS",
+          "kind": "bool",
+          "name": "tls"
+        }
+      ],
+      "name": "smtp",
+      "tags": [
+        "Mailer"
+      ]
+    }
+  ],
+  "initialisms": [
+    "OTP"
+  ],
+  "name": "zp",
+  "rules": [
+    {
+      "group": "auth",
+      "keys": [
+        "auth.token",
+        "auth.keys"
+      ],
+      "kind": "AtMostOne"
+    },
+    {
+      "group": "server",
+      "keys": [
+        "server.tls.cert",
+        "server.tls.enabled"
+      ],
+      "kind": "RelevantIf"
+    }
+  ],
+  "searchPaths": [
+    ".",
+    "$HOME/.zp"
+  ],
+  "tags": [
+    {
+      "desc": "Everything the mailer needs",
+      "name": "Mailer"
+    }
+  ],
+  "version": 16
+}

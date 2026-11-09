@@ -2,6 +2,7 @@ package gen
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/epistemer/cfgx/internal/golden"
 	"github.com/epistemer/cfgx/internal/ir"
+	"github.com/epistemer/cfgx/internal/node"
 )
 
 func str(s string) *string { return &s }
@@ -709,5 +711,79 @@ func TestRuleOnRenamedKey(t *testing.T) {
 	}
 	if len(m.Rules) != 1 || fmt.Sprint(m.Rules[0].Keys) != "[0 1]" {
 		t.Errorf("rules: %+v", m.Rules)
+	}
+}
+
+// TestArtifactsGolden checks every generated file (M6.1) for two schemas,
+// and that the example config and the schema parse.
+func TestArtifactsGolden(t *testing.T) {
+	for name, app := range map[string]*ir.App{"nested": nested(), "kinds": allKinds()} {
+		t.Run(name, func(t *testing.T) {
+			app.ConfigFile, app.SearchPaths = "config", []string{".", "$HOME/.zp"}
+			m, err := Build(app, "settings")
+			if err != nil {
+				t.Fatal(err)
+			}
+			files, err := Artifacts(m)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, f := range []string{"config.example.yaml", "config.schema.json", ".env.example", "docs/CONFIG.md", "cfgx.lock.json"} {
+				data, ok := files[f]
+				if !ok {
+					t.Errorf("no %s", f)
+					continue
+				}
+				golden.Assert(t, filepath.Join("testdata", "artifacts", name, strings.ReplaceAll(f, "/", "_")+".golden"), data)
+			}
+			if _, err := node.Parse("config.example.yaml", files["config.example.yaml"], node.YAML); err != nil {
+				t.Errorf("the example config doesn't parse: %v", err)
+			}
+			var schema map[string]any
+			if err := json.Unmarshal(files["config.schema.json"], &schema); err != nil {
+				t.Errorf("the schema isn't JSON: %v", err)
+			}
+			if m.ExampleConfig != string(files["config.example.yaml"]) || m.JSONSchema != string(files["config.schema.json"]) {
+				t.Error("the embedded files differ from the written ones")
+			}
+		})
+	}
+}
+
+// Generated files stay well-formed whatever the schema says: multi-line
+// descriptions and defaults, secrets.
+func TestArtifactsEdgeCases(t *testing.T) {
+	a := allKinds()
+	a.ConfigFile = "config"
+	a.Groups[0].Desc = "Every kind\nsecond line"
+	a.Groups[0].Keys = []ir.Key{
+		{Name: "multi", Desc: "One line.\nAnother line.", Kind: ir.KindString, Default: str("a\nb")},
+		{Name: "pw", Desc: "Password", Kind: ir.KindSecret, Default: str("hunter2")},
+		{Name: "waits", Desc: "Waits", Kind: ir.KindDurations, Default: str("0,5s")},
+		{Name: "size", Desc: "Size", Kind: ir.KindByteSize, Default: str("1024")},
+	}
+	m, err := Build(a, "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := Artifacts(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range files {
+		if strings.Contains(string(data), "hunter2") {
+			t.Errorf("%s shows the secret", name)
+		}
+	}
+	if _, err := node.Parse("config.example.yaml", files["config.example.yaml"], node.YAML); err != nil {
+		t.Errorf("example config: %v\n%s", err, files["config.example.yaml"])
+	}
+	for _, l := range strings.Split(string(files[".env.example"]), "\n") {
+		if l != "" && !strings.HasPrefix(l, "#") {
+			t.Errorf(".env.example has an uncommented line %q", l)
+		}
+	}
+	if !strings.Contains(string(files[".env.example"]), `# K_K_MULTI="a\nb"`) {
+		t.Errorf(".env.example:\n%s", files[".env.example"])
 	}
 }

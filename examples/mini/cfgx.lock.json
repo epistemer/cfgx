@@ -1,0 +1,87 @@
+{
+  "commands": [
+    {
+      "name": "Serve",
+      "uses": [
+        "server",
+        "database"
+      ]
+    },
+    {
+      "name": "Migrate",
+      "uses": [
+        "database"
+      ]
+    }
+  ],
+  "configFile": "mini",
+  "desc": "Minimal cfgx example",
+  "envPrefix": "MINI",
+  "global": [
+    "log"
+  ],
+  "groups": [
+    {
+      "desc": "HTTP server",
+      "keys": [
+        {
+          "default": "localhost",
+          "desc": "Listen host",
+          "kind": "string",
+          "name": "host"
+        },
+        {
+          "default": "8080",
+          "desc": "Listen port",
+          "kind": "int",
+          "name": "port"
+        },
+        {
+          "desc": "Enable TLS",
+          "kind": "bool",
+          "name": "tls"
+        }
+      ],
+      "name": "server"
+    },
+    {
+      "desc": "Database connection",
+      "keys": [
+        {
+          "desc": "Database connection URL",
+          "kind": "string",
+          "name": "url"
+        },
+        {
+          "desc": "Query timeout in seconds",
+          "kind": "int",
+          "name": "timeout"
+        },
+        {
+          "default": "false",
+          "desc": "Log SQL queries",
+          "kind": "bool",
+          "name": "debug"
+        }
+      ],
+      "name": "database"
+    },
+    {
+      "desc": "Logging",
+      "keys": [
+        {
+          "desc": "Log more",
+          "kind": "bool",
+          "name": "verbose"
+        }
+      ],
+      "name": "log"
+    }
+  ],
+  "name": "mini",
+  "searchPaths": [
+    ".",
+    "$HOME/.config/mini"
+  ],
+  "version": 16
+}
