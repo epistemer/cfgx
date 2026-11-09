@@ -11,6 +11,8 @@ grep 'return Even\(v\.SrvBatch\)' internal/settings/zz_settings.go
 exec ./app$exe run --help
 stdout '--srv-workers int\s+Workers \(default from runtime.NumCPU\)'
 stdout '--srv-port int\s+Port \(default 8080\)'
+stdout '--srv-seed int\s+Seed \(default from rand.Int\)'
+grep '"math/rand/v2"' internal/settings/zz_settings.go
 
 # DefaultFunc runs when loading; the defaults pass their checks.
 exec ./app$exe run
@@ -110,6 +112,7 @@ func Even(n int) error {
 package schema
 
 import (
+	"math/rand/v2"
 	"runtime"
 	"time"
 
@@ -122,6 +125,7 @@ import (
 var Srv = dsl.Group("srv", "Server",
 	dsl.Int("port", "Port").Default(8080).Range(1, 65535),
 	dsl.Int("workers", "Workers").DefaultFunc(runtime.NumCPU).Range(1, 1024),
+	dsl.Int("seed", "Seed").DefaultFunc(rand.Int),
 	dsl.String("name", "Name").Len(3, 10).Pattern(`[a-z]+`),
 	dsl.String("email", "Email").Validate(validate.Email),
 	dsl.Int("batch", "Batch size").Validate(settings.Even),

@@ -4,6 +4,35 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M4.8 constraints and function references
+
+- **Landed:**
+  - `Range`, `Min` and `Max` on numbers, durations and sizes; `Len` and
+    `Pattern` on strings.
+  - `Validate(f)` and `DefaultFunc(f)`, typed by what the getter returns, so
+    a `Secret` validator takes a `cfgx.Secret`.
+  - The schema rejects defaults that break the key's own constraints, and
+    closures, methods, unexported or generic functions, and functions from
+    the schema package or `main`.
+  - One `go list` call checks every package the generated code would import
+    for a key, enum and `Text` types included: none may import `cfgx/dsl`,
+    and `internal/` packages must be reachable. A function in the generated
+    package itself is called without an import.
+  - Failures name the key and the value's source, never the value.
+- **Reviewed:** Gemini 3.8 Flash (High), about 316k tokens
+  ([review 0015](reviews/0015-gemini-m4.8-review.md)). 5 of 8 findings
+  fixed, including directories behind symlinks (macOS `/tmp`) and enum types
+  declared in the generated package. Fixing one exposed a parsing bug that
+  left some packages unchecked; also fixed.
+- **Decided for you** (implementation.md §3.4):
+  - Constraints and `Validate` run only on values that are set. An optional
+    port with `Range(1, 65535)` can stay 0; `Required` is for presence.
+  - `Pattern` matches the whole value.
+  - Constraint messages don't quote the value. A `Validate` function's own
+    message is passed through as written.
+- **Next:** M4.9 (naming and source modifiers), then M4.10 (completion).
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M4.7 Text keys
 
 - **Landed:** `dsl.Text("allow", "...", netip.Prefix{})` takes any named

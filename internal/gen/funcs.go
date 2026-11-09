@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/epistemer/cfgx/internal/ir"
@@ -150,7 +151,9 @@ func ResolveRefs(ctx context.Context, m *Model, dir string) error {
 	if err != nil {
 		return err
 	}
-	args := []string{"list", "-e", "-f", "{{.Dir}}\t{{.ImportPath}}\t{{.Name}}\t{{join .Deps \" \"}}", "."}
+	// Match lists the command-line patterns a package matched: "." marks
+	// the generated package, whatever symlinks its directory goes through.
+	args := []string{"list", "-e", "-f", "{{join .Match \" \"}}\t{{.ImportPath}}\t{{.Name}}\t{{join .Deps \" \"}}", "."}
 	seen := map[string]bool{}
 	for _, r := range m.refs {
 		if !seen[r.path] {
@@ -172,27 +175,36 @@ func ResolveRefs(ctx context.Context, m *Model, dir string) error {
 	}
 	pkgs := map[string]pkgInfo{}
 	self := ""
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		f := strings.SplitN(line, "\t", 4)
+	// Lines aren't trimmed: a package without dependencies ends in a tab.
+	for _, line := range strings.Split(strings.TrimRight(string(out), "\r\n"), "\n") {
+		f := strings.SplitN(strings.TrimRight(line, "\r"), "\t", 4)
 		if len(f) < 4 {
 			continue
 		}
-		if f[0] == abs {
+		if slices.Contains(strings.Fields(f[0]), ".") {
 			self = f[1]
 		}
 		pkgs[f[1]] = pkgInfo{name: f[2], deps: strings.Fields(f[3])}
 	}
+	if self == "" {
+		return fmt.Errorf("checking the packages the schema refers to: go list didn't report the package in %s", abs)
+	}
 	var probs Problems
-	selfOnly := map[string]bool{}
+	selfRef := false
 	for _, r := range m.refs {
 		p := pkgs[r.path]
 		switch {
-		case r.path == self && r.fn != nil:
-			r.fn.Self = true
-			selfOnly[r.path] = !importedElsewhere(m, r.path)
+		case r.path == self && r.fn == nil:
+			probs = append(probs, Problem{r.pos, fmt.Sprintf("%s: %s is declared in the generated package %s, which can't import itself; declare it in another package", r.km.Path, r.what, self)})
+			continue
+		case r.path == self:
+			r.fn.Self, selfRef = true, true
 			if r.km.defaultFunc == r.fn {
 				r.km.DefaultLit = r.fn.Expr() + "()"
 			}
+			continue
+		case p.name == "":
+			probs = append(probs, Problem{r.pos, fmt.Sprintf("%s: %s is in %s, which go list can't load from %s", r.km.Path, r.what, r.path, abs)})
 			continue
 		case p.name == "main":
 			probs = append(probs, Problem{r.pos, fmt.Sprintf("%s: %s is in package main (%s), which the generated code can't import", r.km.Path, r.what, r.path)})
@@ -204,31 +216,21 @@ func ResolveRefs(ctx context.Context, m *Model, dir string) error {
 			probs = append(probs, Problem{r.pos, fmt.Sprintf("%s: %s is in %s, an internal package the generated package %s can't import", r.km.Path, r.what, r.path, self)})
 			continue
 		}
-		if p.name != "" {
-			m.imp.pkgs[r.path] = p.name
+		m.imp.pkgs[r.path] = p.name
+		if r.fn != nil && r.km.defaultFunc == r.fn {
+			r.km.DefaultFrom = p.name + "." + r.fn.Name
 		}
 	}
 	if len(probs) > 0 {
 		return probs
 	}
-	for p, only := range selfOnly {
-		if only {
-			delete(m.imp.used, p)
-		}
+	if selfRef {
+		// Only functions can be in the generated package (types there are
+		// rejected above), and they need no import.
+		delete(m.imp.used, self)
 	}
 	m.Imports = m.imp.imports(len(m.Commands) > 0)
 	return nil
-}
-
-// importedElsewhere reports whether a key's type needs the package at p,
-// so its import stays even when its functions are called directly.
-func importedElsewhere(m *Model, p string) bool {
-	for _, r := range m.refs {
-		if r.path == p && r.fn == nil {
-			return true
-		}
-	}
-	return false
 }
 
 func contains(ss []string, s string) bool {
@@ -242,15 +244,18 @@ func contains(ss []string, s string) bool {
 
 // internalOK reports whether from may import to under Go's internal/ rule:
 // a path with an internal element is importable only from within the tree
-// rooted at that element's parent.
+// rooted at the parent of its last internal element, as the go command
+// checks it.
 func internalOK(from, to string) bool {
 	elems := strings.Split(to, "/")
 	for i := len(elems) - 1; i >= 0; i-- {
 		if elems[i] != "internal" {
 			continue
 		}
+		// A standard library internal package (internal/abi) is for the
+		// standard library only.
 		parent := strings.Join(elems[:i], "/")
-		return parent == "" || from == parent || strings.HasPrefix(from, parent+"/")
+		return parent != "" && (from == parent || strings.HasPrefix(from, parent+"/"))
 	}
 	return true
 }

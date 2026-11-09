@@ -664,7 +664,7 @@ func TestFuncRefRules(t *testing.T) {
 		{"m/internal/settings", "m/internal/x", true},
 		{"m/internal/settings", "m/internal/settings/schema/internal/x", false},
 		{"other/a", "m/internal/x", false},
-		{"m/a", "internal/x", true},
+		{"m/a", "internal/abi", false},
 		{"m/a", "m/x", true},
 	} {
 		if got := internalOK(c.from, c.to); got != c.ok {
