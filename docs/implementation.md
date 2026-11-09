@@ -670,6 +670,14 @@ unknown.
     file, as `engine.App.ExampleConfig` and `JSONSchema` (raw string
     literals where possible), for `config init` and `config schema`
     (M6.4). Per-key metadata for `explain` comes with M6.4, which uses it.
+- **[decided, M6.2]** `cfgx gen -check` renders the code and the artifacts
+  in memory, writes nothing, and fails naming every file that is stale or
+  missing; with `-artifacts -` it checks only the code.
+  `cfgxtest.AssertGenerated(t)` finds the package's `//go:generate` line
+  that runs `cfgx gen`, and runs it with `-check` added after `gen`, so it
+  checks exactly what `go generate` would write. `examples/zp` calls it, so
+  the examples test, which runs the example's tests, fails on a stale file
+  twice over.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree

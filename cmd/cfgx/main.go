@@ -29,11 +29,12 @@ func main() {
 	os.Exit(run(context.Background(), os.Args[1:], os.Stderr))
 }
 
-const usage = `usage: cfgx gen [-timeout d] [-artifacts dir] <schema package>
+const usage = `usage: cfgx gen [-check] [-timeout d] [-artifacts dir] <schema package>
 
 Runs the schema package and writes zz_<package>.go in the current directory,
 and the example config, its JSON Schema, .env.example, docs/CONFIG.md and
 cfgx.lock.json under the module root, or under -artifacts dir ("-" for none).
+With -check, it writes nothing and fails if any of them is stale.
 `
 
 func run(ctx context.Context, args []string, stderr io.Writer) int {
@@ -44,6 +45,7 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 	fs := flag.NewFlagSet("cfgx gen", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	timeout := fs.Duration("timeout", 2*time.Minute, "stop running the schema after this long")
+	check := fs.Bool("check", false, "write nothing; fail if a generated file is stale")
 	artifacts := fs.String("artifacts", "", "where to write the example config, JSON Schema, docs and lock file (default: the module root; - for none)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
@@ -52,14 +54,14 @@ func run(ctx context.Context, args []string, stderr io.Writer) int {
 		fmt.Fprint(stderr, usage)
 		return 2
 	}
-	if err := generate(ctx, fs.Arg(0), *timeout, *artifacts, stderr); err != nil {
+	if err := generate(ctx, fs.Arg(0), *timeout, *artifacts, *check, stderr); err != nil {
 		fmt.Fprintln(stderr, "cfgx:", err)
 		return 1
 	}
 	return 0
 }
 
-func generate(ctx context.Context, pattern string, timeout time.Duration, artifactDir string, stderr io.Writer) error {
+func generate(ctx context.Context, pattern string, timeout time.Duration, artifactDir string, check bool, stderr io.Writer) error {
 	wd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -94,28 +96,42 @@ func generate(ctx context.Context, pattern string, timeout time.Duration, artifa
 	if err != nil {
 		return err
 	}
-	if err := writeIfChanged(out, src); err != nil {
-		return err
+	all := map[string][]byte{out: src}
+	if artifactDir != "-" {
+		if artifactDir == "" {
+			if artifactDir, err = moduleRoot(ctx, wd); err != nil {
+				return err
+			}
+		}
+		for name, data := range files {
+			all[filepath.Join(artifactDir, filepath.FromSlash(name))] = data
+		}
 	}
-	if artifactDir == "-" {
+	paths := make([]string, 0, len(all))
+	for p := range all {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	if check {
+		var stale []string
+		for _, p := range paths {
+			if old, err := os.ReadFile(p); err != nil || !bytes.Equal(old, all[p]) {
+				if rel, err := filepath.Rel(wd, p); err == nil {
+					p = rel
+				}
+				stale = append(stale, p)
+			}
+		}
+		if len(stale) > 0 {
+			return fmt.Errorf("generated files are stale: %s; run go generate", strings.Join(stale, ", "))
+		}
 		return nil
 	}
-	if artifactDir == "" {
-		if artifactDir, err = moduleRoot(ctx, wd); err != nil {
+	for _, p := range paths {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			return err
 		}
-	}
-	names := make([]string, 0, len(files))
-	for name := range files {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		path := filepath.Join(artifactDir, filepath.FromSlash(name))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return err
-		}
-		if err := writeIfChanged(path, files[name]); err != nil {
+		if err := writeIfChanged(p, all[p]); err != nil {
 			return err
 		}
 	}
