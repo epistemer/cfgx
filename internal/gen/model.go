@@ -63,6 +63,7 @@ type KeyModel struct {
 	Required, Global         bool
 	FlagOnly                 bool
 	FileEnv, File, Resolve   bool  // see engine.Key
+	Items, Map               bool  // a list or map key: SetItems, see engine.Key
 	MaxFileSize              int64 // see engine.Key
 	Tags                     []string
 	Aliases                  []AliasModel

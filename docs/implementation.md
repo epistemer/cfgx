@@ -502,6 +502,32 @@ unknown.
     defaults are quoted in `--help`; zone names aren't.
   - Open for `Test()` (§5.4 of the interface): it does no I/O, but a
     `Location` default needs `LoadLocation`. Decide when `Test()` lands.
+- **[decided, M4.6]** Lists and maps:
+  - Flags record every occurrence (`rawValue` keeps them all), and the engine
+    splits each occurrence, an env var, or a single value in the config file
+    as one CSV record (`encoding/csv`, spaces after a comma dropped): `--tag a
+    --tag b,c` and `ZP_TAG='a, "b,c"'` both work. A list in the config file
+    gives its items as they are, commas included; a map gives `key=value`
+    items for `StringMap`. Items must be single values: a null, list or map
+    item is a problem at its own position.
+  - Only the winning layer counts, and it replaces the whole list or map:
+    layers never merge. An empty flag or env var gives an empty list, which
+    counts as not set (A4); the getter returns nil for an empty list or map.
+  - Empty items are kept in `Strings` (`a,,b`) but rejected in `Ints` and
+    `Durations`, where they would quietly be 0. Item problems name the item:
+    `item 2: "x" is not an integer`.
+  - `StringMap` items split at the first `=`; spaces around a key are
+    dropped, the value is kept, and a later item with the same key wins, so a
+    script can override `--label a=1` with a later `--label a=2`. An empty
+    key is a problem. In the config file a map key can't contain `=`.
+  - Nothing under a `StringMap` key in the config file is an unknown key.
+  - Defaults are recorded as one CSV record, checked with the engine's
+    parsers at generate time, and written as literals (`[]int{80, 443}`), so
+    each load gets a fresh slice. `--help` shows `[a,"b,c"]`, quoting items
+    that hold a comma, a quote or outer spaces, and `[k=v]` for maps.
+  - Help labels: `strings`, `ints`, `durations`, `key=value`.
+  - The engine's `Key` gets `SetItems` in place of `Set` for these kinds, and
+    `Map` for `StringMap`.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree

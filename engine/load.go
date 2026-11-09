@@ -254,6 +254,44 @@ type candidate struct {
 	bad    *cfgx.Problem
 	read   bool
 	trim   bool // remove one trailing newline from what is read
+	// For list and map keys: occ holds a flag's occurrences, each split as
+	// CSV like raw; items, if exact, are a config file list's or map's
+	// items, used as they are.
+	occ   []string
+	items []string
+	exact bool
+}
+
+// listItems returns the items c gives a list or map key.
+func (c *candidate) listItems() ([]string, error) {
+	if c.exact {
+		return c.items, nil
+	}
+	raws := c.occ
+	if raws == nil {
+		raws = []string{c.raw}
+	}
+	var items []string
+	for _, r := range raws {
+		its, err := SplitCSV(r)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, its...)
+	}
+	return items, nil
+}
+
+// apply parses c, whose text is raw, into k's field of v.
+func apply[V any](k *Key[V], v *V, c *candidate, raw string) error {
+	if k.SetItems == nil {
+		return k.Set(v, raw)
+	}
+	items, err := c.listItems()
+	if err != nil {
+		return err
+	}
+	return k.SetItems(v, items)
 }
 
 // sets reports whether c would set key k (A4). A path counts as set if it
@@ -266,7 +304,7 @@ func sets[V any](k *Key[V], c *candidate) bool {
 	if c.read {
 		return c.raw != ""
 	}
-	return setsValue(k, c.raw)
+	return setsValue(k, c)
 }
 
 func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) (string, bool)) {
@@ -282,12 +320,12 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 		origins = append(origins, win.origin)
 	}
 	if !k.FlagOnly && l.file != nil {
-		if c := l.fromFile(k.Path); c != nil {
+		if c := l.fromFile(k, k.Path); c != nil {
 			win = c
 			origins = append(origins, c.origin)
 			for _, a := range k.Aliases {
 				if a.Path != "" {
-					if ac := l.fromFile(a.Path); ac != nil {
+					if ac := l.fromFile(k, a.Path); ac != nil {
 						where := l.at(ac.keyPos)
 						l.warn(fmt.Sprintf("%s is ignored: %s is set too", a.Path, k.Path),
 							slog.String("key", k.Path), slog.String("source", where))
@@ -297,7 +335,7 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 		} else {
 			for _, a := range k.Aliases {
 				if a.Path != "" {
-					if ac := l.fromFile(a.Path); ac != nil {
+					if ac := l.fromFile(k, a.Path); ac != nil {
 						win = ac
 						origins = append(origins, ac.origin)
 						where := l.at(ac.keyPos)
@@ -338,7 +376,7 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 	if fs != nil && k.Flag != "" {
 		f := fs.Lookup(k.Flag)
 		if f != nil && f.Changed {
-			win = &candidate{raw: f.Value.String(), origin: Origin{LayerFlag, "--" + k.Flag}}
+			win = &candidate{raw: f.Value.String(), occ: occurrences(f), origin: Origin{LayerFlag, "--" + k.Flag}}
 			origins = append(origins, win.origin)
 			for _, a := range k.Aliases {
 				if a.Flag != "" {
@@ -353,7 +391,7 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 			for _, a := range k.Aliases {
 				if a.Flag != "" {
 					if af := fs.Lookup(a.Flag); af != nil && af.Changed {
-						win = &candidate{raw: af.Value.String(), origin: Origin{LayerFlag, "--" + a.Flag}}
+						win = &candidate{raw: af.Value.String(), occ: occurrences(af), origin: Origin{LayerFlag, "--" + a.Flag}}
 						origins = append(origins, win.origin)
 						l.warn(fmt.Sprintf("--%s is deprecated, use --%s", a.Flag, k.Flag),
 							slog.String("key", k.Path), slog.String("source", win.origin.String()))
@@ -416,7 +454,7 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 				return
 			}
 		}
-		if err := k.Set(v, raw); err != nil {
+		if err := apply(k, v, win, raw); err != nil {
 			l.errs = append(l.errs, cfgx.Problem{Key: k.Path, Message: err.Error(), Source: win.origin.String()})
 			return
 		}
@@ -435,9 +473,9 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 // setsValue reports whether raw would set key k (A4): an empty value or
 // false doesn't. It parses into a scratch value, so the real one is
 // untouched; a value that doesn't parse counts as set.
-func setsValue[V any](k *Key[V], raw string) bool {
+func setsValue[V any](k *Key[V], c *candidate) bool {
 	scratch := new(V)
-	if err := k.Set(scratch, raw); err != nil {
+	if err := apply(k, scratch, c, c.raw); err != nil {
 		return true
 	}
 	return k.IsSet(scratch)
@@ -560,8 +598,9 @@ func (l *loader[V]) required(k *Key[V], win *candidate) cfgx.Problem {
 	return cfgx.Problem{Key: k.Path, Message: msg}
 }
 
-// fromFile finds path in the config file. A null value counts as absent.
-func (l *loader[V]) fromFile(path string) *candidate {
+// fromFile finds path, one of k's names, in the config file. A null value
+// counts as absent.
+func (l *loader[V]) fromFile(k *Key[V], path string) *candidate {
 	segs := strings.Split(path, ".")
 	cur := l.file.root
 	for n, seg := range segs {
@@ -572,6 +611,9 @@ func (l *loader[V]) fromFile(path string) *candidate {
 		val := p.Value
 		origin := Origin{LayerFile, l.at(val.Pos)}
 		if n == len(segs)-1 {
+			if k.SetItems != nil {
+				return l.fileItems(k, path, p, origin)
+			}
 			switch val.Kind {
 			case node.Map:
 				return &candidate{origin: origin, keyPos: p.KeyPos, bad: &cfgx.Problem{Key: path, Message: "expected a single value, found a map", Source: origin.String()}}
@@ -589,6 +631,71 @@ func (l *loader[V]) fromFile(path string) *candidate {
 			return &candidate{origin: origin, keyPos: p.KeyPos, bad: &cfgx.Problem{Key: prefix, Message: "expected a map of settings, found " + found, Source: origin.String()}}
 		}
 		cur = val
+	}
+	return nil
+}
+
+// fileItems is the candidate of a list or map key whose config file value
+// is p: a single value, split like an env var's; a list of single values;
+// or, for a map key, a map of single values.
+func (l *loader[V]) fileItems(k *Key[V], path string, p *node.Pair, origin Origin) *candidate {
+	val := p.Value
+	c := &candidate{origin: origin, keyPos: p.KeyPos}
+	bad := func(msg string, at node.Pos) *candidate {
+		o := Origin{LayerFile, l.at(at)}
+		c.bad = &cfgx.Problem{Key: path, Message: msg, Source: o.String()}
+		return c
+	}
+	want := "a list"
+	if k.Map {
+		want = "a map"
+	}
+	scalar := func(n *node.Node, what string) (string, bool) {
+		switch n.Kind {
+		case node.Scalar:
+			return n.Scalar, true
+		case node.Null:
+			bad(what+" is null", n.Pos)
+		case node.Map:
+			bad(what+" is a map; expected a single value", n.Pos)
+		default:
+			bad(what+" is a list; expected a single value", n.Pos)
+		}
+		return "", false
+	}
+	switch val.Kind {
+	case node.Scalar:
+		c.raw = val.Scalar
+		return c
+	case node.List:
+		if k.Map {
+			return bad("expected a map, found a list", val.Pos)
+		}
+		c.exact, c.items = true, []string{}
+		for i, it := range val.List {
+			s, ok := scalar(it, fmt.Sprintf("item %d", i+1))
+			if !ok {
+				return c
+			}
+			c.items = append(c.items, s)
+		}
+		return c
+	case node.Map:
+		if !k.Map {
+			return bad("expected "+want+", found a map", val.Pos)
+		}
+		c.exact, c.items = true, []string{}
+		for _, e := range val.Map {
+			if strings.Contains(e.Key, "=") {
+				return bad(fmt.Sprintf("map key %q contains =", e.Key), e.KeyPos)
+			}
+			s, ok := scalar(e.Value, fmt.Sprintf("the value of %q", e.Key))
+			if !ok {
+				return c
+			}
+			c.items = append(c.items, e.Key+"="+s)
+		}
+		return c
 	}
 	return nil
 }

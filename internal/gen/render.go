@@ -76,6 +76,7 @@ var keys = [...]engine.Key[values]{
 		{{- if .File}} File: true,{{end}}
 		{{- if .MaxFileSize}} MaxFileSize: {{.MaxFileSize}},{{end}}
 		{{- if .Resolve}} Resolve: true,{{end}}
+		{{- if .Map}} Map: true,{{end}}
 		{{- if .Bool}} Bool: true,{{end}}
 		{{- if .Required}} Required: true,{{end}}
 		{{- if .Global}} Global: true,{{end}}
@@ -86,7 +87,11 @@ var keys = [...]engine.Key[values]{
 		{{- if .Deprecated}}
 		Deprecated: {{printf "%q" .Deprecated}},
 		{{- end}}
+		{{- if .Items}}
+		SetItems: func(v *values, items []string) error { return engine.{{.Parse}}(items, &v.{{.Field}}) },
+		{{- else}}
 		Set: func(v *values, raw string) error { return engine.{{.Parse}}(raw, {{.ParseArgs}}&v.{{.Field}}) },
+		{{- end}}
 		IsSet: func(v *values) bool { return {{.IsSet}} },
 		{{- if .DefaultLit}}
 		Default: func(v *values) { v.{{.Field}} = {{.DefaultLit}} },
