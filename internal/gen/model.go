@@ -62,7 +62,7 @@ type KeyModel struct {
 	Quote, Bool              bool
 	Required, Global         bool
 	FlagOnly                 bool
-	FileEnv, File            bool  // see engine.Key
+	FileEnv, File, Resolve   bool  // see engine.Key
 	MaxFileSize              int64 // see engine.Key
 	Tags                     []string
 	Aliases                  []AliasModel

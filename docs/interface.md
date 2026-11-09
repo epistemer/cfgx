@@ -240,8 +240,8 @@ with type-checked modifiers.
 | `SecretFile` | `cfgx.Secret` | the setting is a path, resolved like `Path`; contents are loaded eagerly at startup from a regular file of at most 1 MiB |
 | `Path` | `string` | a path, cleaned and resolved relative to the config file's directory when set in a file |
 | `File` | `[]byte` | the setting is a path, resolved like `Path`; contents are loaded eagerly from a regular file of at most 16 MiB |
-| `URL` | `*url.URL` | parsed |
-| `Location` | `*time.Location` | IANA name |
+| `URL` | `*url.URL` | an absolute URL such as `https://host/path`; opaque forms such as `localhost:5432` are rejected |
+| `Location` | `*time.Location` | IANA name, `UTC` or `Local`; nil when unset |
 | `Strings`, `Ints`, `Durations` | `[]T` | flag repeatable or comma-separated; env comma-separated |
 | `StringMap` | `map[string]string` | env/flag `k=v,k2=v2` |
 | `Text(name, desc, zero T)` | `T` | any `T` whose pointer implements `encoding.TextUnmarshaler` (`netip.Prefix`, your own types) |

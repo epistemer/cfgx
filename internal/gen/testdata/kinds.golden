@@ -4,6 +4,7 @@ package settings
 
 import (
 	"context"
+	"net/url"
 	"slices"
 	"time"
 
@@ -27,6 +28,11 @@ type values struct {
 	KD2   time.Duration
 	KSize int64
 	KNone time.Duration
+	KPath string
+	KFile []byte
+	KURL  *url.URL
+	KLoc  *time.Location
+	KUrl2 *url.URL
 }
 
 var keys = [...]engine.Key[values]{
@@ -99,6 +105,36 @@ var keys = [...]engine.Key[values]{
 		Set:   func(v *values, raw string) error { return engine.ParseDuration(raw, &v.KNone) },
 		IsSet: func(v *values) bool { return v.KNone != 0 },
 	},
+	{
+		Path: "k.path", Env: "K_K_PATH", Flag: "k-path",
+		Type: "path", Desc: "path", DefaultText: "data//app.db", Quote: true, Resolve: true,
+		Set:   func(v *values, raw string) error { return engine.ParsePath(raw, &v.KPath) },
+		IsSet: func(v *values) bool { return v.KPath != "" },
+	},
+	{
+		Path: "k.file", Env: "K_K_FILE", Flag: "k-file",
+		Type: "file", Desc: "file", DefaultText: "ca.pem", Quote: true, File: true, MaxFileSize: 16777216,
+		Set:   func(v *values, raw string) error { return engine.ParseBytes(raw, &v.KFile) },
+		IsSet: func(v *values) bool { return len(v.KFile) != 0 },
+	},
+	{
+		Path: "k.url", Env: "K_K_URL", Flag: "k-url",
+		Type: "url", Desc: "url", DefaultText: "https://example.com/x", Quote: true,
+		Set:   func(v *values, raw string) error { return engine.ParseURL(raw, &v.KURL) },
+		IsSet: func(v *values) bool { return v.KURL != nil },
+	},
+	{
+		Path: "k.loc", Env: "K_K_LOC", Flag: "k-loc",
+		Type: "location", Desc: "location", DefaultText: "UTC",
+		Set:   func(v *values, raw string) error { return engine.ParseLocation(raw, &v.KLoc) },
+		IsSet: func(v *values) bool { return v.KLoc != nil },
+	},
+	{
+		Path: "k.url2", Env: "K_K_URL2", Flag: "k-url2",
+		Type: "url", Desc: "url without default", Quote: true,
+		Set:   func(v *values, raw string) error { return engine.ParseURL(raw, &v.KUrl2) },
+		IsSet: func(v *values) bool { return v.KUrl2 != nil },
+	},
 }
 
 // app describes the whole application to the engine.
@@ -122,6 +158,11 @@ type K interface {
 	KD2() time.Duration
 	KSize() int64
 	KNone() time.Duration
+	KPath() string
+	KFile() []byte
+	KURL() *url.URL
+	KLoc() *time.Location
+	KUrl2() *url.URL
 }
 
 type kGroup struct{ r *root }
@@ -156,6 +197,21 @@ func (g *kGroup) KSize() int64 { return g.r.cur.Load().KSize }
 // KNone returns k.none: no default
 func (g *kGroup) KNone() time.Duration { return g.r.cur.Load().KNone }
 
+// KPath returns k.path: path
+func (g *kGroup) KPath() string { return g.r.cur.Load().KPath }
+
+// KFile returns k.file: file
+func (g *kGroup) KFile() []byte { return g.r.cur.Load().KFile }
+
+// KURL returns k.url: url
+func (g *kGroup) KURL() *url.URL { return g.r.cur.Load().KURL }
+
+// KLoc returns k.loc: location
+func (g *kGroup) KLoc() *time.Location { return g.r.cur.Load().KLoc }
+
+// KUrl2 returns k.url2: url without default
+func (g *kGroup) KUrl2() *url.URL { return g.r.cur.Load().KUrl2 }
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -171,7 +227,7 @@ type Run struct {
 // them. The slice is a copy.
 func (c *Run) Args() []string { return slices.Clone(c.args) }
 
-var keysRun = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+var keysRun = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}
 
 func newRun(v *values, args []string) *Run {
 	r := &root{}

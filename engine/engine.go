@@ -40,8 +40,11 @@ type Key[V any] struct {
 	// trailing newline (Secret). Setting both is a problem.
 	FileEnv bool
 	// File makes the value a path, and the key's value that file's contents
-	// (SecretFile). DefaultText is then the default path, and Default is nil.
+	// (SecretFile, File). DefaultText is then the default path.
 	File bool
+	// Resolve makes a relative path from the config file relative to the
+	// file's directory (Path, A11). File keys always resolve what they read.
+	Resolve bool
 	// MaxFileSize caps what FileEnv and File read, in bytes.
 	MaxFileSize int64
 	// RelevantIf lists keys that must all be set for this key to matter.
@@ -51,7 +54,11 @@ type Key[V any] struct {
 	// Set parses raw into the field of v. An empty raw sets the zero value,
 	// which is how an empty env var or flag clears a value.
 	Set func(v *V, raw string) error
-	// Default stores the default in v; nil if the key has none.
+	// Default stores the default in v. If it is nil, a non-empty DefaultText
+	// is the default's raw text, which is parsed with Set, like any layer's
+	// value, only if no other layer sets the key: that is how File keys
+	// read their default path, and how kinds whose value isn't a Go literal
+	// (URL, Location) and paths, cleaned for the OS they run on, get theirs.
 	Default func(v *V)
 	// IsSet reports whether the key's value is non-zero (true for a bool),
 	// which is what "set" means for Required and rules (A4).

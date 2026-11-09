@@ -2,6 +2,7 @@ package gen
 
 import (
 	"fmt"
+	"net/url"
 	"path"
 	"slices"
 	"sort"
@@ -26,8 +27,10 @@ type kindSpec struct {
 	fileEnv  bool     // <ENV>_FILE names a file holding the value
 	file     bool     // the setting is a path; the value is the file's contents
 	maxFile  int64    // the most fileEnv and file read, in bytes
+	resolve  bool     // a path: relative paths from the config file resolve against its directory
 	// canon checks a default's text and returns its canonical text, shown in
-	// --help, and a Go expression for the generated code.
+	// --help, and a Go expression for the generated code. An empty
+	// expression means the engine parses the text when loading instead.
 	canon func(text string) (canonical, lit string, err error)
 }
 
@@ -61,12 +64,41 @@ var kinds = map[ir.Kind]kindSpec{
 	ir.KindSecretFile: {goType: "cfgx.Secret", flagType: "file", parse: "ParseSecret", quote: true, isSet: "%s.IsSet()", zero: "",
 		file: true, maxFile: secretMax,
 		canon: func(s string) (string, string, error) { return s, "", nil }},
+	ir.KindPath: {goType: "string", flagType: "path", parse: "ParsePath", quote: true, isSet: `%s != ""`, zero: "",
+		resolve: true,
+		// Parsed when loading, so it is cleaned for the OS the app runs on.
+		canon: func(s string) (string, string, error) { return s, "", nil }},
+	ir.KindFile: {goType: "[]byte", flagType: "file", parse: "ParseBytes", quote: true, isSet: "len(%s) != 0", zero: "",
+		file: true, maxFile: fileMax,
+		canon: func(s string) (string, string, error) { return s, "", nil }},
+	ir.KindURL: {goType: "*url.URL", flagType: "url", parse: "ParseURL", imports: []string{"net/url"}, quote: true, isSet: "%s != nil", zero: "",
+		canon: func(s string) (string, string, error) {
+			var u *url.URL
+			if err := engine.ParseURL(s, &u); err != nil {
+				return "", "", err
+			}
+			return s, "", nil
+		}},
+	ir.KindLocation: {goType: "*time.Location", flagType: "location", parse: "ParseLocation", imports: []string{"time"}, isSet: "%s != nil", zero: "",
+		// Loaded when the app loads the key, so a zone missing there is a
+		// problem rather than a panic.
+		canon: func(s string) (string, string, error) {
+			var loc *time.Location
+			if err := engine.ParseLocation(s, &loc); err != nil {
+				return "", "", err
+			}
+			return s, "", nil
+		}},
 	ir.KindByteSize: {goType: "int64", flagType: "bytesize", parse: "ParseByteSize", isSet: "%s != 0", zero: "0",
 		canon: viaParser(engine.ParseByteSize, engine.FormatByteSize, i64)},
 }
 
-// secretMax is the most a secret's file may hold.
-const secretMax = 1 << 20
+// secretMax and fileMax are the most a secret's file and a File key's
+// file may hold.
+const (
+	secretMax = 1 << 20
+	fileMax   = 16 << 20
+)
 
 func i64(n int64) string   { return strconv.FormatInt(n, 10) }
 func u(n uint) string      { return strconv.FormatUint(uint64(n), 10) }
@@ -115,7 +147,7 @@ func kindInfo(km *KeyModel, k ir.Key, imp *importer) error {
 	}
 	km.GoType, km.FlagType, km.Parse = spec.goType, spec.flagType, spec.parse
 	km.Quote, km.Bool = spec.quote, spec.isBool
-	km.FileEnv, km.File, km.MaxFileSize = spec.fileEnv, spec.file, spec.maxFile
+	km.FileEnv, km.File, km.MaxFileSize, km.Resolve = spec.fileEnv, spec.file, spec.maxFile, spec.resolve
 	if spec.noFlag {
 		km.Flag = ""
 	}
@@ -200,6 +232,7 @@ func newImporter(schema string) *importer {
 			"context":                          "context",
 			"slices":                           "slices",
 			"time":                             "time",
+			"net/url":                          "url",
 		}}
 	for _, n := range im.names {
 		im.taken[n] = true

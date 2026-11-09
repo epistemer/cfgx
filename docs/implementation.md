@@ -471,6 +471,35 @@ unknown.
   - A `Secret` may have a default (it goes into the generated code); a
     `Secret` can't be a command argument, which is flag-only. A `SecretFile`
     has a flag, since its value is a path, and can be an argument.
+- **[decided, M4.5]** Paths, files, URLs and zones:
+  - `Path`, `File`, `URL` and `Location` defaults aren't Go literals in the
+    generated code. The generator checks the text, and the engine parses it
+    when loading, only if no other layer sets the key (`Key.Default` is nil
+    and `DefaultText` holds the text). So a path is cleaned for the OS the app
+    runs on, not the one that generated the file, and a zone missing on the
+    machine that runs the app is a problem with source `default`, not a
+    panic. A key that isn't relevant still gets such a default if it parses;
+    a `File` key's default path isn't read.
+  - `Path` is `filepath.Clean`ed; empty stays empty. A relative path from the
+    config file (or an alias's file key) is joined to the file's directory;
+    from an env var, a flag or the default it stays relative to the working
+    directory. `--help` shows a default as written.
+  - `File` is `SecretFile` with a `[]byte` value and a 16 MiB cap. An empty
+    file counts as not set. Getters return the shared slice: callers must
+    not modify it.
+  - `URL` must be absolute and not opaque: `localhost:5432` and
+    `user:pw@host` parse with the first word as the scheme, so they're
+    rejected, as are `mailto:` and `urn:` URLs (use a `String` key for
+    those). Messages quote a URL only through `Redacted()`, or not at all,
+    since a URL may hold a password.
+  - `Location` takes `time.LoadLocation` names: IANA names, `UTC`, `Local`.
+    An empty value is nil, so a `Location` without a default or `Required`
+    may be nil. Zones come from the system's zoneinfo; an image without it
+    needs `import _ "time/tzdata"` in main, which the DSL doc says.
+  - Flag type labels: `path`, `file`, `url`, `location`. Path, file and URL
+    defaults are quoted in `--help`; zone names aren't.
+  - Open for `Test()` (§5.4 of the interface): it does no I/O, but a
+    `Location` default needs `LoadLocation`. Decide when `Test()` lands.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree

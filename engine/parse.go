@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -206,5 +208,73 @@ func ParseEnum[T comparable](raw string, texts []string, values []T, dst *T) err
 // fails, so no message can quote the value.
 func ParseSecret(raw string, dst *cfgx.Secret) error {
 	*dst = cfgx.NewSecret(raw)
+	return nil
+}
+
+// ParsePath stores raw as a path, cleaned for this OS; empty stays empty.
+// Loading has already made a relative path from the config file relative to
+// the file's directory.
+func ParsePath(raw string, dst *string) error {
+	if raw == "" {
+		*dst = ""
+		return nil
+	}
+	*dst = filepath.Clean(raw)
+	return nil
+}
+
+// ParseBytes stores a file's contents, exactly; empty means nil.
+func ParseBytes(raw string, dst *[]byte) error {
+	if raw == "" {
+		*dst = nil
+		return nil
+	}
+	*dst = []byte(raw)
+	return nil
+}
+
+// ParseURL parses an absolute URL, such as https://host/path or
+// file:///path; empty means nil. Opaque URLs, such as mailto:x, are
+// rejected: that is how localhost:5432 parses, with localhost as the
+// scheme. A URL may hold a password, so messages show it redacted, or not
+// at all.
+func ParseURL(raw string, dst **url.URL) error {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		*dst = nil
+		return nil
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			err = ue.Err
+		}
+		return fmt.Errorf("isn't a valid URL: %v", err)
+	}
+	if u.Scheme == "" {
+		return fmt.Errorf("%q isn't an absolute URL; it needs a scheme, such as https://", u.Redacted())
+	}
+	if u.Opaque != "" {
+		// What follows the scheme may be a password: user:pw@host.
+		return fmt.Errorf("isn't an absolute URL: %s: isn't followed by // or /; write it as %s://..., such as https://host:port", u.Scheme, u.Scheme)
+	}
+	*dst = u
+	return nil
+}
+
+// ParseLocation loads a time zone by its IANA name, such as Europe/Paris,
+// or UTC or Local; empty means nil.
+func ParseLocation(raw string, dst **time.Location) error {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		*dst = nil
+		return nil
+	}
+	loc, err := time.LoadLocation(s)
+	if err != nil {
+		return fmt.Errorf("%q isn't a time zone this system knows; use an IANA name such as Europe/Paris, or UTC", raw)
+	}
+	*dst = loc
 	return nil
 }

@@ -75,6 +75,7 @@ var keys = [...]engine.Key[values]{
 		{{- if .FileEnv}} FileEnv: true,{{end}}
 		{{- if .File}} File: true,{{end}}
 		{{- if .MaxFileSize}} MaxFileSize: {{.MaxFileSize}},{{end}}
+		{{- if .Resolve}} Resolve: true,{{end}}
 		{{- if .Bool}} Bool: true,{{end}}
 		{{- if .Required}} Required: true,{{end}}
 		{{- if .Global}} Global: true,{{end}}
@@ -87,7 +88,7 @@ var keys = [...]engine.Key[values]{
 		{{- end}}
 		Set: func(v *values, raw string) error { return engine.{{.Parse}}(raw, {{.ParseArgs}}&v.{{.Field}}) },
 		IsSet: func(v *values) bool { return {{.IsSet}} },
-		{{- if and .HasDefault (not .File)}}
+		{{- if .DefaultLit}}
 		Default: func(v *values) { v.{{.Field}} = {{.DefaultLit}} },
 		{{- end}}
 	},
