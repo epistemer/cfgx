@@ -98,6 +98,75 @@ type logGroup struct{ r *root }
 // LogDebug returns log.debug: Debug logging
 func (g *logGroup) LogDebug() bool { return g.r.cur.Load().LogDebug }
 
+// Values holds every setting of the app as plain fields, nested like the
+// groups, for Test.
+type Values struct {
+	Database DatabaseValues
+	SMTP     SMTPValues
+	Log      LogValues
+}
+
+// DatabaseValues holds the database settings, for Test.
+type DatabaseValues struct {
+	Host string
+	Port int
+}
+
+// SMTPValues holds the smtp settings, for Test.
+type SMTPValues struct {
+	URL string
+}
+
+// LogValues holds the log settings, for Test.
+type LogValues struct {
+	Debug bool
+}
+
+// load copies v into tv.
+func (tv *Values) load(v *values) {
+	tv.Database.Host = v.DatabaseHost
+	tv.Database.Port = v.DatabasePort
+	tv.SMTP.URL = v.SMTPURL
+	tv.Log.Debug = v.LogDebug
+}
+
+// store copies tv into v.
+func (tv *Values) store(v *values) {
+	v.DatabaseHost = tv.Database.Host
+	v.DatabasePort = tv.Database.Port
+	v.SMTPURL = tv.SMTP.URL
+	v.LogDebug = tv.Log.Debug
+}
+
+// All implements every group and tag interface. Test returns one.
+type All struct {
+	*databaseGroup
+	*smtpGroup
+	*logGroup
+}
+
+// Test returns configuration for tests: every key's default, changed by
+// edit, which may be nil. It reads no config file, env var or flag, and no
+// SecretFile or File key's default path: those stay empty unless edit sets
+// them.
+func Test(edit func(v *Values)) *All {
+	v := &values{}
+	engine.TestDefaults(&app, v)
+	var tv Values
+	tv.load(v)
+	if edit != nil {
+		edit(&tv)
+	}
+	tv.store(v)
+	r := &root{}
+	r.cur.Store(v)
+	return &All{
+		databaseGroup: &databaseGroup{r: r},
+		smtpGroup:     &smtpGroup{r: r},
+		logGroup:      &logGroup{r: r},
+	}
+}
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -134,6 +203,13 @@ func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *
 	return engine.Command(cmd, &app, keysServe, newServe, run)
 }
 
+// LoadServe loads the Serve configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadServe(ctx context.Context, opts ...cfgx.Option) (*Serve, error) {
+	return engine.LoadCommand(ctx, &app, keysServe, newServe, opts...)
+}
+
 // Migrate is the configuration of the Migrate command.
 type Migrate struct {
 	*logGroup
@@ -163,6 +239,13 @@ func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) erro
 	return engine.Command(cmd, &app, keysMigrate, newMigrate, run)
 }
 
+// LoadMigrate loads the Migrate configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadMigrate(ctx context.Context, opts ...cfgx.Option) (*Migrate, error) {
+	return engine.LoadCommand(ctx, &app, keysMigrate, newMigrate, opts...)
+}
+
 // Version is the configuration of the Version command.
 type Version struct {
 	*logGroup
@@ -188,4 +271,11 @@ func newVersion(v *values, args []string) *Version {
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func VersionCommand(cmd *cobra.Command, run func(context.Context, *Version) error) *cobra.Command {
 	return engine.Command(cmd, &app, keysVersion, newVersion, run)
+}
+
+// LoadVersion loads the Version configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadVersion(ctx context.Context, opts ...cfgx.Option) (*Version, error) {
+	return engine.LoadCommand(ctx, &app, keysVersion, newVersion, opts...)
 }

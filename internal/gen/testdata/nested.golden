@@ -251,6 +251,121 @@ type Mailer interface {
 	SMTPTLS() bool
 }
 
+// Values holds every setting of the app as plain fields, nested like the
+// groups, for Test.
+type Values struct {
+	DB        DBValues
+	Server    ServerValues
+	Scheduler SchedulerValues
+	Auth      AuthValues
+	SMTP      SMTPValues
+}
+
+// DBValues holds the database settings, for Test.
+type DBValues struct {
+	Host string
+}
+
+// ServerValues holds the server settings, for Test.
+type ServerValues struct {
+	Port       int
+	TLSEnabled bool
+	TLSCert    string
+}
+
+// SchedulerValues holds the scheduler settings, for Test.
+type SchedulerValues struct {
+	Workers int
+	Retry   SchedulerRetryValues
+}
+
+// SchedulerRetryValues holds the scheduler.retry settings, for Test.
+type SchedulerRetryValues struct {
+	Max int
+}
+
+// AuthValues holds the auth settings, for Test.
+type AuthValues struct {
+	OTPLength int
+	Emailfrom string
+	Token     string
+	Keys      string
+}
+
+// SMTPValues holds the smtp settings, for Test.
+type SMTPValues struct {
+	Host string
+	Port int
+	TLS  bool
+}
+
+// load copies v into tv.
+func (tv *Values) load(v *values) {
+	tv.DB.Host = v.DBHost
+	tv.Server.Port = v.ServerPort
+	tv.Server.TLSEnabled = v.ServerTLSEnabled
+	tv.Server.TLSCert = v.ServerTLSCert
+	tv.Scheduler.Workers = v.SchedulerWorkers
+	tv.Scheduler.Retry.Max = v.SchedulerRetryMax
+	tv.Auth.OTPLength = v.AuthOTPLength
+	tv.Auth.Emailfrom = v.AuthEmailfrom
+	tv.Auth.Token = v.AuthToken
+	tv.Auth.Keys = v.AuthKeys
+	tv.SMTP.Host = v.SMTPHost
+	tv.SMTP.Port = v.SMTPPort
+	tv.SMTP.TLS = v.SMTPTLS
+}
+
+// store copies tv into v.
+func (tv *Values) store(v *values) {
+	v.DBHost = tv.DB.Host
+	v.ServerPort = tv.Server.Port
+	v.ServerTLSEnabled = tv.Server.TLSEnabled
+	v.ServerTLSCert = tv.Server.TLSCert
+	v.SchedulerWorkers = tv.Scheduler.Workers
+	v.SchedulerRetryMax = tv.Scheduler.Retry.Max
+	v.AuthOTPLength = tv.Auth.OTPLength
+	v.AuthEmailfrom = tv.Auth.Emailfrom
+	v.AuthToken = tv.Auth.Token
+	v.AuthKeys = tv.Auth.Keys
+	v.SMTPHost = tv.SMTP.Host
+	v.SMTPPort = tv.SMTP.Port
+	v.SMTPTLS = tv.SMTP.TLS
+}
+
+// All implements every group and tag interface. Test returns one.
+type All struct {
+	*dbGroup
+	*serverGroup
+	*schedulerGroup
+	*authGroup
+	*smtpGroup
+}
+
+// Test returns configuration for tests: every key's default, changed by
+// edit, which may be nil. It reads no config file, env var or flag, and no
+// SecretFile or File key's default path: those stay empty unless edit sets
+// them.
+func Test(edit func(v *Values)) *All {
+	v := &values{}
+	engine.TestDefaults(&app, v)
+	var tv Values
+	tv.load(v)
+	if edit != nil {
+		edit(&tv)
+	}
+	tv.store(v)
+	r := &root{}
+	r.cur.Store(v)
+	return &All{
+		dbGroup:        &dbGroup{r: r},
+		serverGroup:    &serverGroup{r: r},
+		schedulerGroup: &schedulerGroup{r: r, schedulerRetryGroup: &schedulerRetryGroup{r: r}},
+		authGroup:      &authGroup{r: r},
+		smtpGroup:      &smtpGroup{r: r},
+	}
+}
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -291,6 +406,13 @@ func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *
 	return engine.Command(cmd, &app, keysServe, newServe, run)
 }
 
+// LoadServe loads the Serve configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadServe(ctx context.Context, opts ...cfgx.Option) (*Serve, error) {
+	return engine.LoadCommand(ctx, &app, keysServe, newServe, opts...)
+}
+
 // Retry is the configuration of the Retry command.
 type Retry struct {
 	*schedulerRetryGroup
@@ -316,6 +438,13 @@ func newRetry(v *values, args []string) *Retry {
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func RetryCommand(cmd *cobra.Command, run func(context.Context, *Retry) error) *cobra.Command {
 	return engine.Command(cmd, &app, keysRetry, newRetry, run)
+}
+
+// LoadRetry loads the Retry configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadRetry(ctx context.Context, opts ...cfgx.Option) (*Retry, error) {
+	return engine.LoadCommand(ctx, &app, keysRetry, newRetry, opts...)
 }
 
 // TestEmail is the configuration of the TestEmail command.
@@ -360,6 +489,13 @@ func TestEmailCommand(cmd *cobra.Command, run func(context.Context, *TestEmail) 
 	return engine.Command(cmd, &app, keysTestEmail, newTestEmail, run)
 }
 
+// LoadTestEmail loads the TestEmail configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadTestEmail(ctx context.Context, opts ...cfgx.Option) (*TestEmail, error) {
+	return engine.LoadCommand(ctx, &app, keysTestEmail, newTestEmail, opts...)
+}
+
 // Notify is the configuration of the Notify command.
 type Notify struct {
 	*smtpGroup
@@ -390,6 +526,13 @@ func newNotify(v *values, args []string) *Notify {
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func NotifyCommand(cmd *cobra.Command, run func(context.Context, *Notify) error) *cobra.Command {
 	return engine.Command(cmd, &app, keysNotify, newNotify, run)
+}
+
+// LoadNotify loads the Notify configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadNotify(ctx context.Context, opts ...cfgx.Option) (*Notify, error) {
+	return engine.LoadCommand(ctx, &app, keysNotify, newNotify, opts...)
 }
 
 // Migrate is the configuration of the Migrate command.
@@ -423,4 +566,11 @@ func newMigrate(v *values, args []string) *Migrate {
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) error) *cobra.Command {
 	return engine.Command(cmd, &app, keysMigrate, newMigrate, run)
+}
+
+// LoadMigrate loads the Migrate configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadMigrate(ctx context.Context, opts ...cfgx.Option) (*Migrate, error) {
+	return engine.LoadCommand(ctx, &app, keysMigrate, newMigrate, opts...)
 }

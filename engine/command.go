@@ -3,8 +3,10 @@ package engine
 import (
 	"context"
 	"fmt"
+	"github.com/spf13/pflag"
 	"io"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 
@@ -139,3 +141,46 @@ func (h *warnHandler) Handle(_ context.Context, r slog.Record) error {
 
 func (h *warnHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
 func (h *warnHandler) WithGroup(string) slog.Handler      { return h }
+
+// LoadCommand loads the configuration of the command whose keys are at
+// idx without cobra, for a generated LoadX: flags come from WithArgs, env
+// vars from WithEnv or the process, and the config file from WithFile or
+// the usual search. Warnings go to WithLogger's logger, or to stderr.
+func LoadCommand[V, C any](ctx context.Context, a *App[V], idx []int, build func(*V, []string) *C, options ...cfgx.Option) (*C, error) {
+	ro := &opts.Root{}
+	for _, o := range options {
+		if o != nil {
+			o(ro)
+		}
+	}
+	fs := pflag.NewFlagSet("load", pflag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	if a.ConfigFile != "" {
+		fs.Var(&rawValue{typ: "path"}, "config", a.configUsage())
+		if ro.File != "" {
+			_ = fs.Set("config", ro.File)
+		}
+	}
+	BindFlags(fs, a.Keys, append(append([]int(nil), idx...), conditions(a, idx)...))
+	if err := fs.Parse(ro.Args); err != nil {
+		return nil, fmt.Errorf("cfgx: %v", err)
+	}
+	var o Options
+	if ro.EnvSet {
+		env := ro.Env
+		o.LookupEnv = func(k string) (string, bool) { v, ok := env[k]; return v, ok }
+		o.Environ = func() []string {
+			out := make([]string, 0, len(env))
+			for k, v := range env {
+				out = append(out, k+"="+v)
+			}
+			return out
+		}
+	}
+	res, err := Load(a, fs, idx, o)
+	logWarnings(ctx, loggerFor(ro, os.Stderr), res.Warnings)
+	if err != nil {
+		return nil, err
+	}
+	return build(res.Values, fs.Args()), nil
+}

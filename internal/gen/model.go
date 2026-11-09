@@ -96,6 +96,7 @@ type KeyModel struct {
 	NoFile   bool
 	Example  string
 	declPath string // the path the schema declared, which rules name
+	Leaf     string // the key's field in its group's Values struct
 	// Complete is set when the schema gave the flag a completion: file
 	// extensions, directories, or a function.
 	Complete     bool
@@ -130,9 +131,13 @@ type GroupModel struct {
 	AllKeys          []*KeyModel   // own keys and every descendant's, in table order
 	Parent           *GroupModel
 	Computed         []*ComputedModel
-	lower            string // Type without "Group": dbGroup → db
-	flagPrefix       string
-	pos              ir.Pos
+	// ValuesType is the group's struct in Values (Test, M6.5); Leaf is its
+	// field name in its parent's struct, and ValuesPath its path from
+	// Values: Scheduler.Retry.
+	ValuesType, Leaf, ValuesPath string
+	lower                        string // Type without "Group": dbGroup → db
+	flagPrefix                   string
+	pos                          ir.Pos
 }
 
 // ComputedModel is a hand-written method that joins a group's interface.
@@ -449,6 +454,13 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		}
 		claim(gm.Iface, g.Pos, "group interface")
 		claim(gm.Type, g.Pos, "group type")
+		gm.ValuesType = gm.Iface + "Values"
+		claim(gm.ValuesType, g.Pos, "group values type")
+		gm.Leaf, gm.ValuesPath = gm.Iface, gm.Iface
+		if parent != nil {
+			gm.Leaf = strings.TrimPrefix(gm.Iface, parent.Iface)
+			gm.ValuesPath = parent.ValuesPath + "." + gm.Leaf
+		}
 		groups[path] = gm
 		groupPaths = append(groupPaths, path)
 		paths[path] = g.Pos
@@ -470,11 +482,12 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			if strings.TrimSpace(k.Desc) == "" {
 				bad(k.Pos, "key %s needs a description", km.Path)
 			}
-			km.Field = gm.Iface + nm.pascal(k.Name)
+			km.Leaf = nm.pascal(k.Name)
+			km.Field = gm.Iface + km.Leaf
 			km.Getter = km.Field
 			km.Flag = joinDash(gm.flagPrefix, dashed(k.Name))
 			km.Env = prefix + "_" + strings.ToUpper(strings.ReplaceAll(km.Path, ".", "_"))
-			if !naming(km, k, app, bad, func(goName string) { km.Field = gm.Iface + goName; km.Getter = km.Field }) {
+			if !naming(km, k, app, bad, func(goName string) { km.Leaf = goName; km.Field = gm.Iface + goName; km.Getter = km.Field }) {
 				continue
 			}
 			if k.FileKey != "" {
@@ -599,6 +612,19 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			bad(tagPos[tm.Name], "tag %s isn't on any key; tag keys or groups with .Tags(%s)", tm.Name, tm.Name)
 		}
 	}
+	// A group's fields in Values: its keys' and its nested groups'. Only a
+	// key's GoName can make two the same.
+	for _, gm := range m.Groups {
+		leaves := map[string]bool{}
+		for _, k := range gm.Keys {
+			leaves[k.Leaf] = true
+		}
+		for _, c := range gm.Children {
+			if leaves[c.Leaf] {
+				bad(gm.pos, "group %q has a key and a nested group that are both %s in Values; rename one with GoName", gm.Path, c.Leaf)
+			}
+		}
+	}
 	// A computed method can't share a name with a getter or another computed
 	// method in its group's interface, embedded groups included.
 	// Two getters with one name (GoName) are reported as a Go name
@@ -690,7 +716,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		claim(cm.Name+"Command", c.Pos, "command binder")
 		claim(cm.KeysVar, c.Pos, "command key list")
 		claim("new"+cm.Name, c.Pos, "command constructor")
-		claim("Load"+cm.Name, c.Pos, "command loader (M6.6)")
+		claim("Load"+cm.Name, c.Pos, "command loader")
 		for _, o := range c.Orphans {
 			bad(c.Pos, "command %s uses group %q (declared at %s), which isn't passed to dsl.App", c.Name, o.Name, o.Pos)
 		}
@@ -1078,4 +1104,15 @@ func checkConfigFile(app *ir.App, bad func(ir.Pos, string, ...any)) {
 		}
 		seen[f] = true
 	}
+}
+
+// TopGroups are the groups that aren't nested in another.
+func (m *Model) TopGroups() []*GroupModel {
+	var out []*GroupModel
+	for _, g := range m.Groups {
+		if g.Parent == nil {
+			out = append(out, g)
+		}
+	}
+	return out
 }

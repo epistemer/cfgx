@@ -191,6 +191,67 @@ type {{.Name}} interface {
 {{- end}}
 }
 {{end}}
+// Values holds every setting of the app as plain fields, nested like the
+// groups, for Test.
+type Values struct {
+{{- range .TopGroups}}
+	{{.Leaf}} {{.ValuesType}}
+{{- end}}
+}
+{{range .Groups}}
+// {{.ValuesType}} holds the {{.Path}} settings, for Test.
+type {{.ValuesType}} struct {
+{{- range .Keys}}
+	{{.Leaf}} {{.GoType}}
+{{- end}}
+{{- range .Children}}
+	{{.Leaf}} {{.ValuesType}}
+{{- end}}
+}
+{{end}}
+// load copies v into tv.
+func (tv *Values) load(v *values) {
+{{- range .Groups}}{{$g := .}}{{range .Keys}}
+	tv.{{$g.ValuesPath}}.{{.Leaf}} = v.{{.Field}}
+{{- end}}{{end}}
+}
+
+// store copies tv into v.
+func (tv *Values) store(v *values) {
+{{- range .Groups}}{{$g := .}}{{range .Keys}}
+	v.{{.Field}} = tv.{{$g.ValuesPath}}.{{.Leaf}}
+{{- end}}{{end}}
+}
+
+// All implements every group and tag interface. Test returns one.
+type All struct {
+{{- range .TopGroups}}
+	*{{.Type}}
+{{- end}}
+}
+
+// Test returns configuration for tests: every key's default, changed by
+// edit, which may be nil. It reads no config file, env var or flag, and no
+// SecretFile or File key's default path: those stay empty unless edit sets
+// them.
+func Test(edit func(v *Values)) *All {
+	v := &values{}
+	engine.TestDefaults(&app, v)
+	var tv Values
+	tv.load(v)
+	if edit != nil {
+		edit(&tv)
+	}
+	tv.store(v)
+	r := &root{}
+	r.cur.Store(v)
+	return &All{
+	{{- range .TopGroups}}
+		{{.Type}}: {{template "group" .}},
+	{{- end}}
+	}
+}
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -245,5 +306,12 @@ func new{{.Name}}(v *values, args []string) *{{.Name}} {
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func {{.Name}}Command(cmd *cobra.Command, run func(context.Context, *{{.Name}}) error) *cobra.Command {
 	return engine.Command(cmd, &app, {{.KeysVar}}, new{{.Name}}, run)
+}
+
+// Load{{.Name}} loads the {{.Name}} configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func Load{{.Name}}(ctx context.Context, opts ...cfgx.Option) (*{{.Name}}, error) {
+	return engine.LoadCommand(ctx, &app, {{.KeysVar}}, new{{.Name}}, opts...)
 }
 {{end}}`))

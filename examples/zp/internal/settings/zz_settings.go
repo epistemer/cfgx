@@ -699,6 +699,216 @@ type Tokens interface {
 	AuthJWTPublic() cfgx.Secret
 }
 
+// Values holds every setting of the app as plain fields, nested like the
+// groups, for Test.
+type Values struct {
+	Log       LogValues
+	DB        DBValues
+	SMTP      SMTPValues
+	Auth      AuthValues
+	Server    ServerValues
+	Scheduler SchedulerValues
+	Storage   StorageValues
+}
+
+// LogValues holds the log settings, for Test.
+type LogValues struct {
+	Level  string
+	Format string
+	Color  bool
+}
+
+// DBValues holds the database settings, for Test.
+type DBValues struct {
+	Host     string
+	Port     int
+	Name     string
+	User     string
+	Password cfgx.Secret
+	Sslmode  string
+}
+
+// SMTPValues holds the smtp settings, for Test.
+type SMTPValues struct {
+	Host     string
+	Port     int
+	User     string
+	Password cfgx.Secret
+	Auth     string
+	TLS      bool
+}
+
+// AuthValues holds the auth settings, for Test.
+type AuthValues struct {
+	EmailFrom  string
+	OTPTTL     time.Duration
+	OTPLength  int
+	SessionTTL time.Duration
+	JWTPrivate cfgx.Secret
+	JWTPublic  cfgx.Secret
+	Token      cfgx.Secret
+	Keys       cfgx.Secret
+	MFA        bool
+}
+
+// ServerValues holds the server settings, for Test.
+type ServerValues struct {
+	Host         string
+	Port         int
+	TLSEnabled   bool
+	TLSCert      string
+	TLSKey       cfgx.Secret
+	TimeoutRead  time.Duration
+	TimeoutWrite time.Duration
+	MaxHeader    int64
+	RateLimit    int
+	RateBurst    int
+}
+
+// SchedulerValues holds the scheduler settings, for Test.
+type SchedulerValues struct {
+	Location *time.Location
+	Execmode models.ZpTaskExecutionMode
+	Workers  int
+	Retry    SchedulerRetryValues
+}
+
+// SchedulerRetryValues holds the scheduler.retry settings, for Test.
+type SchedulerRetryValues struct {
+	Max   int
+	Delay time.Duration
+}
+
+// StorageValues holds the storage settings, for Test.
+type StorageValues struct {
+	Bolt string
+}
+
+// load copies v into tv.
+func (tv *Values) load(v *values) {
+	tv.Log.Level = v.LogLevel
+	tv.Log.Format = v.LogFormat
+	tv.Log.Color = v.LogColor
+	tv.DB.Host = v.DBHost
+	tv.DB.Port = v.DBPort
+	tv.DB.Name = v.DBName
+	tv.DB.User = v.DBUser
+	tv.DB.Password = v.DBPassword
+	tv.DB.Sslmode = v.DBSslmode
+	tv.SMTP.Host = v.SMTPHost
+	tv.SMTP.Port = v.SMTPPort
+	tv.SMTP.User = v.SMTPUser
+	tv.SMTP.Password = v.SMTPPassword
+	tv.SMTP.Auth = v.SMTPAuth
+	tv.SMTP.TLS = v.SMTPTLS
+	tv.Auth.EmailFrom = v.AuthEmailFrom
+	tv.Auth.OTPTTL = v.AuthOTPTTL
+	tv.Auth.OTPLength = v.AuthOTPLength
+	tv.Auth.SessionTTL = v.AuthSessionTTL
+	tv.Auth.JWTPrivate = v.AuthJWTPrivate
+	tv.Auth.JWTPublic = v.AuthJWTPublic
+	tv.Auth.Token = v.AuthToken
+	tv.Auth.Keys = v.AuthKeys
+	tv.Auth.MFA = v.AuthMFA
+	tv.Server.Host = v.ServerHost
+	tv.Server.Port = v.ServerPort
+	tv.Server.TLSEnabled = v.ServerTLSEnabled
+	tv.Server.TLSCert = v.ServerTLSCert
+	tv.Server.TLSKey = v.ServerTLSKey
+	tv.Server.TimeoutRead = v.ServerTimeoutRead
+	tv.Server.TimeoutWrite = v.ServerTimeoutWrite
+	tv.Server.MaxHeader = v.ServerMaxHeader
+	tv.Server.RateLimit = v.ServerRateLimit
+	tv.Server.RateBurst = v.ServerRateBurst
+	tv.Scheduler.Location = v.SchedulerLocation
+	tv.Scheduler.Execmode = v.SchedulerExecmode
+	tv.Scheduler.Workers = v.SchedulerWorkers
+	tv.Scheduler.Retry.Max = v.SchedulerRetryMax
+	tv.Scheduler.Retry.Delay = v.SchedulerRetryDelay
+	tv.Storage.Bolt = v.StorageBolt
+}
+
+// store copies tv into v.
+func (tv *Values) store(v *values) {
+	v.LogLevel = tv.Log.Level
+	v.LogFormat = tv.Log.Format
+	v.LogColor = tv.Log.Color
+	v.DBHost = tv.DB.Host
+	v.DBPort = tv.DB.Port
+	v.DBName = tv.DB.Name
+	v.DBUser = tv.DB.User
+	v.DBPassword = tv.DB.Password
+	v.DBSslmode = tv.DB.Sslmode
+	v.SMTPHost = tv.SMTP.Host
+	v.SMTPPort = tv.SMTP.Port
+	v.SMTPUser = tv.SMTP.User
+	v.SMTPPassword = tv.SMTP.Password
+	v.SMTPAuth = tv.SMTP.Auth
+	v.SMTPTLS = tv.SMTP.TLS
+	v.AuthEmailFrom = tv.Auth.EmailFrom
+	v.AuthOTPTTL = tv.Auth.OTPTTL
+	v.AuthOTPLength = tv.Auth.OTPLength
+	v.AuthSessionTTL = tv.Auth.SessionTTL
+	v.AuthJWTPrivate = tv.Auth.JWTPrivate
+	v.AuthJWTPublic = tv.Auth.JWTPublic
+	v.AuthToken = tv.Auth.Token
+	v.AuthKeys = tv.Auth.Keys
+	v.AuthMFA = tv.Auth.MFA
+	v.ServerHost = tv.Server.Host
+	v.ServerPort = tv.Server.Port
+	v.ServerTLSEnabled = tv.Server.TLSEnabled
+	v.ServerTLSCert = tv.Server.TLSCert
+	v.ServerTLSKey = tv.Server.TLSKey
+	v.ServerTimeoutRead = tv.Server.TimeoutRead
+	v.ServerTimeoutWrite = tv.Server.TimeoutWrite
+	v.ServerMaxHeader = tv.Server.MaxHeader
+	v.ServerRateLimit = tv.Server.RateLimit
+	v.ServerRateBurst = tv.Server.RateBurst
+	v.SchedulerLocation = tv.Scheduler.Location
+	v.SchedulerExecmode = tv.Scheduler.Execmode
+	v.SchedulerWorkers = tv.Scheduler.Workers
+	v.SchedulerRetryMax = tv.Scheduler.Retry.Max
+	v.SchedulerRetryDelay = tv.Scheduler.Retry.Delay
+	v.StorageBolt = tv.Storage.Bolt
+}
+
+// All implements every group and tag interface. Test returns one.
+type All struct {
+	*logGroup
+	*dbGroup
+	*smtpGroup
+	*authGroup
+	*serverGroup
+	*schedulerGroup
+	*storageGroup
+}
+
+// Test returns configuration for tests: every key's default, changed by
+// edit, which may be nil. It reads no config file, env var or flag, and no
+// SecretFile or File key's default path: those stay empty unless edit sets
+// them.
+func Test(edit func(v *Values)) *All {
+	v := &values{}
+	engine.TestDefaults(&app, v)
+	var tv Values
+	tv.load(v)
+	if edit != nil {
+		edit(&tv)
+	}
+	tv.store(v)
+	r := &root{}
+	r.cur.Store(v)
+	return &All{
+		logGroup:       &logGroup{r: r},
+		dbGroup:        &dbGroup{r: r},
+		smtpGroup:      &smtpGroup{r: r},
+		authGroup:      &authGroup{r: r},
+		serverGroup:    &serverGroup{r: r},
+		schedulerGroup: &schedulerGroup{r: r, schedulerRetryGroup: &schedulerRetryGroup{r: r}},
+		storageGroup:   &storageGroup{r: r},
+	}
+}
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -741,6 +951,13 @@ func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *
 	return engine.Command(cmd, &app, keysServe, newServe, run)
 }
 
+// LoadServe loads the Serve configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadServe(ctx context.Context, opts ...cfgx.Option) (*Serve, error) {
+	return engine.LoadCommand(ctx, &app, keysServe, newServe, opts...)
+}
+
 // Migrate is the configuration of the Migrate command.
 type Migrate struct {
 	*logGroup
@@ -776,6 +993,13 @@ func newMigrate(v *values, args []string) *Migrate {
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) error) *cobra.Command {
 	return engine.Command(cmd, &app, keysMigrate, newMigrate, run)
+}
+
+// LoadMigrate loads the Migrate configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadMigrate(ctx context.Context, opts ...cfgx.Option) (*Migrate, error) {
+	return engine.LoadCommand(ctx, &app, keysMigrate, newMigrate, opts...)
 }
 
 // TestEmail is the configuration of the TestEmail command.
@@ -835,4 +1059,11 @@ func newTestEmail(v *values, args []string) *TestEmail {
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func TestEmailCommand(cmd *cobra.Command, run func(context.Context, *TestEmail) error) *cobra.Command {
 	return engine.Command(cmd, &app, keysTestEmail, newTestEmail, run)
+}
+
+// LoadTestEmail loads the TestEmail configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadTestEmail(ctx context.Context, opts ...cfgx.Option) (*TestEmail, error) {
+	return engine.LoadCommand(ctx, &app, keysTestEmail, newTestEmail, opts...)
 }

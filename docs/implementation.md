@@ -612,6 +612,31 @@ unknown.
   - The engine registers completions with `RegisterFlagCompletionFunc` on
     the command whose flags it binds, and on the root for global keys. A
     key without a flag can't have a completion.
+- **[decided, M6.5]** Test helpers:
+  - `Values` nests one struct per group (`DBValues`, `SchedulerRetryValues`),
+    named after the group's interface; a key's field is its own segment of
+    the getter (`v.Auth.EmailFrom`, `v.Scheduler.Retry.Max`). Command
+    arguments aren't in it. `All` embeds every top-level group type, so it
+    implements every group and tag interface, computed methods included.
+  - `Test(edit)` applies each key's default, then edit, through the same
+    `values` struct the loader fills, so getters and computed methods behave
+    as they do at runtime. It reads no config file, env var, flag, or
+    `SecretFile`/`File` default path (A6). Defaults parsed from text are
+    parsed (paths, URLs, `Text` types), and a `Location` default loads its
+    zone as `time.LoadLocation` does: the zone database is the one read it
+    makes, so `t.In(loc)` works in tests. A default that fails to parse
+    panics. `DefaultFunc`s run.
+- **[decided, M6.6]** Loading without cobra: the generated `LoadX(ctx,
+  opts...)` calls `engine.LoadCommand`, which builds a private flag set
+  with the command's flags (its keys, the global keys and their
+  `RelevantIf` conditions, plus `--config`), so `cfgx.WithArgs` is parsed
+  exactly as the command's flags would be, and the arguments that aren't
+  flags become `Args()` (A12). `WithEnv(map)` replaces the process
+  environment for env vars, the config file variable and `$VAR`s in search
+  paths. `WithFile(path)` is `--config`; a `--config` in `WithArgs` wins.
+  Warnings go to `WithLogger`'s logger, or to stderr as a command's do;
+  problems come back as the error. Bad flags are an error, not a panic or
+  exit.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree
