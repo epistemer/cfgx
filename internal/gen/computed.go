@@ -137,11 +137,12 @@ type qualifier struct {
 	self  *types.Package
 	fixed map[string]string // path → name, imported anyway
 	names map[string]string // path → name in the generated file
+	pkgs  map[string]string // path → the package's own name
 	taken map[string]bool
 }
 
 func newQualifier(self *types.Package, fixed map[string]string) *qualifier {
-	q := &qualifier{self: self, fixed: fixed, names: map[string]string{}, taken: map[string]bool{}}
+	q := &qualifier{self: self, fixed: fixed, names: map[string]string{}, pkgs: map[string]string{}, taken: map[string]bool{}}
 	for _, name := range self.Scope().Names() {
 		q.taken[name] = true
 	}
@@ -162,6 +163,7 @@ func (q *qualifier) qualify(p *types.Package) string {
 		q.names[p.Path()] = name
 		return name
 	}
+	q.pkgs[p.Path()] = p.Name()
 	name := p.Name()
 	for i := 2; q.taken[name]; i++ {
 		name = p.Name() + strconv.Itoa(i)
@@ -176,7 +178,7 @@ func (q *qualifier) imports() []ImportModel {
 	var out []ImportModel
 	for path, name := range q.names {
 		if _, fixed := q.fixed[path]; !fixed {
-			out = append(out, ImportModel{Alias: name, Path: path})
+			out = append(out, ImportModel{Alias: name, Path: path, Pkg: q.pkgs[path]})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })

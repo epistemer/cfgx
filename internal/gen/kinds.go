@@ -161,12 +161,13 @@ func enumInfo(km *KeyModel, k ir.Key, imp *importer) error {
 type importer struct {
 	schema string            // the schema package, which can't be imported
 	names  map[string]string // path → name in the generated file
+	pkgs   map[string]string // path → the package's own name
 	used   map[string]bool   // paths some key needs
 	taken  map[string]bool
 }
 
 func newImporter(schema string) *importer {
-	im := &importer{schema: schema, used: map[string]bool{}, taken: map[string]bool{},
+	im := &importer{schema: schema, used: map[string]bool{}, pkgs: map[string]string{}, taken: map[string]bool{},
 		names: map[string]string{
 			"github.com/epistemer/cfgx":        "cfgx",
 			"github.com/epistemer/cfgx/engine": "engine",
@@ -190,6 +191,7 @@ func newImporter(schema string) *importer {
 // whose own name is pkg.
 func (im *importer) name(path, pkg string) string {
 	im.used[path] = true
+	im.pkgs[path] = pkg
 	if n, ok := im.names[path]; ok {
 		return n
 	}
@@ -215,7 +217,7 @@ func (im *importer) imports(hasCommands bool) []ImportModel {
 				continue
 			}
 		}
-		out = append(out, ImportModel{Alias: im.names[p], Path: p})
+		out = append(out, ImportModel{Alias: im.names[p], Path: p, Pkg: im.pkgs[p]})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out

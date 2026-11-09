@@ -107,9 +107,9 @@ type ComputedModel struct {
 	Pos       ir.Pos
 }
 
-// ImportModel is a package the generated file imports for computed
-// methods' signatures.
-type ImportModel struct{ Alias, Path string }
+// ImportModel is a package the generated file imports for keys' types and
+// computed methods' signatures. Pkg is the package's own name.
+type ImportModel struct{ Alias, Path, Pkg string }
 
 // Std reports whether the package is in the standard library, whose
 // imports go in the first group.
@@ -118,10 +118,10 @@ func (i ImportModel) Std() bool {
 	return !strings.Contains(first, ".")
 }
 
-// Spec is the import line: the path, with the alias only when Go wouldn't
-// infer it from the path.
+// Spec is the import line: the path, with the alias unless it is the
+// package's own name and the path's last element, as readers expect.
 func (i ImportModel) Spec() string {
-	if i.Alias == path.Base(i.Path) {
+	if i.Alias == i.Pkg && i.Pkg == path.Base(i.Path) {
 		return strconv.Quote(i.Path)
 	}
 	return i.Alias + " " + strconv.Quote(i.Path)

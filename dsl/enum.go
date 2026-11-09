@@ -78,6 +78,7 @@ func (k *EnumKey[T]) describe() {
 		return
 	}
 	texts := map[string]int{}
+	twice := map[T]bool{}
 	for i, v := range k.values {
 		rv := reflect.ValueOf(&v).Elem()
 		text, err := enumText(rv)
@@ -92,7 +93,10 @@ func (k *EnumKey[T]) describe() {
 		}
 		switch {
 		case slices.Index(k.values, v) < i:
-			problem("value %q is listed twice", text)
+			if !twice[v] {
+				twice[v] = true
+				problem("value %q is listed more than once", text)
+			}
 			continue
 		case text == "":
 			problem("value %d has empty text, which means not set", i+1)

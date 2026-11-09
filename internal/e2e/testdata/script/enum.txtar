@@ -1,13 +1,14 @@
 # M4.2: Enum keys. The getter returns the values' own type, inferred from them:
 # zp's models.ZpTaskExecutionMode (a named string), a Stringer int, a pointer
-# MarshalText, time.Month, plain strings, and a type whose package name is
-# one the generated file already uses (keys).
+# MarshalText, time.Month, plain strings, a type whose package name is one
+# the generated file already uses (keys), and a second package named models
+# whose path ends in models2, so its import needs an explicit name.
 go generate ./...
 go build -o app$exe .
 env APP_PAINT_COLOR=red
 
 exec ./app$exe run
-stdout '^mode=sequential level=info format=yaml month=March ssl=disable color=Red timeout=1s\r?\n$'
+stdout '^mode=sequential level=info format=yaml month=March ssl=disable color=Red timeout=1s size=small\r?\n$'
 
 # --help lists the values and shows the default as its text.
 exec ./app$exe run --help
@@ -20,7 +21,7 @@ stdout '--paint-color string\s+Paint color; one of red, green\s'
 cp files/app.yaml app.yaml
 env APP_LOG_LEVEL=
 exec ./app$exe run --log-format=json --db-sslmode verify-full --paint-color green
-stdout '^mode=parallel level=debug format=json month=December ssl=verify-full color=Green timeout=1s\r?\n$'
+stdout '^mode=parallel level=debug format=json month=December ssl=verify-full color=Green timeout=1s size=small\r?\n$'
 env APP_LOG_LEVEL=warn
 exec ./app$exe run
 stdout ' level=warn '
@@ -75,8 +76,8 @@ func main() {
 			var mode models.ZpTaskExecutionMode = r.SchedulerExecmode()
 			var level models.Level = r.LogLevel()
 			var color keys.Color = r.PaintColor()
-			fmt.Printf("mode=%s level=%s format=%s month=%s ssl=%s color=%s timeout=%s\n",
-				mode, level, r.LogFormat().Name(), r.LogMonth(), r.DBSslmode(), color, r.SchedulerTimeout())
+			fmt.Printf("mode=%s level=%s format=%s month=%s ssl=%s color=%s timeout=%s size=%s\n",
+				mode, level, r.LogFormat().Name(), r.LogMonth(), r.DBSslmode(), color, r.SchedulerTimeout(), r.PaintSize())
 			return nil
 		}))
 	if err := root.Execute(); err != nil {
@@ -142,6 +143,12 @@ const (
 func (c Color) MarshalText() ([]byte, error) {
 	return []byte(map[Color]string{Red: "red", Green: "green"}[c]), nil
 }
+-- internal/other/models2/models.go --
+package models
+
+type Size string
+
+const Small Size = "small"
 -- internal/settings/settings.go --
 package settings
 
@@ -156,6 +163,7 @@ import (
 
 	"example.com/e2e/internal/keys"
 	"example.com/e2e/internal/models"
+	other "example.com/e2e/internal/other/models2"
 )
 
 var Scheduler = dsl.Group("scheduler", "Task scheduler",
@@ -178,6 +186,7 @@ var DB = dsl.Group("db", "Database",
 
 var Paint = dsl.Group("paint", "Paint",
 	dsl.Enum("color", "Paint color", keys.Red, keys.Green).Required(),
+	dsl.Enum("size", "Paint size", other.Small).Default(other.Small),
 )
 
 var App = dsl.App("app", "Test app", Scheduler, Log, DB, Paint).ConfigFile("app", ".")
