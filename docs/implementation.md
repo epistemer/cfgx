@@ -626,6 +626,17 @@ unknown.
     zone as `time.LoadLocation` does: the zone database is the one read it
     makes, so `t.In(loc)` works in tests. A default that fails to parse
     panics. `DefaultFunc`s run.
+- **[decided, M6.6]** Loading without cobra: the generated `LoadX(ctx,
+  opts...)` calls `engine.LoadCommand`, which builds a private flag set
+  with the command's flags (its keys, the global keys and their
+  `RelevantIf` conditions, plus `--config`), so `cfgx.WithArgs` is parsed
+  exactly as the command's flags would be, and the arguments that aren't
+  flags become `Args()` (A12). `WithEnv(map)` replaces the process
+  environment for env vars, the config file variable and `$VAR`s in search
+  paths. `WithFile(path)` is `--config`; a `--config` in `WithArgs` wins.
+  Warnings go to `WithLogger`'s logger, or to stderr as a command's do;
+  problems come back as the error. Bad flags are an error, not a panic or
+  exit.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree

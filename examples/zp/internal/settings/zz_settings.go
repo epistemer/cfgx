@@ -951,6 +951,13 @@ func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *
 	return engine.Command(cmd, &app, keysServe, newServe, run)
 }
 
+// LoadServe loads the Serve configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadServe(ctx context.Context, opts ...cfgx.Option) (*Serve, error) {
+	return engine.LoadCommand(ctx, &app, keysServe, newServe, opts...)
+}
+
 // Migrate is the configuration of the Migrate command.
 type Migrate struct {
 	*logGroup
@@ -986,6 +993,13 @@ func newMigrate(v *values, args []string) *Migrate {
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) error) *cobra.Command {
 	return engine.Command(cmd, &app, keysMigrate, newMigrate, run)
+}
+
+// LoadMigrate loads the Migrate configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadMigrate(ctx context.Context, opts ...cfgx.Option) (*Migrate, error) {
+	return engine.LoadCommand(ctx, &app, keysMigrate, newMigrate, opts...)
 }
 
 // TestEmail is the configuration of the TestEmail command.
@@ -1045,4 +1059,11 @@ func newTestEmail(v *values, args []string) *TestEmail {
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func TestEmailCommand(cmd *cobra.Command, run func(context.Context, *TestEmail) error) *cobra.Command {
 	return engine.Command(cmd, &app, keysTestEmail, newTestEmail, run)
+}
+
+// LoadTestEmail loads the TestEmail configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadTestEmail(ctx context.Context, opts ...cfgx.Option) (*TestEmail, error) {
+	return engine.LoadCommand(ctx, &app, keysTestEmail, newTestEmail, opts...)
 }

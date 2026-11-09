@@ -716,7 +716,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		claim(cm.Name+"Command", c.Pos, "command binder")
 		claim(cm.KeysVar, c.Pos, "command key list")
 		claim("new"+cm.Name, c.Pos, "command constructor")
-		claim("Load"+cm.Name, c.Pos, "command loader (M6.6)")
+		claim("Load"+cm.Name, c.Pos, "command loader")
 		for _, o := range c.Orphans {
 			bad(c.Pos, "command %s uses group %q (declared at %s), which isn't passed to dsl.App", c.Name, o.Name, o.Pos)
 		}

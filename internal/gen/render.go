@@ -307,4 +307,11 @@ func new{{.Name}}(v *values, args []string) *{{.Name}} {
 func {{.Name}}Command(cmd *cobra.Command, run func(context.Context, *{{.Name}}) error) *cobra.Command {
 	return engine.Command(cmd, &app, {{.KeysVar}}, new{{.Name}}, run)
 }
+
+// Load{{.Name}} loads the {{.Name}} configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func Load{{.Name}}(ctx context.Context, opts ...cfgx.Option) (*{{.Name}}, error) {
+	return engine.LoadCommand(ctx, &app, {{.KeysVar}}, new{{.Name}}, opts...)
+}
 {{end}}`))

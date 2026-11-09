@@ -553,3 +553,10 @@ func newRun(v *values, args []string) *Run {
 func RunCommand(cmd *cobra.Command, run func(context.Context, *Run) error) *cobra.Command {
 	return engine.Command(cmd, &app, keysRun, newRun, run)
 }
+
+// LoadRun loads the Run configuration without cobra, from the
+// config file, the environment and the arguments that options such as
+// cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+func LoadRun(ctx context.Context, opts ...cfgx.Option) (*Run, error) {
+	return engine.LoadCommand(ctx, &app, keysRun, newRun, opts...)
+}
