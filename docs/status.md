@@ -4,6 +4,30 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M5.8 examples/zp; M5 done
+
+- **Landed:**
+  - `examples/zp`: the schema from interface §3.1, without the store and
+    mutable keys (M7.9). Stub `mailer`, `server` and `db` packages take
+    the generated interfaces.
+  - Compile-failure tests show that `*settings.Migrate` can't be passed to
+    `mailer.New`, and that `*settings.TestEmail` has `AuthEmailFrom()` but
+    no other `Auth` getter.
+  - The main module's tests now build, vet and test every example, and fail
+    if an example's generated file is stale. `examples/mini` wasn't checked
+    by CI before.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 171k tokens
+  ([review 0018](reviews/0018-gemini-m5.8-review.md)). 5 of 6 findings
+  fixed, all in the test harness.
+- **Also:** M4.10's PR failed CI on `gofmt`, an alignment change in a
+  struct I added to. Fixed. I now run `gofmt -l` right before every commit.
+- **Decided for you:** the example keeps the file key `emailfrom` and uses
+  `.GoName("EmailFrom")`, so the getter is `AuthEmailFrom()`, as §5.1 has it.
+- **Next:** M6, the developer surface (`Test()`, `LoadX`, docs, example
+  files and JSON Schema).
+- **Waiting on you:** the naming veto from M4.9 and M4.10 (`dsl.FromFlag`
+  and the other sources, and `dsl.CompleteFunc`).
+
 ## 2026-11-09: M4.10 completion; M4 done
 
 - **Landed:** `Complete(dsl.Files("*.pem"))`, `dsl.Dirs()` and
