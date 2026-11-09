@@ -1,0 +1,187 @@
+# M4.2: Enum keys. The getter returns the values' own type, inferred from them:
+# zp's models.ZpTaskExecutionMode (a named string), a Stringer int, a pointer
+# MarshalText, time.Month, plain strings, and a type whose package name is
+# one the generated file already uses (keys).
+go generate ./...
+go build -o app$exe .
+env APP_PAINT_COLOR=red
+
+exec ./app$exe run
+stdout '^mode=sequential level=info format=yaml month=March ssl=disable color=Red timeout=1s\r?\n$'
+
+# --help lists the values and shows the default as its text.
+exec ./app$exe run --help
+stdout '--scheduler-execmode string\s+Task execution mode; one of sequential, parallel \(default sequential\)'
+stdout '--log-level string\s+Minimum log level; one of debug, info, warn \(default info\)'
+stdout '--paint-color string\s+Paint color; one of red, green\s'
+
+# Each layer takes the values' text. An empty env var clears the file's
+# value to the zero value, which here is a value too (debug).
+cp files/app.yaml app.yaml
+env APP_LOG_LEVEL=
+exec ./app$exe run --log-format=json --db-sslmode verify-full --paint-color green
+stdout '^mode=parallel level=debug format=json month=December ssl=verify-full color=Green timeout=1s\r?\n$'
+env APP_LOG_LEVEL=warn
+exec ./app$exe run
+stdout ' level=warn '
+rm app.yaml
+
+# A command argument can be an enum.
+exec ./app$exe run --pick parallel
+stdout '^pick=parallel\r?\n'
+
+# Values outside the set are problems, with a suggestion when one is close;
+# matching is exact.
+! exec ./app$exe run --scheduler-execmode Parallel --log-level verbose --db-sslmode requir --log-month 3
+cmp stderr want.txt
+
+-- want.txt --
+app: invalid configuration (4 problems)
+  db.sslmode: "requir" isn't one of disable, require, verify-full; did you mean require? (flag --db-sslmode)
+  log.level: "verbose" isn't one of debug, info, warn (flag --log-level)
+  log.month: "3" isn't one of March, December (flag --log-month)
+  scheduler.execmode: "Parallel" isn't one of sequential, parallel; did you mean parallel? (flag --scheduler-execmode)
+-- files/app.yaml --
+scheduler:
+  execmode: parallel
+log:
+  level: warn
+  month: December
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/keys"
+	"example.com/e2e/internal/models"
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(settings.RunCommand(&cobra.Command{Use: "run"},
+		func(_ context.Context, r *settings.Run) error {
+			if p := r.Pick(); p != "" {
+				fmt.Printf("pick=%s\n", p)
+				return nil
+			}
+			// The getters return the values' own types.
+			var mode models.ZpTaskExecutionMode = r.SchedulerExecmode()
+			var level models.Level = r.LogLevel()
+			var color keys.Color = r.PaintColor()
+			fmt.Printf("mode=%s level=%s format=%s month=%s ssl=%s color=%s timeout=%s\n",
+				mode, level, r.LogFormat().Name(), r.LogMonth(), r.DBSslmode(), color, r.SchedulerTimeout())
+			return nil
+		}))
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/models/models.go --
+package models
+
+import "errors"
+
+// ZpTaskExecutionMode is shaped like zp's, which sqlc generates.
+type ZpTaskExecutionMode string
+
+const (
+	ZpTaskExecutionModeSequential ZpTaskExecutionMode = "sequential"
+	ZpTaskExecutionModeParallel   ZpTaskExecutionMode = "parallel"
+)
+
+// Level is a Stringer: its text is String().
+type Level int
+
+const (
+	Debug Level = iota
+	Info
+	Warn
+)
+
+func (l Level) String() string { return [...]string{"debug", "info", "warn"}[l] }
+
+// Format has MarshalText on the pointer, which wins over String.
+type Format uint8
+
+const (
+	YAML Format = iota + 1
+	JSON
+)
+
+func (f *Format) MarshalText() ([]byte, error) {
+	switch *f {
+	case YAML:
+		return []byte("yaml"), nil
+	case JSON:
+		return []byte("json"), nil
+	}
+	return nil, errors.New("unknown format")
+}
+
+func (f Format) String() string { return "Format(" + f.Name() + ")" }
+
+func (f Format) Name() string { b, _ := f.MarshalText(); return string(b) }
+-- internal/keys/keys.go --
+package keys
+
+// Color lives in a package named like a generated variable.
+type Color string
+
+const (
+	Red   Color = "Red"
+	Green Color = "Green"
+)
+
+func (c Color) MarshalText() ([]byte, error) {
+	return []byte(map[Color]string{Red: "red", Green: "green"}[c]), nil
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import (
+	"time"
+
+	"github.com/epistemer/cfgx/dsl"
+
+	"example.com/e2e/internal/keys"
+	"example.com/e2e/internal/models"
+)
+
+var Scheduler = dsl.Group("scheduler", "Task scheduler",
+	dsl.Enum("execmode", "Task execution mode",
+		models.ZpTaskExecutionModeSequential,
+		models.ZpTaskExecutionModeParallel,
+	).Default(models.ZpTaskExecutionModeSequential),
+	dsl.Duration("timeout", "Task timeout").Default(time.Second),
+)
+
+var Log = dsl.Group("log", "Logging",
+	dsl.Enum("level", "Minimum log level", models.Debug, models.Info, models.Warn).Default(models.Info),
+	dsl.Enum("format", "Log format", models.YAML, models.JSON).Default(models.YAML),
+	dsl.Enum("month", "Rotation month", time.March, time.December).Default(time.March),
+)
+
+var DB = dsl.Group("db", "Database",
+	dsl.Enum("sslmode", "SSL mode", "disable", "require", "verify-full").Default("disable"),
+)
+
+var Paint = dsl.Group("paint", "Paint",
+	dsl.Enum("color", "Paint color", keys.Red, keys.Green).Required(),
+)
+
+var App = dsl.App("app", "Test app", Scheduler, Log, DB, Paint).ConfigFile("app", ".")
+
+var Run = dsl.Command("Run").Uses(Scheduler, Log, DB, Paint).Args(
+	dsl.Enum("pick", "Pick a mode", models.ZpTaskExecutionModeSequential, models.ZpTaskExecutionModeParallel),
+)

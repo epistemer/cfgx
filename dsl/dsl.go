@@ -241,6 +241,9 @@ type keyBase struct {
 	tags       []*TagDef
 	aliases    []string
 	deprecated string
+	typ        *ir.Type       // enums: the values' Go type
+	enum       []ir.EnumValue // enums: the values
+	problems   []string
 	pos        ir.Pos
 }
 
@@ -467,21 +470,7 @@ func Export(w io.Writer) error {
 			if err != nil {
 				return ir.Group{}, err
 			}
-			var aliases []string
-			if len(k.aliases) > 0 {
-				aliases = append([]string(nil), k.aliases...)
-			}
-			ig.Keys = append(ig.Keys, ir.Key{
-				Name:       k.name,
-				Desc:       k.desc,
-				Kind:       k.kind,
-				Default:    k.def,
-				Required:   k.required,
-				Tags:       kt,
-				Aliases:    aliases,
-				Deprecated: k.deprecated,
-				Pos:        k.pos,
-			})
+			ig.Keys = append(ig.Keys, k.export(kt))
 		}
 		for _, r := range g.rules {
 			if r == nil {
@@ -574,21 +563,7 @@ func Export(w io.Writer) error {
 			if err != nil {
 				return err
 			}
-			var aliases []string
-			if len(k.aliases) > 0 {
-				aliases = append([]string(nil), k.aliases...)
-			}
-			ic.Args = append(ic.Args, ir.Key{
-				Name:       k.name,
-				Desc:       k.desc,
-				Kind:       k.kind,
-				Default:    k.def,
-				Required:   k.required,
-				Tags:       kt,
-				Aliases:    aliases,
-				Deprecated: k.deprecated,
-				Pos:        k.pos,
-			})
+			ic.Args = append(ic.Args, k.export(kt))
 		}
 		out.Commands = append(out.Commands, ic)
 	}
@@ -596,6 +571,28 @@ func Export(w io.Writer) error {
 		out.Tags = append(out.Tags, ir.Tag{Name: t.name, Desc: t.desc, Pos: t.pos})
 	}
 	return ir.Encode(w, out)
+}
+
+// export returns the key's IR, with its tags already resolved.
+func (k *keyBase) export(tags []string) ir.Key {
+	var aliases []string
+	if len(k.aliases) > 0 {
+		aliases = append([]string(nil), k.aliases...)
+	}
+	return ir.Key{
+		Name:       k.name,
+		Desc:       k.desc,
+		Kind:       k.kind,
+		Default:    k.def,
+		Required:   k.required,
+		Tags:       tags,
+		Aliases:    aliases,
+		Deprecated: k.deprecated,
+		Type:       k.typ,
+		Enum:       k.enum,
+		Problems:   k.problems,
+		Pos:        k.pos,
+	}
 }
 
 // isNil reports whether kd is nil or holds a nil pointer, whose base()

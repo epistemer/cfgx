@@ -5,11 +5,11 @@ package settings
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/epistemer/cfgx"
 	"github.com/epistemer/cfgx/engine"
 	"github.com/spf13/cobra"
-	"time"
 )
 
 // The engine version this file was generated for.

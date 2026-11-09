@@ -235,7 +235,7 @@ with type-checked modifiers.
 | `Bool` | `bool` | flag is `--x` / `--x=false` |
 | `Duration` | `time.Duration` | `"90s"`, `"5m"`; bare numbers rejected (no unit ambiguity) |
 | `ByteSize` | `int64` | `"1MiB"`, `"512KB"`, or bytes |
-| `Enum(name, desc, values ...T)` | `T` | `T` is any comparable type with a string form (string, named string, `TextMarshaler`). Completion + docs list the values |
+| `Enum(name, desc, values ...T)` | `T` | `T` is any type whose underlying type is a string, integer, float or bool type. A value's text is its `MarshalText`, else a string type's value, else its `String`, else its literal. Completion + docs list the values |
 | `Secret` | `cfgx.Secret` | never a flag by default; also reads `<ENV>_FILE` (setting both is an error) |
 | `SecretFile` | `cfgx.Secret` | the setting is a path, resolved like `Path`; contents are loaded eagerly at startup from a regular file of at most 1 MiB |
 | `Path` | `string` | a path, cleaned and resolved relative to the config file's directory when set in a file |

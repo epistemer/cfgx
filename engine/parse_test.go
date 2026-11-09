@@ -120,3 +120,29 @@ func FuzzParseDuration(f *testing.F) {
 		}
 	})
 }
+
+func TestParseEnum(t *testing.T) {
+	type mode int
+	texts, vals := []string{"sequential", "parallel"}, []mode{1, 2}
+	for _, c := range []struct {
+		raw  string
+		want mode
+		err  string
+	}{
+		{"parallel", 2, ""},
+		{" sequential\n", 1, ""},
+		{"", 0, ""},
+		{"  ", 0, ""},
+		{"Parallel", 0, `"Parallel" isn't one of sequential, parallel; did you mean parallel?`},
+		{"fast", 0, `"fast" isn't one of sequential, parallel`},
+	} {
+		got := mode(9)
+		err := ParseEnum(c.raw, texts, vals, &got)
+		switch {
+		case c.err != "" && (err == nil || err.Error() != c.err):
+			t.Errorf("%q: err = %v, want %s", c.raw, err, c.err)
+		case c.err == "" && (err != nil || got != c.want):
+			t.Errorf("%q = %d, %v; want %d", c.raw, got, err, c.want)
+		}
+	}
+}

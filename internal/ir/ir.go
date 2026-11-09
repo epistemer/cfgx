@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 8
+const Version = 9
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -38,6 +38,8 @@ const (
 	KindFloat    Kind = "float"
 	KindDuration Kind = "duration"
 	KindByteSize Kind = "bytesize"
+	// M4.2
+	KindEnum Kind = "enum"
 )
 
 // App is a whole schema.
@@ -62,6 +64,9 @@ type App struct {
 	Rules       []Rule    `json:"rules,omitempty"`
 	Commands    []Command `json:"commands"`
 	Pos         Pos       `json:"pos"`
+	// Schema is the schema package's import path. The loader sets it; it
+	// isn't part of the encoded IR.
+	Schema string `json:"-"`
 }
 
 // Group is a named set of keys and nested groups.
@@ -92,7 +97,37 @@ type Key struct {
 	Tags       []string `json:"tags,omitempty"`
 	Aliases    []string `json:"aliases,omitempty"`
 	Deprecated string   `json:"deprecated,omitempty"`
-	Pos        Pos      `json:"pos"`
+	// Type is the Go type of an enum's values.
+	Type *Type `json:"type,omitempty"`
+	// Enum lists an enum's values, in declaration order.
+	Enum []EnumValue `json:"enum,omitempty"`
+	// Problems were found while the schema ran, such as a MarshalText
+	// error; the generator reports them at Pos.
+	Problems []string `json:"problems,omitempty"`
+	Pos      Pos      `json:"pos"`
+}
+
+// Type is a Go type the generated code names.
+type Type struct {
+	// Path is the import path; "" for a predeclared type such as string.
+	Path string `json:"path,omitempty"`
+	// Pkg is the package's name; Name is the type's name within it.
+	Pkg  string `json:"pkg,omitempty"`
+	Name string `json:"name"`
+	// Kind is the underlying type's reflect kind: string, int, uint8,
+	// float64, bool...
+	Kind string `json:"kind"`
+}
+
+// EnumValue is one value of an enum.
+type EnumValue struct {
+	// Text is the value's canonical text: what files, env vars and flags
+	// say.
+	Text string `json:"text"`
+	// Lit is a Go literal of the underlying value: "a", 2, 1.5 or true.
+	Lit string `json:"lit"`
+	// Zero is true for the type's zero value, which counts as not set (A4).
+	Zero bool `json:"zero,omitempty"`
 }
 
 // RuleKind is a kind of cross-key rule.
