@@ -106,6 +106,7 @@ var keys = [...]engine.Key[values]{
 			return engine.ParseEnum(raw, enumTextsLogLevel, enumValuesLogLevel, &v.LogLevel)
 		},
 		IsSet:   func(v *values) bool { return v.LogLevel != "" },
+		Show:    func(v *values) any { return engine.ShowEnum(v.LogLevel, enumTextsLogLevel, enumValuesLogLevel) },
 		Default: func(v *values) { v.LogLevel = "info" },
 	},
 	{
@@ -115,6 +116,7 @@ var keys = [...]engine.Key[values]{
 			return engine.ParseEnum(raw, enumTextsLogFormat, enumValuesLogFormat, &v.LogFormat)
 		},
 		IsSet:   func(v *values) bool { return v.LogFormat != "" },
+		Show:    func(v *values) any { return engine.ShowEnum(v.LogFormat, enumTextsLogFormat, enumValuesLogFormat) },
 		Default: func(v *values) { v.LogFormat = "text" },
 	},
 	{
@@ -122,12 +124,14 @@ var keys = [...]engine.Key[values]{
 		Type: "bool", Desc: "Force colored output even without a TTY", Bool: true, Global: true,
 		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.LogColor) },
 		IsSet: func(v *values) bool { return v.LogColor },
+		Show:  func(v *values) any { return v.LogColor },
 	},
 	{
 		Path: "database.host", Env: "ZP_DATABASE_HOST", Flag: "database-host",
 		Type: "string", Desc: "Database server host", DefaultText: "localhost", Quote: true,
 		Set:     func(v *values, raw string) error { return engine.ParseString(raw, &v.DBHost) },
 		IsSet:   func(v *values) bool { return v.DBHost != "" },
+		Show:    func(v *values) any { return v.DBHost },
 		Default: func(v *values) { v.DBHost = "localhost" },
 	},
 	{
@@ -135,6 +139,7 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "Database server port", DefaultText: "5432",
 		Set:   func(v *values, raw string) error { return engine.ParseInt(raw, &v.DBPort) },
 		IsSet: func(v *values) bool { return v.DBPort != 0 },
+		Show:  func(v *values) any { return v.DBPort },
 		Check: func(v *values) error {
 			if err := engine.AtLeast(v.DBPort, 1, "1"); err != nil {
 				return err
@@ -151,12 +156,14 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "Database name", Quote: true, Required: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.DBName) },
 		IsSet: func(v *values) bool { return v.DBName != "" },
+		Show:  func(v *values) any { return v.DBName },
 	},
 	{
 		Path: "database.user", Env: "ZP_DATABASE_USER", Flag: "database-user",
 		Type: "string", Desc: "Database user", DefaultText: "postgres", Quote: true,
 		Set:     func(v *values, raw string) error { return engine.ParseString(raw, &v.DBUser) },
 		IsSet:   func(v *values) bool { return v.DBUser != "" },
+		Show:    func(v *values) any { return v.DBUser },
 		Default: func(v *values) { v.DBUser = "postgres" },
 	},
 	{
@@ -164,6 +171,7 @@ var keys = [...]engine.Key[values]{
 		Type: "", Desc: "Database password", FileEnv: true, MaxFileSize: 1048576, Required: true,
 		Set:   func(v *values, raw string) error { return engine.ParseSecret(raw, &v.DBPassword) },
 		IsSet: func(v *values) bool { return v.DBPassword.IsSet() },
+		Show:  func(v *values) any { return engine.ShowSecret(v.DBPassword) },
 	},
 	{
 		Path: "database.sslmode", Env: "ZP_DATABASE_SSLMODE", Flag: "database-sslmode",
@@ -173,6 +181,7 @@ var keys = [...]engine.Key[values]{
 			return engine.ParseEnum(raw, enumTextsDBSslmode, enumValuesDBSslmode, &v.DBSslmode)
 		},
 		IsSet:   func(v *values) bool { return v.DBSslmode != "" },
+		Show:    func(v *values) any { return engine.ShowEnum(v.DBSslmode, enumTextsDBSslmode, enumValuesDBSslmode) },
 		Default: func(v *values) { v.DBSslmode = "disable" },
 	},
 	{
@@ -180,12 +189,14 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "SMTP server host", Quote: true, Required: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.SMTPHost) },
 		IsSet: func(v *values) bool { return v.SMTPHost != "" },
+		Show:  func(v *values) any { return v.SMTPHost },
 	},
 	{
 		Path: "smtp.port", Env: "ZP_SMTP_PORT", Flag: "smtp-port",
 		Type: "int", Desc: "SMTP server port", DefaultText: "587",
 		Set:     func(v *values, raw string) error { return engine.ParseInt(raw, &v.SMTPPort) },
 		IsSet:   func(v *values) bool { return v.SMTPPort != 0 },
+		Show:    func(v *values) any { return v.SMTPPort },
 		Default: func(v *values) { v.SMTPPort = 587 },
 	},
 	{
@@ -193,12 +204,14 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "SMTP user", Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.SMTPUser) },
 		IsSet: func(v *values) bool { return v.SMTPUser != "" },
+		Show:  func(v *values) any { return v.SMTPUser },
 	},
 	{
 		Path: "smtp.password", Env: "ZP_SMTP_PASSWORD", Flag: "",
 		Type: "", Desc: "SMTP password", FileEnv: true, MaxFileSize: 1048576,
 		Set:   func(v *values, raw string) error { return engine.ParseSecret(raw, &v.SMTPPassword) },
 		IsSet: func(v *values) bool { return v.SMTPPassword.IsSet() },
+		Show:  func(v *values) any { return engine.ShowSecret(v.SMTPPassword) },
 	},
 	{
 		Path: "smtp.auth", Env: "ZP_SMTP_AUTH", Flag: "smtp-auth",
@@ -207,6 +220,7 @@ var keys = [...]engine.Key[values]{
 			return engine.ParseEnum(raw, enumTextsSMTPAuth, enumValuesSMTPAuth, &v.SMTPAuth)
 		},
 		IsSet:   func(v *values) bool { return v.SMTPAuth != "" },
+		Show:    func(v *values) any { return engine.ShowEnum(v.SMTPAuth, enumTextsSMTPAuth, enumValuesSMTPAuth) },
 		Default: func(v *values) { v.SMTPAuth = "PLAIN" },
 	},
 	{
@@ -214,12 +228,14 @@ var keys = [...]engine.Key[values]{
 		Type: "bool", Desc: "Use implicit TLS", Bool: true,
 		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.SMTPTLS) },
 		IsSet: func(v *values) bool { return v.SMTPTLS },
+		Show:  func(v *values) any { return v.SMTPTLS },
 	},
 	{
 		Path: "auth.emailfrom", Env: "ZP_AUTH_EMAILFROM", Flag: "auth-emailfrom",
 		Type: "string", Desc: "Sender address for auth emails", Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.AuthEmailFrom) },
 		IsSet: func(v *values) bool { return v.AuthEmailFrom != "" },
+		Show:  func(v *values) any { return v.AuthEmailFrom },
 		Check: func(v *values) error {
 			return validate.Email(v.AuthEmailFrom)
 		},
@@ -229,6 +245,7 @@ var keys = [...]engine.Key[values]{
 		Type: "duration", Desc: "OTP validity", DefaultText: "5m0s",
 		Set:     func(v *values, raw string) error { return engine.ParseDuration(raw, &v.AuthOTPTTL) },
 		IsSet:   func(v *values) bool { return v.AuthOTPTTL != 0 },
+		Show:    func(v *values) any { return v.AuthOTPTTL.String() },
 		Default: func(v *values) { v.AuthOTPTTL = 5 * time.Minute },
 	},
 	{
@@ -236,6 +253,7 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "OTP length", DefaultText: "6",
 		Set:   func(v *values, raw string) error { return engine.ParseInt(raw, &v.AuthOTPLength) },
 		IsSet: func(v *values) bool { return v.AuthOTPLength != 0 },
+		Show:  func(v *values) any { return v.AuthOTPLength },
 		Check: func(v *values) error {
 			if err := engine.AtLeast(v.AuthOTPLength, 4, "4"); err != nil {
 				return err
@@ -252,6 +270,7 @@ var keys = [...]engine.Key[values]{
 		Type: "duration", Desc: "Session lifetime", DefaultText: "24h0m0s",
 		Set:     func(v *values, raw string) error { return engine.ParseDuration(raw, &v.AuthSessionTTL) },
 		IsSet:   func(v *values) bool { return v.AuthSessionTTL != 0 },
+		Show:    func(v *values) any { return v.AuthSessionTTL.String() },
 		Default: func(v *values) { v.AuthSessionTTL = 24 * time.Hour },
 	},
 	{
@@ -259,24 +278,28 @@ var keys = [...]engine.Key[values]{
 		Type: "file", Desc: "JWT private key (PEM)", DefaultText: "keys/priv.pem", Quote: true, File: true, MaxFileSize: 1048576,
 		Set:   func(v *values, raw string) error { return engine.ParseSecret(raw, &v.AuthJWTPrivate) },
 		IsSet: func(v *values) bool { return v.AuthJWTPrivate.IsSet() },
+		Show:  func(v *values) any { return engine.ShowSecret(v.AuthJWTPrivate) },
 	},
 	{
 		Path: "auth.jwt.public", Env: "ZP_AUTH_JWT_PUBLIC", Flag: "auth-jwt-public",
 		Type: "file", Desc: "JWT public key (PEM)", DefaultText: "keys/pub.pem", Quote: true, File: true, MaxFileSize: 1048576,
 		Set:   func(v *values, raw string) error { return engine.ParseSecret(raw, &v.AuthJWTPublic) },
 		IsSet: func(v *values) bool { return v.AuthJWTPublic.IsSet() },
+		Show:  func(v *values) any { return engine.ShowSecret(v.AuthJWTPublic) },
 	},
 	{
 		Path: "auth.token", Env: "ZP_AUTH_TOKEN", Flag: "",
 		Type: "", Desc: "Static API token", FileEnv: true, MaxFileSize: 1048576,
 		Set:   func(v *values, raw string) error { return engine.ParseSecret(raw, &v.AuthToken) },
 		IsSet: func(v *values) bool { return v.AuthToken.IsSet() },
+		Show:  func(v *values) any { return engine.ShowSecret(v.AuthToken) },
 	},
 	{
 		Path: "auth.keys", Env: "ZP_AUTH_KEYS", Flag: "auth-keys",
 		Type: "file", Desc: "CSV file of API keys", Quote: true, File: true, MaxFileSize: 1048576,
 		Set:      func(v *values, raw string) error { return engine.ParseSecret(raw, &v.AuthKeys) },
 		IsSet:    func(v *values) bool { return v.AuthKeys.IsSet() },
+		Show:     func(v *values) any { return engine.ShowSecret(v.AuthKeys) },
 		Complete: &engine.Completion{Exts: []string{"csv"}},
 	},
 	{
@@ -284,12 +307,14 @@ var keys = [...]engine.Key[values]{
 		Type: "bool", Desc: "Require multi-factor authentication", Bool: true,
 		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.AuthMFA) },
 		IsSet: func(v *values) bool { return v.AuthMFA },
+		Show:  func(v *values) any { return v.AuthMFA },
 	},
 	{
 		Path: "server.host", Env: "ZP_SERVER_HOST", Flag: "host",
 		Type: "string", Desc: "Listen address", DefaultText: "0.0.0.0", Quote: true,
 		Set:     func(v *values, raw string) error { return engine.ParseString(raw, &v.ServerHost) },
 		IsSet:   func(v *values) bool { return v.ServerHost != "" },
+		Show:    func(v *values) any { return v.ServerHost },
 		Default: func(v *values) { v.ServerHost = "0.0.0.0" },
 	},
 	{
@@ -297,6 +322,7 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "Listen port", Short: "p", DefaultText: "7777",
 		Set:   func(v *values, raw string) error { return engine.ParseInt(raw, &v.ServerPort) },
 		IsSet: func(v *values) bool { return v.ServerPort != 0 },
+		Show:  func(v *values) any { return v.ServerPort },
 		Check: func(v *values) error {
 			if err := engine.AtLeast(v.ServerPort, 1, "1"); err != nil {
 				return err
@@ -313,12 +339,14 @@ var keys = [...]engine.Key[values]{
 		Type: "bool", Desc: "Serve HTTPS", Bool: true,
 		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.ServerTLSEnabled) },
 		IsSet: func(v *values) bool { return v.ServerTLSEnabled },
+		Show:  func(v *values) any { return v.ServerTLSEnabled },
 	},
 	{
 		Path: "server.tls.cert", Env: "ZP_SERVER_TLS_CERT", Flag: "tls-cert",
 		Type: "path", Desc: "TLS certificate", DefaultText: "ssl/cert.pem", Quote: true, Resolve: true, RelevantIf: []int{26},
 		Set:      func(v *values, raw string) error { return engine.ParsePath(raw, &v.ServerTLSCert) },
 		IsSet:    func(v *values) bool { return v.ServerTLSCert != "" },
+		Show:     func(v *values) any { return v.ServerTLSCert },
 		Complete: &engine.Completion{Exts: []string{"pem"}},
 	},
 	{
@@ -326,12 +354,14 @@ var keys = [...]engine.Key[values]{
 		Type: "file", Desc: "TLS private key", DefaultText: "ssl/key.pem", Quote: true, File: true, MaxFileSize: 1048576, RelevantIf: []int{26},
 		Set:   func(v *values, raw string) error { return engine.ParseSecret(raw, &v.ServerTLSKey) },
 		IsSet: func(v *values) bool { return v.ServerTLSKey.IsSet() },
+		Show:  func(v *values) any { return engine.ShowSecret(v.ServerTLSKey) },
 	},
 	{
 		Path: "server.timeout.read", Env: "ZP_SERVER_TIMEOUT_READ", Flag: "timeout-read",
 		Type: "duration", Desc: "Read timeout", DefaultText: "20s",
 		Set:     func(v *values, raw string) error { return engine.ParseDuration(raw, &v.ServerTimeoutRead) },
 		IsSet:   func(v *values) bool { return v.ServerTimeoutRead != 0 },
+		Show:    func(v *values) any { return v.ServerTimeoutRead.String() },
 		Default: func(v *values) { v.ServerTimeoutRead = 20 * time.Second },
 	},
 	{
@@ -339,6 +369,7 @@ var keys = [...]engine.Key[values]{
 		Type: "duration", Desc: "Write timeout", DefaultText: "1m0s",
 		Set:     func(v *values, raw string) error { return engine.ParseDuration(raw, &v.ServerTimeoutWrite) },
 		IsSet:   func(v *values) bool { return v.ServerTimeoutWrite != 0 },
+		Show:    func(v *values) any { return v.ServerTimeoutWrite.String() },
 		Default: func(v *values) { v.ServerTimeoutWrite = 1 * time.Minute },
 	},
 	{
@@ -346,6 +377,7 @@ var keys = [...]engine.Key[values]{
 		Type: "bytesize", Desc: "Maximum request header size", DefaultText: "1MiB",
 		Set:     func(v *values, raw string) error { return engine.ParseByteSize(raw, &v.ServerMaxHeader) },
 		IsSet:   func(v *values) bool { return v.ServerMaxHeader != 0 },
+		Show:    func(v *values) any { return engine.FormatByteSize(v.ServerMaxHeader) },
 		Default: func(v *values) { v.ServerMaxHeader = 1048576 },
 	},
 	{
@@ -353,6 +385,7 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "Requests per second per IP", DefaultText: "100",
 		Set:     func(v *values, raw string) error { return engine.ParseInt(raw, &v.ServerRateLimit) },
 		IsSet:   func(v *values) bool { return v.ServerRateLimit != 0 },
+		Show:    func(v *values) any { return v.ServerRateLimit },
 		Default: func(v *values) { v.ServerRateLimit = 100 },
 	},
 	{
@@ -360,6 +393,7 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "Burst capacity per IP", DefaultText: "20",
 		Set:     func(v *values, raw string) error { return engine.ParseInt(raw, &v.ServerRateBurst) },
 		IsSet:   func(v *values) bool { return v.ServerRateBurst != 0 },
+		Show:    func(v *values) any { return v.ServerRateBurst },
 		Default: func(v *values) { v.ServerRateBurst = 20 },
 	},
 	{
@@ -367,6 +401,7 @@ var keys = [...]engine.Key[values]{
 		Type: "location", Desc: "Scheduler timezone", DefaultText: "Africa/Cairo",
 		Set:   func(v *values, raw string) error { return engine.ParseLocation(raw, &v.SchedulerLocation) },
 		IsSet: func(v *values) bool { return v.SchedulerLocation != nil },
+		Show:  func(v *values) any { return engine.ShowLocation(v.SchedulerLocation) },
 	},
 	{
 		Path: "scheduler.execmode", Env: "ZP_SCHEDULER_EXECMODE", Flag: "scheduler-execmode",
@@ -374,7 +409,10 @@ var keys = [...]engine.Key[values]{
 		Set: func(v *values, raw string) error {
 			return engine.ParseEnum(raw, enumTextsSchedulerExecmode, enumValuesSchedulerExecmode, &v.SchedulerExecmode)
 		},
-		IsSet:   func(v *values) bool { return v.SchedulerExecmode != "" },
+		IsSet: func(v *values) bool { return v.SchedulerExecmode != "" },
+		Show: func(v *values) any {
+			return engine.ShowEnum(v.SchedulerExecmode, enumTextsSchedulerExecmode, enumValuesSchedulerExecmode)
+		},
 		Default: func(v *values) { v.SchedulerExecmode = models.ZpTaskExecutionMode("sequential") },
 	},
 	{
@@ -382,6 +420,7 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "Concurrent workers", DefaultText: "",
 		Set:         func(v *values, raw string) error { return engine.ParseInt(raw, &v.SchedulerWorkers) },
 		IsSet:       func(v *values) bool { return v.SchedulerWorkers != 0 },
+		Show:        func(v *values) any { return v.SchedulerWorkers },
 		DefaultFrom: "runtime.NumCPU",
 		Default:     func(v *values) { v.SchedulerWorkers = runtime.NumCPU() },
 	},
@@ -390,6 +429,7 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "Maximum retries", DefaultText: "3",
 		Set:     func(v *values, raw string) error { return engine.ParseInt(raw, &v.SchedulerRetryMax) },
 		IsSet:   func(v *values) bool { return v.SchedulerRetryMax != 0 },
+		Show:    func(v *values) any { return v.SchedulerRetryMax },
 		Default: func(v *values) { v.SchedulerRetryMax = 3 },
 	},
 	{
@@ -397,6 +437,7 @@ var keys = [...]engine.Key[values]{
 		Type: "duration", Desc: "Delay between retries", DefaultText: "1m0s",
 		Set:     func(v *values, raw string) error { return engine.ParseDuration(raw, &v.SchedulerRetryDelay) },
 		IsSet:   func(v *values) bool { return v.SchedulerRetryDelay != 0 },
+		Show:    func(v *values) any { return v.SchedulerRetryDelay.String() },
 		Default: func(v *values) { v.SchedulerRetryDelay = 1 * time.Minute },
 	},
 	{
@@ -404,18 +445,21 @@ var keys = [...]engine.Key[values]{
 		Type: "path", Desc: "Bolt database file; also holds runtime settings", DefaultText: "bolt.db", Quote: true, Resolve: true,
 		Set:   func(v *values, raw string) error { return engine.ParsePath(raw, &v.StorageBolt) },
 		IsSet: func(v *values) bool { return v.StorageBolt != "" },
+		Show:  func(v *values) any { return v.StorageBolt },
 	},
 	{
 		Path: "down", Env: "", Flag: "down",
 		Type: "bool", Desc: "Roll back instead of applying", FlagOnly: true, Bool: true,
 		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.MigrateDown) },
 		IsSet: func(v *values) bool { return v.MigrateDown },
+		Show:  func(v *values) any { return v.MigrateDown },
 	},
 	{
 		Path: "steps", Env: "", Flag: "steps",
 		Type: "int", Desc: "Number of migrations; 0 means all", FlagOnly: true,
 		Set:   func(v *values, raw string) error { return engine.ParseInt(raw, &v.MigrateSteps) },
 		IsSet: func(v *values) bool { return v.MigrateSteps != 0 },
+		Show:  func(v *values) any { return v.MigrateSteps },
 		Check: func(v *values) error {
 			if err := engine.AtLeast(v.MigrateSteps, 0, "0"); err != nil {
 				return err
@@ -428,6 +472,7 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "Recipient name", FlagOnly: true, DefaultText: "John Doe", Quote: true,
 		Set:     func(v *values, raw string) error { return engine.ParseString(raw, &v.TestEmailToName) },
 		IsSet:   func(v *values) bool { return v.TestEmailToName != "" },
+		Show:    func(v *values) any { return v.TestEmailToName },
 		Default: func(v *values) { v.TestEmailToName = "John Doe" },
 	},
 	{
@@ -435,6 +480,7 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "Recipient address", FlagOnly: true, Quote: true, Required: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.TestEmailToAddress) },
 		IsSet: func(v *values) bool { return v.TestEmailToAddress != "" },
+		Show:  func(v *values) any { return v.TestEmailToAddress },
 		Check: func(v *values) error {
 			return validate.Email(v.TestEmailToAddress)
 		},
@@ -444,6 +490,7 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "Template to render", FlagOnly: true, DefaultText: "new-account", Quote: true,
 		Set:     func(v *values, raw string) error { return engine.ParseString(raw, &v.TestEmailTemplate) },
 		IsSet:   func(v *values) bool { return v.TestEmailTemplate != "" },
+		Show:    func(v *values) any { return v.TestEmailTemplate },
 		Default: func(v *values) { v.TestEmailTemplate = "new-account" },
 	},
 }
@@ -1130,6 +1177,11 @@ storage:
 	Rules: []engine.Rule{
 		{Kind: engine.AtMostOne, Group: "auth", Keys: []int{21, 22}},
 	},
+	Profiles: map[string][]int{
+		"Serve":     keysServe,
+		"Migrate":   keysMigrate,
+		"TestEmail": keysTestEmail,
+	},
 	Global: []int{0, 1, 2},
 }
 
@@ -1582,6 +1634,10 @@ func Test(edit func(v *Values)) *All {
 	}
 }
 
+// ConfigCommand returns the config subcommand: init, print, explain,
+// validate, schema and env. Add it to the root command.
+func ConfigCommand() *cobra.Command { return engine.ConfigCommand(&app) }
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -1621,7 +1677,7 @@ func newServe(v *values, args []string) *Serve {
 // ServeCommand binds the Serve configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysServe, newServe, run)
+	return engine.Command(cmd, &app, "Serve", keysServe, newServe, run)
 }
 
 // LoadServe loads the Serve configuration without cobra, from the
@@ -1665,7 +1721,7 @@ func newMigrate(v *values, args []string) *Migrate {
 // MigrateCommand binds the Migrate configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysMigrate, newMigrate, run)
+	return engine.Command(cmd, &app, "Migrate", keysMigrate, newMigrate, run)
 }
 
 // LoadMigrate loads the Migrate configuration without cobra, from the
@@ -1731,7 +1787,7 @@ func newTestEmail(v *values, args []string) *TestEmail {
 // TestEmailCommand binds the TestEmail configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func TestEmailCommand(cmd *cobra.Command, run func(context.Context, *TestEmail) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysTestEmail, newTestEmail, run)
+	return engine.Command(cmd, &app, "TestEmail", keysTestEmail, newTestEmail, run)
 }
 
 // LoadTestEmail loads the TestEmail configuration without cobra, from the

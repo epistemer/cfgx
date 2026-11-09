@@ -189,7 +189,7 @@ func TestConditionOnly(t *testing.T) {
 func TestCommandBindsConditionFlags(t *testing.T) {
 	a := rulesApp()
 	a.ConfigFile = ""
-	cmd := Command(&cobra.Command{Use: "x"}, a, []int{2}, func(v *rvals, _ []string) *rvals { return v },
+	cmd := Command(&cobra.Command{Use: "x"}, a, "X", []int{2}, func(v *rvals, _ []string) *rvals { return v },
 		func(context.Context, *rvals) error { return nil })
 	if cmd.Flags().Lookup("server-tls-enabled") == nil {
 		t.Error("the condition's flag must be bound, or the cert can never be relevant through flags")

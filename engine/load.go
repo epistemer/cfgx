@@ -57,6 +57,10 @@ type Options struct {
 	LookupEnv func(string) (string, bool)
 	// Environ replaces os.Environ, for tests.
 	Environ func() []string
+	// Partial skips Required and the rules, so config print and explain
+	// can show a configuration that isn't complete yet. Values that don't
+	// parse are still problems.
+	Partial bool
 }
 
 // Result is what Load found.
@@ -67,6 +71,8 @@ type Result[V any] struct {
 	Origins  [][]Origin
 	File     string // the config file that was read; "" if none
 	Warnings []Warning
+	// Irrelevant marks the keys a RelevantIf condition left out.
+	Irrelevant map[int]bool
 }
 
 // envCaseInsensitive is true where env var names are case-insensitive, so
@@ -91,7 +97,7 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 		environ = os.Environ
 	}
 	res := &Result[V]{Origins: make([][]Origin, len(a.Keys))}
-	l := &loader[V]{a: a, res: res}
+	l := &loader[V]{a: a, res: res, partial: o.Partial}
 
 	if a.ConfigFile != "" {
 		// A --config that was passed decides, even if empty: the env var is
@@ -159,7 +165,15 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 		}
 		pending = later
 	}
-	l.checkRules(v)
+	res.Irrelevant = map[int]bool{}
+	for i, st := range l.state {
+		if st == irrelevant {
+			res.Irrelevant[i] = true
+		}
+	}
+	if !o.Partial {
+		l.checkRules(v)
+	}
 	if len(l.errs) > 0 {
 		sort.SliceStable(l.errs, func(i, j int) bool { return l.errs[i].Key < l.errs[j].Key })
 		return res, l.errs
@@ -177,6 +191,7 @@ type loader[V any] struct {
 	loaded   map[int]bool    // the command's keys
 	condOnly map[int]bool    // RelevantIf conditions loaded only for relevance
 	state    map[int]keyState
+	partial  bool // Options.Partial
 }
 
 // conditions returns the RelevantIf conditions of the keys at idx, directly
@@ -469,7 +484,7 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 			return
 		}
 	}
-	if k.Required && !k.IsSet(v) && !l.condOnly[i] {
+	if k.Required && !k.IsSet(v) && !l.condOnly[i] && !l.partial {
 		if win != nil && win.read && win.raw != "" {
 			l.errs = append(l.errs, cfgx.Problem{Key: k.Path, Message: "is required, but the file " + l.resolve(win) + " is empty", Source: win.origin.String()})
 			return

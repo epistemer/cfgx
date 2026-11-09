@@ -60,6 +60,7 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "string", DefaultText: "x", Quote: true,
 		Set:     func(v *values, raw string) error { return engine.ParseString(raw, &v.KS) },
 		IsSet:   func(v *values) bool { return v.KS != "" },
+		Show:    func(v *values) any { return v.KS },
 		Default: func(v *values) { v.KS = "x" },
 	},
 	{
@@ -67,6 +68,7 @@ var keys = [...]engine.Key[values]{
 		Type: "bool", Desc: "bool", DefaultText: "true", Bool: true,
 		Set:     func(v *values, raw string) error { return engine.ParseBool(raw, &v.KB) },
 		IsSet:   func(v *values) bool { return v.KB },
+		Show:    func(v *values) any { return v.KB },
 		Default: func(v *values) { v.KB = true },
 	},
 	{
@@ -74,6 +76,7 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "int", DefaultText: "-3",
 		Set:     func(v *values, raw string) error { return engine.ParseInt(raw, &v.KI) },
 		IsSet:   func(v *values) bool { return v.KI != 0 },
+		Show:    func(v *values) any { return v.KI },
 		Default: func(v *values) { v.KI = -3 },
 	},
 	{
@@ -81,6 +84,7 @@ var keys = [...]engine.Key[values]{
 		Type: "int64", Desc: "int64", DefaultText: "9223372036854775807",
 		Set:     func(v *values, raw string) error { return engine.ParseInt64(raw, &v.KI64) },
 		IsSet:   func(v *values) bool { return v.KI64 != 0 },
+		Show:    func(v *values) any { return v.KI64 },
 		Default: func(v *values) { v.KI64 = 9223372036854775807 },
 	},
 	{
@@ -88,6 +92,7 @@ var keys = [...]engine.Key[values]{
 		Type: "uint", Desc: "uint", DefaultText: "7",
 		Set:     func(v *values, raw string) error { return engine.ParseUint(raw, &v.KU) },
 		IsSet:   func(v *values) bool { return v.KU != 0 },
+		Show:    func(v *values) any { return v.KU },
 		Default: func(v *values) { v.KU = 7 },
 	},
 	{
@@ -95,6 +100,7 @@ var keys = [...]engine.Key[values]{
 		Type: "float", Desc: "float", DefaultText: "0.25",
 		Set:     func(v *values, raw string) error { return engine.ParseFloat(raw, &v.KF) },
 		IsSet:   func(v *values) bool { return v.KF != 0 },
+		Show:    func(v *values) any { return v.KF },
 		Default: func(v *values) { v.KF = 0.25 },
 	},
 	{
@@ -102,6 +108,7 @@ var keys = [...]engine.Key[values]{
 		Type: "duration", Desc: "duration", DefaultText: "5m0s",
 		Set:     func(v *values, raw string) error { return engine.ParseDuration(raw, &v.KD) },
 		IsSet:   func(v *values) bool { return v.KD != 0 },
+		Show:    func(v *values) any { return v.KD.String() },
 		Default: func(v *values) { v.KD = 5 * time.Minute },
 	},
 	{
@@ -109,6 +116,7 @@ var keys = [...]engine.Key[values]{
 		Type: "duration", Desc: "odd duration", DefaultText: "1.5s",
 		Set:     func(v *values, raw string) error { return engine.ParseDuration(raw, &v.KD2) },
 		IsSet:   func(v *values) bool { return v.KD2 != 0 },
+		Show:    func(v *values) any { return v.KD2.String() },
 		Default: func(v *values) { v.KD2 = 1500 * time.Millisecond },
 	},
 	{
@@ -116,6 +124,7 @@ var keys = [...]engine.Key[values]{
 		Type: "bytesize", Desc: "bytesize", DefaultText: "1MiB",
 		Set:     func(v *values, raw string) error { return engine.ParseByteSize(raw, &v.KSize) },
 		IsSet:   func(v *values) bool { return v.KSize != 0 },
+		Show:    func(v *values) any { return engine.FormatByteSize(v.KSize) },
 		Default: func(v *values) { v.KSize = 1048576 },
 	},
 	{
@@ -123,42 +132,49 @@ var keys = [...]engine.Key[values]{
 		Type: "duration", Desc: "no default",
 		Set:   func(v *values, raw string) error { return engine.ParseDuration(raw, &v.KNone) },
 		IsSet: func(v *values) bool { return v.KNone != 0 },
+		Show:  func(v *values) any { return v.KNone.String() },
 	},
 	{
 		Path: "k.path", Env: "K_K_PATH", Flag: "k-path",
 		Type: "path", Desc: "path", DefaultText: "data//app.db", Quote: true, Resolve: true,
 		Set:   func(v *values, raw string) error { return engine.ParsePath(raw, &v.KPath) },
 		IsSet: func(v *values) bool { return v.KPath != "" },
+		Show:  func(v *values) any { return v.KPath },
 	},
 	{
 		Path: "k.file", Env: "K_K_FILE", Flag: "k-file",
 		Type: "file", Desc: "file", DefaultText: "ca.pem", Quote: true, File: true, MaxFileSize: 16777216,
 		Set:   func(v *values, raw string) error { return engine.ParseBytes(raw, &v.KFile) },
 		IsSet: func(v *values) bool { return len(v.KFile) != 0 },
+		Show:  func(v *values) any { return engine.ShowBytes(v.KFile) },
 	},
 	{
 		Path: "k.url", Env: "K_K_URL", Flag: "k-url",
 		Type: "url", Desc: "url", DefaultText: "https://example.com/x", Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseURL(raw, &v.KURL) },
 		IsSet: func(v *values) bool { return v.KURL != nil },
+		Show:  func(v *values) any { return engine.ShowURL(v.KURL) },
 	},
 	{
 		Path: "k.loc", Env: "K_K_LOC", Flag: "k-loc",
 		Type: "location", Desc: "location", DefaultText: "UTC",
 		Set:   func(v *values, raw string) error { return engine.ParseLocation(raw, &v.KLoc) },
 		IsSet: func(v *values) bool { return v.KLoc != nil },
+		Show:  func(v *values) any { return engine.ShowLocation(v.KLoc) },
 	},
 	{
 		Path: "k.url2", Env: "K_K_URL2", Flag: "k-url2",
 		Type: "url", Desc: "url without default", Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseURL(raw, &v.KUrl2) },
 		IsSet: func(v *values) bool { return v.KUrl2 != nil },
+		Show:  func(v *values) any { return engine.ShowURL(v.KUrl2) },
 	},
 	{
 		Path: "k.tags", Env: "K_K_TAGS", Flag: "k-tags",
 		Type: "strings", Desc: "strings", DefaultText: "[a,\"b,c\",\"\"]",
 		SetItems: func(v *values, items []string) error { return engine.ParseStrings(items, &v.KTags) },
 		IsSet:    func(v *values) bool { return len(v.KTags) != 0 },
+		Show:     func(v *values) any { return v.KTags },
 		Default:  func(v *values) { v.KTags = []string{"a", "b,c", ""} },
 	},
 	{
@@ -166,6 +182,7 @@ var keys = [...]engine.Key[values]{
 		Type: "ints", Desc: "ints", DefaultText: "[80,443]",
 		SetItems: func(v *values, items []string) error { return engine.ParseInts(items, &v.KPorts) },
 		IsSet:    func(v *values) bool { return len(v.KPorts) != 0 },
+		Show:     func(v *values) any { return v.KPorts },
 		Default:  func(v *values) { v.KPorts = []int{80, 443} },
 	},
 	{
@@ -173,6 +190,7 @@ var keys = [...]engine.Key[values]{
 		Type: "durations", Desc: "durations", DefaultText: "[1s,1m0s]",
 		SetItems: func(v *values, items []string) error { return engine.ParseDurations(items, &v.KBackoff) },
 		IsSet:    func(v *values) bool { return len(v.KBackoff) != 0 },
+		Show:     func(v *values) any { return engine.ShowDurations(v.KBackoff) },
 		Default:  func(v *values) { v.KBackoff = []time.Duration{1 * time.Second, 1 * time.Minute} },
 	},
 	{
@@ -180,6 +198,7 @@ var keys = [...]engine.Key[values]{
 		Type: "key=value", Desc: "stringmap", DefaultText: "[a=x=y,b=2]", Map: true,
 		SetItems: func(v *values, items []string) error { return engine.ParseStringMap(items, &v.KLabels) },
 		IsSet:    func(v *values) bool { return len(v.KLabels) != 0 },
+		Show:     func(v *values) any { return v.KLabels },
 		Default:  func(v *values) { v.KLabels = map[string]string{"a": "x=y", "b": "2"} },
 	},
 	{
@@ -187,6 +206,7 @@ var keys = [...]engine.Key[values]{
 		Type: "strings", Desc: "empty list", DefaultText: "",
 		SetItems: func(v *values, items []string) error { return engine.ParseStrings(items, &v.KNone2) },
 		IsSet:    func(v *values) bool { return len(v.KNone2) != 0 },
+		Show:     func(v *values) any { return v.KNone2 },
 		Default:  func(v *values) { v.KNone2 = nil },
 	},
 	{
@@ -194,12 +214,14 @@ var keys = [...]engine.Key[values]{
 		Type: "prefix", Desc: "text", DefaultText: "10.0.0.0/8", Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseText(raw, &v.KCidr) },
 		IsSet: func(v *values) bool { return engine.NonZero(v.KCidr) },
+		Show:  func(v *values) any { return engine.ShowText(v.KCidr) },
 	},
 	{
 		Path: "k.port", Env: "K_K_PORT", Flag: "k-port",
 		Type: "int", Desc: "checked int", DefaultText: "80",
 		Set:   func(v *values, raw string) error { return engine.ParseInt(raw, &v.KPort) },
 		IsSet: func(v *values) bool { return v.KPort != 0 },
+		Show:  func(v *values) any { return v.KPort },
 		Check: func(v *values) error {
 			if err := engine.AtLeast(v.KPort, 1, "1"); err != nil {
 				return err
@@ -216,6 +238,7 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "checked string", Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.KName) },
 		IsSet: func(v *values) bool { return v.KName != "" },
+		Show:  func(v *values) any { return v.KName },
 		Check: func(v *values) error {
 			if err := engine.Length(v.KName, 1, 8); err != nil {
 				return err
@@ -231,6 +254,7 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "computed default", DefaultText: "",
 		Set:         func(v *values, raw string) error { return engine.ParseInt(raw, &v.KCpus) },
 		IsSet:       func(v *values) bool { return v.KCpus != 0 },
+		Show:        func(v *values) any { return v.KCpus },
 		DefaultFrom: "runtime.NumCPU",
 		Default:     func(v *values) { v.KCpus = runtime.NumCPU() },
 	},
@@ -239,6 +263,7 @@ var keys = [...]engine.Key[values]{
 		Type: "duration", Desc: "checked duration",
 		Set:   func(v *values, raw string) error { return engine.ParseDuration(raw, &v.KWait) },
 		IsSet: func(v *values) bool { return v.KWait != 0 },
+		Show:  func(v *values) any { return v.KWait.String() },
 		Check: func(v *values) error {
 			if err := engine.AtLeast(v.KWait, 1500*time.Millisecond, "1.5s"); err != nil {
 				return err
@@ -251,6 +276,7 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "renamed", Short: "n", Hidden: true, Quote: true,
 		Set:      func(v *values, raw string) error { return engine.ParseString(raw, &v.KRenamed) },
 		IsSet:    func(v *values) bool { return v.KRenamed != "" },
+		Show:     func(v *values) any { return v.KRenamed },
 		Complete: &engine.Completion{Exts: []string{"pem", "crt"}},
 	},
 	{
@@ -258,6 +284,7 @@ var keys = [...]engine.Key[values]{
 		Type: "path", Desc: "directory", Quote: true, Resolve: true,
 		Set:      func(v *values, raw string) error { return engine.ParsePath(raw, &v.KDir) },
 		IsSet:    func(v *values) bool { return v.KDir != "" },
+		Show:     func(v *values) any { return v.KDir },
 		Complete: &engine.Completion{Dirs: true},
 	},
 	{
@@ -265,6 +292,7 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "env only, renamed in the file", NoFile: true, Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.KFk) },
 		IsSet: func(v *values) bool { return v.KFk != "" },
+		Show:  func(v *values) any { return v.KFk },
 	},
 }
 
@@ -272,6 +300,9 @@ var keys = [...]engine.Key[values]{
 var app = engine.App[values]{
 	EnvPrefix: "K",
 	Keys:      keys[:],
+	Profiles: map[string][]int{
+		"Run": keysRun,
+	},
 }
 
 // root holds the current values; every getter reads through it.
@@ -522,6 +553,10 @@ func Test(edit func(v *Values)) *All {
 	}
 }
 
+// ConfigCommand returns the config subcommand: init, print, explain,
+// validate, schema and env. Add it to the root command.
+func ConfigCommand() *cobra.Command { return engine.ConfigCommand(&app) }
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -551,7 +586,7 @@ func newRun(v *values, args []string) *Run {
 // RunCommand binds the Run configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func RunCommand(cmd *cobra.Command, run func(context.Context, *Run) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysRun, newRun, run)
+	return engine.Command(cmd, &app, "Run", keysRun, newRun, run)
 }
 
 // LoadRun loads the Run configuration without cobra, from the

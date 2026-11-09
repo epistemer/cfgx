@@ -28,6 +28,7 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "Database host", DefaultText: "localhost", Quote: true,
 		Set:     func(v *values, raw string) error { return engine.ParseString(raw, &v.DatabaseHost) },
 		IsSet:   func(v *values) bool { return v.DatabaseHost != "" },
+		Show:    func(v *values) any { return v.DatabaseHost },
 		Default: func(v *values) { v.DatabaseHost = "localhost" },
 	},
 	{
@@ -35,6 +36,7 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "Database port", DefaultText: "5432",
 		Set:     func(v *values, raw string) error { return engine.ParseInt(raw, &v.DatabasePort) },
 		IsSet:   func(v *values) bool { return v.DatabasePort != 0 },
+		Show:    func(v *values) any { return v.DatabasePort },
 		Default: func(v *values) { v.DatabasePort = 5432 },
 	},
 	{
@@ -42,12 +44,14 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "Server URL", Quote: true, Required: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.SMTPURL) },
 		IsSet: func(v *values) bool { return v.SMTPURL != "" },
+		Show:  func(v *values) any { return v.SMTPURL },
 	},
 	{
 		Path: "log.debug", Env: "DEMO_LOG_DEBUG", Flag: "log-debug",
 		Type: "bool", Desc: "Debug logging", DefaultText: "false", Bool: true, Global: true,
 		Set:     func(v *values, raw string) error { return engine.ParseBool(raw, &v.LogDebug) },
 		IsSet:   func(v *values) bool { return v.LogDebug },
+		Show:    func(v *values) any { return v.LogDebug },
 		Default: func(v *values) { v.LogDebug = false },
 	},
 }
@@ -58,7 +62,12 @@ var app = engine.App[values]{
 	ConfigFile:  "config",
 	SearchPaths: []string{".", "$HOME/.demo"},
 	Keys:        keys[:],
-	Global:      []int{3},
+	Profiles: map[string][]int{
+		"Serve":   keysServe,
+		"Migrate": keysMigrate,
+		"Version": keysVersion,
+	},
+	Global: []int{3},
 }
 
 // root holds the current values; every getter reads through it.
@@ -167,6 +176,10 @@ func Test(edit func(v *Values)) *All {
 	}
 }
 
+// ConfigCommand returns the config subcommand: init, print, explain,
+// validate, schema and env. Add it to the root command.
+func ConfigCommand() *cobra.Command { return engine.ConfigCommand(&app) }
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -200,7 +213,7 @@ func newServe(v *values, args []string) *Serve {
 // ServeCommand binds the Serve configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysServe, newServe, run)
+	return engine.Command(cmd, &app, "Serve", keysServe, newServe, run)
 }
 
 // LoadServe loads the Serve configuration without cobra, from the
@@ -236,7 +249,7 @@ func newMigrate(v *values, args []string) *Migrate {
 // MigrateCommand binds the Migrate configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysMigrate, newMigrate, run)
+	return engine.Command(cmd, &app, "Migrate", keysMigrate, newMigrate, run)
 }
 
 // LoadMigrate loads the Migrate configuration without cobra, from the
@@ -270,7 +283,7 @@ func newVersion(v *values, args []string) *Version {
 // VersionCommand binds the Version configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func VersionCommand(cmd *cobra.Command, run func(context.Context, *Version) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysVersion, newVersion, run)
+	return engine.Command(cmd, &app, "Version", keysVersion, newVersion, run)
 }
 
 // LoadVersion loads the Version configuration without cobra, from the

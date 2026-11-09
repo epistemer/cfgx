@@ -1,0 +1,176 @@
+# M6.4: the config subcommand. It covers the whole app, or one command's
+# keys by its command line (a nested one too); it reads defaults, the file
+# and env only, never flags but --config; secrets are masked everywhere.
+go generate ./...
+go build -o app$exe .
+env APP_DB_PASSWORD=hunter2
+env APP_DB_URL=postgres://admin:s3cret@db/app
+
+# schema and init.
+exec ./app$exe config schema
+stdout '"\$schema": "https://json-schema.org/draft/2020-12/schema"'
+exec ./app$exe config init
+stdout '^Wrote app.yaml.\r?$'
+grep '^# Database$' app.yaml
+! exec ./app$exe config init
+stderr 'app.yaml exists; pass --force to overwrite it'
+exec ./app$exe config init --force -o other.yaml
+exists other.yaml
+cp files/app.yaml app.yaml
+
+# print: every key but arguments, at its file path; secrets masked, URL
+# passwords redacted.
+exec ./app$exe config print
+cmp stdout want-print.txt
+# For one command: the nested "db migrate" uses only db.
+exec ./app$exe config print db migrate
+cmp stdout want-print-migrate.txt
+
+# explain: values and sources.
+exec ./app$exe config explain
+cmp stdout want-explain.txt
+
+# A command's flags never count, and its arguments aren't checked.
+! exec ./app$exe config print --db-port 1
+stderr 'unknown flag: --db-port'
+exec ./app$exe config validate db migrate
+stdout '^The configuration is valid.\r?$'
+
+# validate the whole app: every command's required keys.
+! exec ./app$exe config validate
+stderr '^  srv.token: is required; set APP_SRV_TOKEN, APP_SRV_TOKEN_FILE or srv.token in the config file\r?$'
+! exec ./app$exe config validate serve
+stderr 'srv.token: is required'
+! exec ./app$exe config validate nope
+stderr '"nope" isn''t a command with a configuration'
+
+# env: the variables, and which are set; never their values.
+exec ./app$exe config env db migrate
+cmp stdout want-env.txt
+
+# A command's RelevantIf conditions in other groups are listed with it.
+exec ./app$exe config explain web
+stdout '^web.cert +unset \(not relevant\)\r?$'
+stdout '^tls.on +false +unset\r?$'
+exec ./app$exe config env web
+stdout '^APP_TLS_ON +tls.on'
+
+# --config works.
+exec ./app$exe config print --config other.yaml db migrate
+stdout '^  port: 5432\r?$'
+
+! stdout hunter2
+! stdout s3cret
+! stderr hunter2
+
+-- files/app.yaml --
+db:
+  port: 6543
+srv:
+  zone: Europe/Paris
+-- want-print.txt --
+db:
+  port: 6543
+  password: "******"
+  url: "postgres://admin:xxxxx@db/app"
+srv:
+  token: ""
+  zone: "Europe/Paris"
+  ca: ""
+  wait: "1m0s"
+tls:
+  on: false
+web:
+  cert: ""
+-- want-print-migrate.txt --
+db:
+  port: 6543
+  password: "******"
+  url: "postgres://admin:xxxxx@db/app"
+-- want-explain.txt --
+KEY          VALUE                          SOURCE                DEFAULT
+db.port      6543                           app.yaml:2:9          5432
+db.password  ******                         env APP_DB_PASSWORD
+db.url       postgres://admin:xxxxx@db/app  env APP_DB_URL
+srv.token                                   unset
+srv.zone     Europe/Paris                   app.yaml:4:9
+srv.ca                                      unset
+srv.wait     1m0s                           default               1m0s
+tls.on       false                          unset
+web.cert                                    unset (not relevant)
+-- want-env.txt --
+VARIABLE              KEY          SET  DESCRIPTION
+APP_CONFIG                              the config file to read
+APP_DB_PORT           db.port           Port
+APP_DB_PASSWORD       db.password  yes  Password
+APP_DB_PASSWORD_FILE  db.password       a file holding db.password
+APP_DB_URL            db.url       yes  URL
+-- main.go --
+package main
+
+import (
+	"context"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	db := &cobra.Command{Use: "db"}
+	db.AddCommand(settings.MigrateCommand(&cobra.Command{Use: "migrate"},
+		func(context.Context, *settings.Migrate) error { return nil }))
+	root.AddCommand(
+		settings.ServeCommand(&cobra.Command{Use: "serve"}, func(context.Context, *settings.Serve) error { return nil }),
+		settings.ProxyCommand(&cobra.Command{Use: "web"}, func(context.Context, *settings.Proxy) error { return nil }),
+		db,
+		settings.ConfigCommand(),
+	)
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import (
+	"time"
+
+	"github.com/epistemer/cfgx/dsl"
+)
+
+var DB = dsl.Group("db", "Database",
+	dsl.Int("port", "Port").Default(5432),
+	dsl.Secret("password", "Password"),
+	dsl.URL("url", "URL"),
+)
+
+var Srv = dsl.Group("srv", "Server",
+	dsl.Secret("token", "Token").Required(),
+	dsl.Location("zone", "Zone"),
+	dsl.File("ca", "CA"),
+	dsl.Duration("wait", "Wait").Default(time.Minute),
+)
+
+var tlsOn = dsl.Bool("on", "TLS on")
+
+var TLS = dsl.Group("tls", "TLS", tlsOn)
+
+var cert = dsl.Path("cert", "Certificate")
+
+var Web = dsl.Group("web", "Web", cert).Rules(dsl.RelevantIf(cert, tlsOn))
+
+var App = dsl.App("app", "Test app", DB, Srv, TLS, Web).ConfigFile("app", ".")
+
+var (
+	Proxy   = dsl.Command("Proxy").Uses(Web)
+	Serve   = dsl.Command("Serve").Uses(DB, Srv)
+	Migrate = dsl.Command("Migrate").Uses(DB).Args(dsl.Int("steps", "Steps").Required())
+)

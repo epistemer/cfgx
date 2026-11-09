@@ -74,6 +74,10 @@ type Key[V any] struct {
 	// IsSet reports whether the key's value is non-zero (true for a bool),
 	// which is what "set" means for Required and rules (A4).
 	IsSet func(v *V) bool
+	// Show is the key's value as config print and explain show it: plain
+	// Go values that encode as JSON, with a secret masked, a URL's password
+	// redacted and a file's contents summed up by size.
+	Show func(v *V) any
 	// Check runs the key's constraints, then its Validate function, on a
 	// value that is set; nil if it has none.
 	Check func(v *V) error
@@ -103,6 +107,9 @@ type App[V any] struct {
 	// ExampleConfig and JSONSchema are the generated example config file
 	// and its JSON Schema, for the config subcommand (M6.4).
 	ExampleConfig, JSONSchema string
+	// Profiles are the commands' key lists by name, for the config
+	// subcommand.
+	Profiles map[string][]int
 }
 
 // RuleKind is a kind of cross-key rule (interface §3.5).

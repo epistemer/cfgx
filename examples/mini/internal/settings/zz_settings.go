@@ -31,6 +31,7 @@ var keys = [...]engine.Key[values]{
 		Type: "string", Desc: "Listen host", DefaultText: "localhost", Quote: true,
 		Set:     func(v *values, raw string) error { return engine.ParseString(raw, &v.ServerHost) },
 		IsSet:   func(v *values) bool { return v.ServerHost != "" },
+		Show:    func(v *values) any { return v.ServerHost },
 		Default: func(v *values) { v.ServerHost = "localhost" },
 	},
 	{
@@ -38,6 +39,7 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "Listen port", DefaultText: "8080",
 		Set:     func(v *values, raw string) error { return engine.ParseInt(raw, &v.ServerPort) },
 		IsSet:   func(v *values) bool { return v.ServerPort != 0 },
+		Show:    func(v *values) any { return v.ServerPort },
 		Default: func(v *values) { v.ServerPort = 8080 },
 	},
 	{
@@ -45,24 +47,28 @@ var keys = [...]engine.Key[values]{
 		Type: "bool", Desc: "Enable TLS", Bool: true,
 		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.ServerTLS) },
 		IsSet: func(v *values) bool { return v.ServerTLS },
+		Show:  func(v *values) any { return v.ServerTLS },
 	},
 	{
 		Path: "database.url", Env: "MINI_DATABASE_URL", Flag: "database-url",
 		Type: "string", Desc: "Database connection URL", Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.DatabaseURL) },
 		IsSet: func(v *values) bool { return v.DatabaseURL != "" },
+		Show:  func(v *values) any { return v.DatabaseURL },
 	},
 	{
 		Path: "database.timeout", Env: "MINI_DATABASE_TIMEOUT", Flag: "database-timeout",
 		Type: "int", Desc: "Query timeout in seconds",
 		Set:   func(v *values, raw string) error { return engine.ParseInt(raw, &v.DatabaseTimeout) },
 		IsSet: func(v *values) bool { return v.DatabaseTimeout != 0 },
+		Show:  func(v *values) any { return v.DatabaseTimeout },
 	},
 	{
 		Path: "database.debug", Env: "MINI_DATABASE_DEBUG", Flag: "database-debug",
 		Type: "bool", Desc: "Log SQL queries", DefaultText: "false", Bool: true,
 		Set:     func(v *values, raw string) error { return engine.ParseBool(raw, &v.DatabaseDebug) },
 		IsSet:   func(v *values) bool { return v.DatabaseDebug },
+		Show:    func(v *values) any { return v.DatabaseDebug },
 		Default: func(v *values) { v.DatabaseDebug = false },
 	},
 	{
@@ -70,6 +76,7 @@ var keys = [...]engine.Key[values]{
 		Type: "bool", Desc: "Log more", Bool: true, Global: true,
 		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.LogVerbose) },
 		IsSet: func(v *values) bool { return v.LogVerbose },
+		Show:  func(v *values) any { return v.LogVerbose },
 	},
 }
 
@@ -200,6 +207,10 @@ log:
   "type": "object"
 }
 `,
+	Profiles: map[string][]int{
+		"Serve":   keysServe,
+		"Migrate": keysMigrate,
+	},
 	Global: []int{6},
 }
 
@@ -330,6 +341,10 @@ func Test(edit func(v *Values)) *All {
 	}
 }
 
+// ConfigCommand returns the config subcommand: init, print, explain,
+// validate, schema and env. Add it to the root command.
+func ConfigCommand() *cobra.Command { return engine.ConfigCommand(&app) }
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -363,7 +378,7 @@ func newServe(v *values, args []string) *Serve {
 // ServeCommand binds the Serve configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysServe, newServe, run)
+	return engine.Command(cmd, &app, "Serve", keysServe, newServe, run)
 }
 
 // LoadServe loads the Serve configuration without cobra, from the
@@ -399,7 +414,7 @@ func newMigrate(v *values, args []string) *Migrate {
 // MigrateCommand binds the Migrate configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysMigrate, newMigrate, run)
+	return engine.Command(cmd, &app, "Migrate", keysMigrate, newMigrate, run)
 }
 
 // LoadMigrate loads the Migrate configuration without cobra, from the

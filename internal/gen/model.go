@@ -66,6 +66,7 @@ type KeyModel struct {
 	Field, Getter, Flag, Env string
 	GoType, FlagType, Parse  string
 	IsSet                    string // Go expression on v: is the value non-zero?
+	Show                     string // Go expression on v: the value for config print
 	HasDefault               bool
 	DefaultText, DefaultLit  string
 	Quote, Bool              bool

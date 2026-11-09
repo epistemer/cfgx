@@ -4,6 +4,36 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M6.4 config subcommand
+
+- **Landed:** `settings.ConfigCommand()` adds `config init`, `print`,
+  `explain`, `validate`, `schema` and `env`.
+  - Each covers the whole app, or one command's keys by its command line,
+    nested commands included: `zp config validate db migrate`.
+  - Values come from defaults, the file and env only, never a command's
+    flags.
+  - Secrets are masked and URL passwords redacted everywhere; `env` never
+    prints values.
+  - `print` and `explain` work on an incomplete configuration. `validate`
+    checks everything a command would.
+  - `examples/zp` has it.
+- **Reviewed:** Gemini 3.8 Flash (High), about 218k tokens
+  ([review 0024](reviews/0024-gemini-m6.4-review.md)). 3 of 5 findings
+  fixed, including `RelevantIf` conditions missing from one command's
+  listing, and a DEFAULT column for `explain`.
+- **Decided for you** (implementation.md §3.4):
+  - `init` writes `config.yaml` in the working directory, or `-o path`,
+    and won't overwrite without `--force`.
+  - `print` is YAML by config file path.
+- **Next:** M6 is done except **M6.7, which needs you** (see below). Then M7,
+  the store.
+- **Waiting on you:** M6.7, a manual check. Open `examples/zp/config.yaml`
+  in VS Code with the YAML extension (yaml-language-server), add
+  `# yaml-language-server: $schema=./config.schema.json` at the top, and
+  check that keys autocomplete and that a wrong value, such as
+  `database.port: 70000` or an unknown key, is flagged. A screenshot in the
+  PR or a word here is enough.
+
 ## 2026-11-09: M6.3 cfgx diff
 
 - **Landed:** `cfgx diff old.lock [new.lock]` lists what changed for

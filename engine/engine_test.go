@@ -491,7 +491,7 @@ func tree(a *App[vals], bind bool, idx []int, opts []cfgx.Option, run func(conte
 	if bind {
 		BindRoot(root, a, opts...)
 	}
-	root.AddCommand(Command(&cobra.Command{Use: "serve", Args: cobra.MaximumNArgs(2)}, a, idx,
+	root.AddCommand(Command(&cobra.Command{Use: "serve", Args: cobra.MaximumNArgs(2)}, a, "Serve", idx,
 		func(v *vals, args []string) *cfg { return &cfg{v, args} }, run))
 	var out bytes.Buffer
 	root.SetOut(&out)
