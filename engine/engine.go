@@ -4,6 +4,7 @@ package engine
 
 import (
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/spf13/pflag"
@@ -26,12 +27,13 @@ type Key[V any] struct {
 	Short       string // one-letter short flag, or ""
 	Type        string // label in --help: int, string, bool
 	Desc        string
-	DefaultText string // shown in --help; "" for none
-	Quote       bool   // quote DefaultText in --help (strings)
-	Bool        bool   // a bool flag: --x means --x=true
-	Required    bool   // must be set (non-zero) after merging
-	Global      bool   // in a Global group: its flag is a persistent flag on the root
-	FlagOnly    bool   // flag-only: never looked up in config file or env
+	DefaultText string   // shown in --help; "" for none
+	Quote       bool     // quote DefaultText in --help (strings)
+	Bool        bool     // a bool flag: --x means --x=true
+	Required    bool     // must be set (non-zero) after merging
+	Global      bool     // in a Global group: its flag is a persistent flag on the root
+	FlagOnly    bool     // flag-only: never looked up in config file or env
+	Enum        []string // an enum's values, in order; listed in --help
 	Aliases     []Alias
 	Deprecated  string
 	// RelevantIf lists keys that must all be set for this key to matter.
@@ -110,6 +112,9 @@ func BindFlags[V any](fs *pflag.FlagSet, keys []Key[V], idx []int) {
 			continue
 		}
 		usage := k.Desc
+		if len(k.Enum) > 0 {
+			usage += "; one of " + strings.Join(k.Enum, ", ")
+		}
 		if d := k.DefaultText; d != "" && !(k.Bool && d == "false") {
 			if k.Quote {
 				d = strconv.Quote(d)

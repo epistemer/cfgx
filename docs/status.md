@@ -4,6 +4,35 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M4.2 enum keys
+
+- **Landed:**
+  - `dsl.Enum(name, desc, values...)`: the getter returns the values' own
+    type, such as zp's `models.ZpTaskExecutionMode`, so `.Default` takes only
+    that type. The e2e script uses a type shaped exactly like zp's.
+  - Files, env vars and flags name values by their text. A wrong value is a
+    problem listing the values, with "did you mean" for a near miss such as
+    `Parallel`. `--help` lists the values.
+  - 14 new bad-schema cases (`enum_*`), from duplicate values to `Required`
+    on an enum whose values include the zero value.
+  - Generated imports: standard-library packages now go in the first group,
+    and a type's package is renamed when its name is taken (`keys2`).
+- **Reviewed:** Gemini 3.8 Flash (High) on the diff, about 360k tokens
+  ([review 0010](reviews/0010-gemini-m4.2-review.md)). Two findings fixed
+  (a repeated problem, a missing import name); one false positive.
+- **Decided for you:** the Enum details in implementation.md §2.2a. Two
+  change interface.md §3.2's row, which I updated:
+  - Wider: an `int` type with only `String` (the usual `stringer` enum)
+    works, as do plain numbers and bools, whose text is the literal.
+  - Narrower: the underlying type must be a string, number or bool. A struct
+    type with `MarshalText`, such as `netip.Addr`, is rejected, because the
+    generated tables write each value as a Go literal. `Text` (M4.7) covers
+    such types; supporting them in `Enum` too would need `UnmarshalText`.
+- **Next:** M4.4 and M4.5 (secrets and file-backed kinds), M4.6 (lists and
+  maps), M4.7, M4.8, M4.9 and M4.10.
+- **Waiting on you:** nothing. Say if you want struct enums despite the
+  above.
+
 ## 2026-11-09: M4.1 numeric and duration keys
 
 - **Landed:**

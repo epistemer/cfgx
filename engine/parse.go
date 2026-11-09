@@ -1,11 +1,14 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/epistemer/cfgx/internal/suggest"
 )
 
 // The parsers generated Set closures call. Each one reads raw text from a
@@ -173,4 +176,27 @@ func FormatByteSize(n int64) string {
 		}
 	}
 	return strconv.FormatInt(n, 10)
+}
+
+// ParseEnum stores the value whose text is raw: values[i] for texts[i].
+// Matching is exact, after trimming spaces; empty means the zero value. A
+// near miss gets a suggestion.
+func ParseEnum[T comparable](raw string, texts []string, values []T, dst *T) error {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		var zero T
+		*dst = zero
+		return nil
+	}
+	for i, t := range texts {
+		if t == s {
+			*dst = values[i]
+			return nil
+		}
+	}
+	msg := fmt.Sprintf("%q isn't one of %s", raw, strings.Join(texts, ", "))
+	if near, ok := suggest.Closest(s, texts); ok {
+		msg += fmt.Sprintf("; did you mean %s?", near)
+	}
+	return errors.New(msg)
 }

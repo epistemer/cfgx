@@ -33,13 +33,17 @@ import (
 {{- if .Commands}}
 	"context"
 	"slices"
-{{end}}
+{{- end}}
+{{- range .Imports}}{{if .Std}}
+	{{.Spec}}
+{{- end}}{{end}}
+
 	"github.com/epistemer/cfgx"
 	"github.com/epistemer/cfgx/engine"
 	"github.com/spf13/cobra"
-{{- range .Imports}}
+{{- range .Imports}}{{if not .Std}}
 	{{.Spec}}
-{{- end}}
+{{- end}}{{end}}
 )
 
 // The engine version this file was generated for.
@@ -52,6 +56,13 @@ type values struct {
 {{- end}}
 }
 
+{{- range .Keys}}{{if .Enum}}
+// The values of {{.Path}}, and their texts.
+var (
+	{{.EnumTexts}} = []string{ {{- range $i, $e := .Enum}}{{if $i}}, {{end}}{{printf "%q" $e.Text}}{{end -}} }
+	{{.EnumValues}} = []{{.GoType}}{ {{- range $i, $e := .Enum}}{{if $i}}, {{end}}{{$e.Lit}}{{end -}} }
+)
+{{end}}{{end}}
 var keys = [...]engine.Key[values]{
 {{- range .Keys}}
 	{
@@ -60,6 +71,7 @@ var keys = [...]engine.Key[values]{
 		{{- if .FlagOnly}} FlagOnly: true,{{end}}
 		{{- if .HasDefault}} DefaultText: {{printf "%q" .DefaultText}},{{end}}
 		{{- if .Quote}} Quote: true,{{end}}
+		{{- if .Enum}} Enum: {{.EnumTexts}},{{end}}
 		{{- if .Bool}} Bool: true,{{end}}
 		{{- if .Required}} Required: true,{{end}}
 		{{- if .Global}} Global: true,{{end}}
@@ -70,7 +82,7 @@ var keys = [...]engine.Key[values]{
 		{{- if .Deprecated}}
 		Deprecated: {{printf "%q" .Deprecated}},
 		{{- end}}
-		Set: func(v *values, raw string) error { return engine.{{.Parse}}(raw, &v.{{.Field}}) },
+		Set: func(v *values, raw string) error { return engine.{{.Parse}}(raw, {{.ParseArgs}}&v.{{.Field}}) },
 		IsSet: func(v *values) bool { return {{.IsSet}} },
 		{{- if .HasDefault}}
 		Default: func(v *values) { v.{{.Field}} = {{.DefaultLit}} },

@@ -66,13 +66,23 @@ type KeyModel struct {
 	Aliases                  []AliasModel
 	Deprecated               string
 	RelevantIf               []int // keys that must be set for this one to matter
-	Kind                     kindSpec
-	Pos                      ir.Pos
+	// ParseArgs are arguments the parser takes between raw and the field,
+	// each followed by ", ".
+	ParseArgs string
+	// Enum lists an enum's values; EnumTexts and EnumValues name the
+	// generated tables of their texts and Go values.
+	Enum                  []EnumModel
+	EnumTexts, EnumValues string
+	zero                  string // the canonical text of the zero value
+	Pos                   ir.Pos
 }
+
+// EnumModel is one value of an enum key.
+type EnumModel struct{ Text, Lit string }
 
 // nonZeroDefault reports whether the key's default counts as set (A4).
 func (k *KeyModel) nonZeroDefault() bool {
-	return k.HasDefault && k.DefaultText != k.Kind.zero
+	return k.HasDefault && k.DefaultText != k.zero
 }
 
 // GroupModel is one group: its interface and the type that implements it.
@@ -97,14 +107,21 @@ type ComputedModel struct {
 	Pos       ir.Pos
 }
 
-// ImportModel is a package the generated file imports for computed
-// methods' signatures.
-type ImportModel struct{ Alias, Path string }
+// ImportModel is a package the generated file imports for keys' types and
+// computed methods' signatures. Pkg is the package's own name.
+type ImportModel struct{ Alias, Path, Pkg string }
 
-// Spec is the import line: the path, with the alias only when Go wouldn't
-// infer it from the path.
+// Std reports whether the package is in the standard library, whose
+// imports go in the first group.
+func (i ImportModel) Std() bool {
+	first, _, _ := strings.Cut(i.Path, "/")
+	return !strings.Contains(first, ".")
+}
+
+// Spec is the import line: the path, with the alias unless it is the
+// package's own name and the path's last element, as readers expect.
 func (i ImportModel) Spec() string {
-	if i.Alias == path.Base(i.Path) {
+	if i.Alias == i.Pkg && i.Pkg == path.Base(i.Path) {
 		return strconv.Quote(i.Path)
 	}
 	return i.Alias + " " + strconv.Quote(i.Path)
@@ -289,6 +306,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		idents[name] = pos
 	}
 	nm := newNamer()
+	imp := newImporter(app.Schema)
 	for _, w := range app.Initialisms {
 		if !initialismRE.MatchString(w) {
 			bad(app.Pos, "initialism %q must be upper-case letters and digits, starting with a letter, like OTP", w)
@@ -420,7 +438,13 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			if reservedMethods[km.Getter] {
 				bad(k.Pos, "getter %s of %s is reserved for a method on command types; rename the key", km.Getter, km.Path)
 			}
-			if err := kindInfo(km, k); err != nil {
+			if len(k.Problems) > 0 {
+				for _, p := range k.Problems {
+					bad(k.Pos, "%s: %s", km.Path, p)
+				}
+				continue
+			}
+			if err := kindInfo(km, k, imp); err != nil {
 				bad(k.Pos, "%v", err)
 				continue
 			}
@@ -723,7 +747,13 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			}
 			fields[km.Field] = k.Pos
 
-			if err := kindInfo(km, k); err != nil {
+			if len(k.Problems) > 0 {
+				for _, p := range k.Problems {
+					bad(k.Pos, "%s: %s", km.Path, p)
+				}
+				continue
+			}
+			if err := kindInfo(km, k, imp); err != nil {
 				bad(k.Pos, "%v", err)
 				continue
 			}
@@ -777,16 +807,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	}
 
 	// The packages the getters' types need, such as time.
-	seenImport := map[string]bool{}
-	for _, k := range m.Keys {
-		for _, p := range k.Kind.imports {
-			if !seenImport[p] {
-				seenImport[p] = true
-				m.Imports = append(m.Imports, ImportModel{Alias: path.Base(p), Path: p})
-			}
-		}
-	}
-	sort.Slice(m.Imports, func(i, j int) bool { return m.Imports[i].Path < m.Imports[j].Path })
+	m.Imports = imp.imports(len(m.Commands) > 0)
 
 	if len(probs) > 0 {
 		return nil, probs

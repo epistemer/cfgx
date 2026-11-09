@@ -129,6 +129,36 @@ from its last path element.
   (1024s). Fractions such as `1.5GB` are rejected in v0.1.0.
 - `Float` rejects NaN and infinities.
 
+**Enum [decided, M4.2].**
+
+- `dsl.Enum(name, desc, values ...T)` is generic over `T comparable`; Go
+  infers `T` from the values, so `.Default` takes only a `T`, and the getter
+  returns `T`. `T`'s underlying type must be a string, integer, float or
+  bool type, so every value has a Go literal and the generated tables need
+  no `UnmarshalText`.
+- A value's text is, in order: `MarshalText` (value or pointer receiver);
+  for a string type, the string itself; `String`; else the literal (`7`,
+  `true`). A string type's own value beats its `String`, because types like
+  sqlc's store the canonical text in the value.
+- The schema run records problems only `reflect` can see (no values, a value
+  listed twice, two values with one text, an empty text, text with outer
+  spaces, a `MarshalText` error, NaN, an unexported or generic type, a
+  default that isn't a value) in `ir.Key.Problems`; the generator reports
+  them at the key's line with every other problem. The generator adds: the
+  type's package is the schema package; `Required` on an enum whose values
+  include the type's zero value, which counts as not set (A4).
+- The generated file has two tables per enum key, the texts and the values
+  (`[]T{...}` of bare literals), which the key's `Enum` field and
+  `engine.ParseEnum` share. Matching is exact after trimming spaces; a near
+  miss, including a case difference, gets "did you mean". `--help` appends
+  "; one of a, b, c" and shows the default unquoted.
+- A type's package is imported under its own name unless the generated file
+  already uses that name (`keys`, `app`, `v`, `cobra`, ...), then with a
+  number added (`keys2`). Standard-library imports go in the first group.
+- Not checked yet: an enum type in a package that imports `cfgx/dsl`, or in
+  the generated package itself; M4.8's `go list -deps` check covers the
+  first, and the second fails to compile with an import cycle.
+
 ### 2.3 Computed methods: a type-checking pass **[decided, M5.6]**
 
 `Group.Computed("DSN")` declares that a hand-written method belongs to the

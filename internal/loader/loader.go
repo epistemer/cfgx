@@ -134,7 +134,12 @@ func Load(ctx context.Context, pattern, workDir string, timeout time.Duration) (
 		return nil, fmt.Errorf("the schema %s ran but produced no IR: %w", importPath, err)
 	}
 	defer f.Close()
-	return ir.Decode(f)
+	app, err := ir.Decode(f)
+	if err != nil {
+		return nil, err
+	}
+	app.Schema = importPath
+	return app, nil
 }
 
 type listedPackage struct {
