@@ -96,7 +96,13 @@ type KeyModel struct {
 	NoFile   bool
 	Example  string
 	declPath string // the path the schema declared, which rules name
-	Pos      ir.Pos
+	// Complete is set when the schema gave the flag a completion: file
+	// extensions, directories, or a function.
+	Complete     bool
+	CompleteExts []string
+	CompleteDirs bool
+	CompleteFunc *FuncModel
+	Pos          ir.Pos
 }
 
 // EnumModel is one value of an enum key.

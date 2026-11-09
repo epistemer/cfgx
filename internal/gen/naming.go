@@ -82,6 +82,9 @@ func afterKind(km *KeyModel, k ir.Key, app *ir.App, prefix string, bad func(ir.P
 	if km.Short != "" && km.Flag == "" {
 		bad(k.Pos, "%s has a short flag but no flag", km.Path)
 	}
+	if k.Complete != nil && km.Flag == "" {
+		bad(k.Pos, "%s has a completion but no flag", km.Path)
+	}
 	switch {
 	case km.Flag == "help":
 		bad(k.Pos, "flag --help of %s collides with the built-in help flag", km.Path)

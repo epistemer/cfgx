@@ -113,6 +113,9 @@ var keys = [...]engine.Key[values]{
 		{{- end}}
 		},
 		{{- end}}
+		{{- if .Complete}}
+		Complete: &engine.Completion{ {{- if .CompleteExts}}Exts: []string{ {{- range $i, $e := .CompleteExts}}{{if $i}}, {{end}}{{printf "%q" $e}}{{end -}} }{{end}}{{if .CompleteDirs}}Dirs: true{{end}}{{if .CompleteFunc}}Func: {{.CompleteFunc.Expr}}{{end -}} },
+		{{- end}}
 		{{- if .DefaultFrom}}
 		DefaultFrom: {{printf "%q" .DefaultFrom}},
 		{{- end}}

@@ -123,6 +123,12 @@ func (m *Model) keyExtras(km *KeyModel, k ir.Key, imp *importer, bad func(ir.Pos
 			km.DefaultFrom = path.Base(f.Path) + "." + f.Name
 		}
 	}
+	if c := k.Complete; c != nil {
+		km.Complete, km.CompleteExts, km.CompleteDirs = true, c.Exts, c.Dirs
+		if c.Func != nil {
+			km.CompleteFunc = ref(c.Func, "Complete")
+		}
+	}
 	if t := k.Type; t != nil && t.Path != "" {
 		m.refs = append(m.refs, pkgRef{path: t.Path, what: "type " + t.Pkg + "." + t.Name, pos: k.Pos, km: km})
 	}

@@ -1,0 +1,127 @@
+# M4.10: shell completion. Enums complete their values; Files, Dirs and
+# CompleteFunc set a flag's completion; --config completes the app's file
+# formats. cobra's hidden __complete command prints the candidates, then
+# :directive (4 no files, 8 filter by extension, 16 directories).
+go generate ./...
+go build -o app$exe .
+
+exec ./app$exe __complete run --log-level ''
+cmp stdout want-level.txt
+exec ./app$exe __complete run --log-level w
+cmp stdout want-level-w.txt
+# An alias flag completes like the key's own.
+exec ./app$exe __complete run --log-verbosity w
+cmp stdout want-level-w.txt
+
+exec ./app$exe __complete run --tls-cert ''
+cmp stdout want-cert.txt
+exec ./app$exe __complete run --data-dir ''
+cmp stdout want-dir.txt
+exec ./app$exe __complete run --db-host lo
+cmp stdout want-host.txt
+exec ./app$exe __complete run --config ''
+cmp stdout want-config.txt
+
+# A global key's flag completes on any command.
+exec ./app$exe __complete run --color ''
+cmp stdout want-color.txt
+
+-- want-level.txt --
+debug
+info
+warn
+:4
+-- want-level-w.txt --
+warn
+:4
+-- want-cert.txt --
+pem
+crt
+:8
+-- want-dir.txt --
+:16
+-- want-host.txt --
+localhost
+local.test
+:4
+-- want-config.txt --
+yaml
+yml
+:8
+-- want-color.txt --
+auto
+always
+never
+:4
+-- main.go --
+package main
+
+import (
+	"context"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(settings.RunCommand(&cobra.Command{Use: "run"},
+		func(context.Context, *settings.Run) error { return nil }))
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/hosts/hosts.go --
+package hosts
+
+import "strings"
+
+// Names completes host names.
+func Names(typed string) []string {
+	var out []string
+	for _, h := range []string{"localhost", "local.test", "db.internal"} {
+		if strings.HasPrefix(h, typed) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import (
+	"github.com/epistemer/cfgx/dsl"
+
+	"example.com/e2e/internal/hosts"
+)
+
+var Log = dsl.Group("log", "Logging",
+	dsl.Enum("level", "Level", "debug", "info", "warn").Default("info").Alias("log.verbosity"),
+)
+
+var TLS = dsl.Group("tls", "TLS",
+	dsl.Path("cert", "Certificate").Complete(dsl.Files("*.pem", "*.crt")),
+)
+
+var Data = dsl.Group("data", "Data",
+	dsl.Path("dir", "Directory").Complete(dsl.Dirs()),
+)
+
+var DB = dsl.Group("db", "Database",
+	dsl.String("host", "Host").Complete(dsl.CompleteFunc(hosts.Names)),
+)
+
+var UI = dsl.Group("ui", "UI",
+	dsl.Enum("color", "Color", "auto", "always", "never").Flag("color"),
+).FlagPrefix("")
+
+var App = dsl.App("app", "Test app", Log, TLS, Data, DB, UI).ConfigFile("app", ".").Formats(dsl.YAML).Global(UI)
+
+var Run = dsl.Command("Run").Uses(Log, TLS, Data, DB)

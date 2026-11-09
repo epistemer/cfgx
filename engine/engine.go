@@ -80,6 +80,9 @@ type Key[V any] struct {
 	DefaultFrom string
 	// Hidden leaves the flag out of --help.
 	Hidden bool
+	// Complete is how the flag's value completes in the shell; nil means an
+	// enum's values, or else the shell's default, file names.
+	Complete *Completion
 	// NoFile keeps the key out of the config file (Sources): a value there
 	// is ignored, with a warning.
 	NoFile bool

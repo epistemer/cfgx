@@ -253,6 +253,7 @@ type keyBase struct {
 	sources    []string
 	hidden     bool
 	example    *string
+	complete   *ir.Completion
 	checks     []ir.Check
 	validate   *ir.FuncRef
 	defFunc    *ir.FuncRef
@@ -721,6 +722,7 @@ func (k *keyBase) export(tags []string) ir.Key {
 		Sources:     k.sources,
 		Hidden:      k.hidden,
 		Example:     k.example,
+		Complete:    k.complete,
 		Checks:      k.checks,
 		Validate:    k.validate,
 		DefaultFunc: k.defFunc,
