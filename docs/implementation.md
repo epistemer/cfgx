@@ -451,6 +451,26 @@ unknown.
 - File-backed values (`SecretFile`, `File`, `_FILE`) must be regular files, so a
   FIFO or device can't hang startup, and are capped at 1 MiB for secrets and
   16 MiB for `File`.
+- **[decided, M4.4]** Secrets and file-backed values:
+  - The engine reads files only after a key's winning layer is known and the
+    key is relevant, so a key a command doesn't load, or one whose
+    `RelevantIf` condition is off, is never read (TLS off with no key file on
+    disk works). Deciding whether a path "sets" a key, for warnings, doesn't
+    read it either: a non-empty path counts as set.
+  - A `SecretFile` default is a path, read like any other; a missing default
+    file is a problem only for commands that load the key while it is
+    relevant.
+  - Files are checked with `os.Stat` before opening (opening a FIFO blocks),
+    then read through a limit of max+1 bytes, since a file can grow after
+    `Stat`. Messages name the path and the source, never the contents.
+  - An empty `<ENV>_FILE` names no file, so it counts as not set: a
+    deployment's `_FILE` can be overridden with `ZP_X_FILE=` and `ZP_X=...`.
+    Aliases get `_FILE` variants too, and every `_FILE` name is a known env
+    var for the unknown-name scan. The generator checks `_FILE` names for
+    collisions with other keys' env vars.
+  - A `Secret` may have a default (it goes into the generated code); a
+    `Secret` can't be a command argument, which is flag-only. A `SecretFile`
+    has a flag, since its value is a path, and can be an argument.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree

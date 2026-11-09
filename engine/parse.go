@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/epistemer/cfgx"
 	"github.com/epistemer/cfgx/internal/suggest"
 )
 
@@ -199,4 +200,11 @@ func ParseEnum[T comparable](raw string, texts []string, values []T, dst *T) err
 		msg += fmt.Sprintf("; did you mean %s?", near)
 	}
 	return errors.New(msg)
+}
+
+// ParseSecret stores raw as a secret, exactly; empty means unset. It never
+// fails, so no message can quote the value.
+func ParseSecret(raw string, dst *cfgx.Secret) error {
+	*dst = cfgx.NewSecret(raw)
+	return nil
 }

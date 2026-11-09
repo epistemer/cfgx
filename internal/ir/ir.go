@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 9
+const Version = 10
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -40,6 +40,9 @@ const (
 	KindByteSize Kind = "bytesize"
 	// M4.2
 	KindEnum Kind = "enum"
+	// M4.4
+	KindSecret     Kind = "secret"
+	KindSecretFile Kind = "secretfile"
 )
 
 // App is a whole schema.

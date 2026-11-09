@@ -22,6 +22,10 @@ type kindSpec struct {
 	isBool   bool     // a bool flag: --x means --x=true
 	isSet    string   // Go expression, with %s for the field: is it non-zero?
 	zero     string   // the canonical text of the zero value
+	noFlag   bool     // never a flag (Secret)
+	fileEnv  bool     // <ENV>_FILE names a file holding the value
+	file     bool     // the setting is a path; the value is the file's contents
+	maxFile  int64    // the most fileEnv and file read, in bytes
 	// canon checks a default's text and returns its canonical text, shown in
 	// --help, and a Go expression for the generated code.
 	canon func(text string) (canonical, lit string, err error)
@@ -43,9 +47,26 @@ var kinds = map[ir.Kind]kindSpec{
 		canon: viaParser(engine.ParseFloat, f64, f64)},
 	ir.KindDuration: {goType: "time.Duration", flagType: "duration", parse: "ParseDuration", imports: []string{"time"}, isSet: "%s != 0", zero: "0s",
 		canon: viaParser(engine.ParseDuration, time.Duration.String, durationLit)},
+	ir.KindSecret: {goType: "cfgx.Secret", parse: "ParseSecret", isSet: "%s.IsSet()", zero: "",
+		noFlag: true, fileEnv: true, maxFile: secretMax,
+		canon: func(s string) (string, string, error) {
+			// The text only decides whether the default counts as set (A4);
+			// it is never shown.
+			text := ""
+			if s != "" {
+				text = "******"
+			}
+			return text, fmt.Sprintf("cfgx.NewSecret(%q)", s), nil
+		}},
+	ir.KindSecretFile: {goType: "cfgx.Secret", flagType: "file", parse: "ParseSecret", quote: true, isSet: "%s.IsSet()", zero: "",
+		file: true, maxFile: secretMax,
+		canon: func(s string) (string, string, error) { return s, "", nil }},
 	ir.KindByteSize: {goType: "int64", flagType: "bytesize", parse: "ParseByteSize", isSet: "%s != 0", zero: "0",
 		canon: viaParser(engine.ParseByteSize, engine.FormatByteSize, i64)},
 }
+
+// secretMax is the most a secret's file may hold.
+const secretMax = 1 << 20
 
 func i64(n int64) string   { return strconv.FormatInt(n, 10) }
 func u(n uint) string      { return strconv.FormatUint(uint64(n), 10) }
@@ -94,6 +115,10 @@ func kindInfo(km *KeyModel, k ir.Key, imp *importer) error {
 	}
 	km.GoType, km.FlagType, km.Parse = spec.goType, spec.flagType, spec.parse
 	km.Quote, km.Bool = spec.quote, spec.isBool
+	km.FileEnv, km.File, km.MaxFileSize = spec.fileEnv, spec.file, spec.maxFile
+	if spec.noFlag {
+		km.Flag = ""
+	}
 	km.IsSet = fmt.Sprintf(spec.isSet, "v."+km.Field)
 	km.zero = spec.zero
 	km.HasDefault = k.Default != nil

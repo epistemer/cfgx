@@ -87,7 +87,9 @@ func TestScript(t *testing.T) {
 	testscript.Run(t, testscript.Params{
 		Dir: filepath.Join("testdata", "script"),
 		Cmds: map[string]func(ts *testscript.TestScript, neg bool, args []string){
-			"go": cmdGo,
+			"go":         cmdGo,
+			"writebytes": cmdWriteBytes,
+			"mkfifo":     cmdMkfifo,
 		},
 		Setup: func(e *testscript.Env) error {
 			passEnv(e, goEnv)
@@ -115,6 +117,31 @@ func cmdGo(ts *testscript.TestScript, neg bool, args []string) {
 	} else if neg {
 		ts.Fatalf("unexpected go command success")
 	}
+}
+
+// cmdWriteBytes writes a file with exact bytes, which a txtar file can't
+// hold reliably: writebytes name text [count]. text is a Go string body with
+// escapes such as \r\n, written count times (default 1).
+func cmdWriteBytes(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) < 2 || len(args) > 3 {
+		ts.Fatalf("usage: writebytes name text [count]")
+	}
+	text, err := strconv.Unquote(`"` + args[1] + `"`)
+	ts.Check(err)
+	n := 1
+	if len(args) == 3 {
+		n, err = strconv.Atoi(args[2])
+		ts.Check(err)
+	}
+	ts.Check(os.WriteFile(ts.MkAbs(args[0]), []byte(strings.Repeat(text, n)), 0o644))
+}
+
+// cmdMkfifo makes a named pipe: mkfifo name. Guard it with [unix].
+func cmdMkfifo(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: mkfifo name")
+	}
+	ts.Check(mkfifo(ts.MkAbs(args[0])))
 }
 
 // queryGoEnv runs "go env -json" for the given variable names and returns the

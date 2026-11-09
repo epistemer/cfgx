@@ -383,6 +383,35 @@ func ByteSize(name, desc string) *ByteSizeKey {
 	return k
 }
 
+// SecretKey is a secret string setting, read as a cfgx.Secret. Create it
+// with Secret.
+type SecretKey struct{ key[*SecretKey, string] }
+
+// Secret declares a secret key. It has no flag, since a flag's value shows
+// in ps and shell history. Besides <ENV>, <ENV>_FILE may name a file that
+// holds the value, minus one trailing newline; setting both is an error.
+// Messages never show the value.
+func Secret(name, desc string) *SecretKey {
+	k := &SecretKey{}
+	k.init(k, name, desc, ir.KindSecret, func(v string) string { return v }, caller(1))
+	return k
+}
+
+// SecretFileKey is a secret read from a file. Create it with SecretFile.
+type SecretFileKey struct{ key[*SecretFileKey, string] }
+
+// SecretFile declares a key whose setting is a path, and whose value, a
+// cfgx.Secret, is that file's contents, exactly. The file is read while
+// loading, only by commands that load the key and only when it is relevant
+// (RelevantIf). It must be a regular file of at most 1 MiB. A relative path
+// in the config file is relative to the config file's directory; elsewhere,
+// to the working directory. Default takes a path.
+func SecretFile(name, desc string) *SecretFileKey {
+	k := &SecretFileKey{}
+	k.init(k, name, desc, ir.KindSecretFile, func(v string) string { return v }, caller(1))
+	return k
+}
+
 // Usable is something a command can use: a group, nested or not, or a tag.
 type Usable interface {
 	usable()

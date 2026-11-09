@@ -72,6 +72,9 @@ var keys = [...]engine.Key[values]{
 		{{- if .HasDefault}} DefaultText: {{printf "%q" .DefaultText}},{{end}}
 		{{- if .Quote}} Quote: true,{{end}}
 		{{- if .Enum}} Enum: {{.EnumTexts}},{{end}}
+		{{- if .FileEnv}} FileEnv: true,{{end}}
+		{{- if .File}} File: true,{{end}}
+		{{- if .MaxFileSize}} MaxFileSize: {{.MaxFileSize}},{{end}}
 		{{- if .Bool}} Bool: true,{{end}}
 		{{- if .Required}} Required: true,{{end}}
 		{{- if .Global}} Global: true,{{end}}
@@ -84,7 +87,7 @@ var keys = [...]engine.Key[values]{
 		{{- end}}
 		Set: func(v *values, raw string) error { return engine.{{.Parse}}(raw, {{.ParseArgs}}&v.{{.Field}}) },
 		IsSet: func(v *values) bool { return {{.IsSet}} },
-		{{- if .HasDefault}}
+		{{- if and .HasDefault (not .File)}}
 		Default: func(v *values) { v.{{.Field}} = {{.DefaultLit}} },
 		{{- end}}
 	},
