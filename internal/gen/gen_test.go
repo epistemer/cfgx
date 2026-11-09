@@ -229,6 +229,11 @@ func allKinds() *ir.App {
 			{Name: "url", Desc: "url", Kind: ir.KindURL, Default: str("https://example.com/x")},
 			{Name: "loc", Desc: "location", Kind: ir.KindLocation, Default: str("UTC")},
 			{Name: "url2", Desc: "url without default", Kind: ir.KindURL},
+			{Name: "tags", Desc: "strings", Kind: ir.KindStrings, Default: str(`a,"b,c",""`)},
+			{Name: "ports", Desc: "ints", Kind: ir.KindInts, Default: str("80, 443")},
+			{Name: "backoff", Desc: "durations", Kind: ir.KindDurations, Default: str("1000ms,1m")},
+			{Name: "labels", Desc: "stringmap", Kind: ir.KindStringMap, Default: str("b=2,a=x=y")},
+			{Name: "none2", Desc: "empty list", Kind: ir.KindStrings, Default: str("")},
 		}}},
 		Commands: []ir.Command{{Name: "Run", Uses: []string{"k"}}},
 	}
@@ -254,10 +259,15 @@ func TestKindsGolden(t *testing.T) {
 		"k.size": {"1MiB", "1048576"},
 		"k.f":    {"0.25", "0.25"},
 		// Parsed when loading: no Go literal.
-		"k.path": {"data//app.db", ""},
-		"k.file": {"ca.pem", ""},
-		"k.url":  {"https://example.com/x", ""},
-		"k.loc":  {"UTC", ""},
+		"k.path":    {"data//app.db", ""},
+		"k.file":    {"ca.pem", ""},
+		"k.url":     {"https://example.com/x", ""},
+		"k.loc":     {"UTC", ""},
+		"k.tags":    {`[a,"b,c",""]`, `[]string{"a", "b,c", ""}`},
+		"k.ports":   {"[80,443]", "[]int{80, 443}"},
+		"k.backoff": {"[1s,1m0s]", "[]time.Duration{1 * time.Second, 1 * time.Minute}"},
+		"k.labels":  {"[a=x=y,b=2]", `map[string]string{"a": "x=y", "b": "2"}`},
+		"k.none2":   {"", "nil"},
 	} {
 		if got[path] != want {
 			t.Errorf("%s: got %q, want %q", path, got[path], want)
@@ -269,6 +279,7 @@ func TestKindDefaults(t *testing.T) {
 	for kind, bad := range map[ir.Kind]string{
 		ir.KindDuration: "30", ir.KindByteSize: "1.5MiB", ir.KindFloat: "NaN", ir.KindUint: "-1", ir.KindInt64: "x",
 		ir.KindURL: "localhost:5432", ir.KindLocation: "Mars/Olympus_Mons",
+		ir.KindInts: "1,,2", ir.KindDurations: "5", ir.KindStringMap: "a", ir.KindStrings: `"x`,
 	} {
 		a := allKinds()
 		a.Groups[0].Keys = []ir.Key{{Name: "x", Desc: "x", Kind: kind, Default: str(bad)}}

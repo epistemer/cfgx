@@ -2,11 +2,13 @@ package gen
 
 import (
 	"fmt"
+	"maps"
 	"net/url"
 	"path"
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/epistemer/cfgx/engine"
@@ -28,6 +30,8 @@ type kindSpec struct {
 	file     bool     // the setting is a path; the value is the file's contents
 	maxFile  int64    // the most fileEnv and file read, in bytes
 	resolve  bool     // a path: relative paths from the config file resolve against its directory
+	items    bool     // a list or map: parsed from items with SetItems
+	isMap    bool     // a map: items are key=value
 	// canon checks a default's text and returns its canonical text, shown in
 	// --help, and a Go expression for the generated code. An empty
 	// expression means the engine parses the text when loading instead.
@@ -89,6 +93,33 @@ var kinds = map[ir.Kind]kindSpec{
 			}
 			return s, "", nil
 		}},
+	ir.KindStrings: {goType: "[]string", flagType: "strings", parse: "ParseStrings", isSet: "len(%s) != 0", zero: "", items: true,
+		canon: listCanon(engine.ParseStrings, itemText, strconv.Quote, "[]string")},
+	ir.KindInts: {goType: "[]int", flagType: "ints", parse: "ParseInts", isSet: "len(%s) != 0", zero: "", items: true,
+		canon: listCanon(engine.ParseInts, strconv.Itoa, strconv.Itoa, "[]int")},
+	ir.KindDurations: {goType: "[]time.Duration", flagType: "durations", parse: "ParseDurations", imports: []string{"time"}, isSet: "len(%s) != 0", zero: "", items: true,
+		canon: listCanon(engine.ParseDurations, time.Duration.String, durationLit, "[]time.Duration")},
+	ir.KindStringMap: {goType: "map[string]string", flagType: "key=value", parse: "ParseStringMap", isSet: "len(%s) != 0", zero: "", items: true, isMap: true,
+		canon: func(s string) (string, string, error) {
+			var m map[string]string
+			items, err := engine.SplitCSV(s)
+			if err == nil {
+				err = engine.ParseStringMap(items, &m)
+			}
+			if err != nil {
+				return "", "", err
+			}
+			if len(m) == 0 {
+				return "", "nil", nil
+			}
+			keys := slices.Sorted(maps.Keys(m))
+			text, lit := make([]string, len(keys)), make([]string, len(keys))
+			for i, k := range keys {
+				text[i] = itemText(k + "=" + m[k])
+				lit[i] = strconv.Quote(k) + ": " + strconv.Quote(m[k])
+			}
+			return "[" + strings.Join(text, ",") + "]", "map[string]string{" + strings.Join(lit, ", ") + "}", nil
+		}},
 	ir.KindByteSize: {goType: "int64", flagType: "bytesize", parse: "ParseByteSize", isSet: "%s != 0", zero: "0",
 		canon: viaParser(engine.ParseByteSize, engine.FormatByteSize, i64)},
 }
@@ -114,6 +145,39 @@ func viaParser[T any](parse func(string, *T) error, text, lit func(T) string) fu
 		}
 		return text(v), lit(v), nil
 	}
+}
+
+// listCanon canonicalizes a list default, recorded as one CSV record, with
+// the engine's own parser. --help shows [a,b]; an empty list shows nothing
+// and is nil.
+func listCanon[T any](parse func([]string, *[]T) error, text, lit func(T) string, typ string) func(string) (string, string, error) {
+	return func(s string) (string, string, error) {
+		var vs []T
+		items, err := engine.SplitCSV(s)
+		if err == nil {
+			err = parse(items, &vs)
+		}
+		if err != nil {
+			return "", "", err
+		}
+		if len(vs) == 0 {
+			return "", "nil", nil
+		}
+		texts, lits := make([]string, len(vs)), make([]string, len(vs))
+		for i, v := range vs {
+			texts[i], lits[i] = text(v), lit(v)
+		}
+		return "[" + strings.Join(texts, ",") + "]", typ + "{" + strings.Join(lits, ", ") + "}", nil
+	}
+}
+
+// itemText shows a list item in --help: quoted, as in CSV, when it is
+// empty or holds a comma, a quote or outer space, so [a,"b,c"] reads right.
+func itemText(s string) string {
+	if s == "" || strings.ContainsAny(s, ",\"\r\n") || strings.TrimSpace(s) != s {
+		return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
+	}
+	return s
 }
 
 // durationLit writes d in the largest unit that divides it: 5 * time.Minute.
@@ -148,6 +212,7 @@ func kindInfo(km *KeyModel, k ir.Key, imp *importer) error {
 	km.GoType, km.FlagType, km.Parse = spec.goType, spec.flagType, spec.parse
 	km.Quote, km.Bool = spec.quote, spec.isBool
 	km.FileEnv, km.File, km.MaxFileSize, km.Resolve = spec.fileEnv, spec.file, spec.maxFile, spec.resolve
+	km.Items, km.Map = spec.items, spec.isMap
 	if spec.noFlag {
 		km.Flag = ""
 	}

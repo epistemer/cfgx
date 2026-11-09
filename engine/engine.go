@@ -52,8 +52,18 @@ type Key[V any] struct {
 	RelevantIf []int
 
 	// Set parses raw into the field of v. An empty raw sets the zero value,
-	// which is how an empty env var or flag clears a value.
+	// which is how an empty env var or flag clears a value. List and map
+	// keys have SetItems instead.
 	Set func(v *V, raw string) error
+	// SetItems parses the items of a list or map key (Strings, Ints,
+	// Durations: one value each; StringMap: key=value each) into the field
+	// of v, replacing it. The engine makes the items: each flag occurrence,
+	// an env var, or a single value in the config file is split as one CSV
+	// record; a list in the config file gives them as they are, and a map
+	// gives key=value items (Map keys).
+	SetItems func(v *V, items []string) error
+	// Map makes SetItems take key=value items, and the config file a map.
+	Map bool
 	// Default stores the default in v. If it is nil, a non-empty DefaultText
 	// is the default's raw text, which is parsed with Set, like any layer's
 	// value, only if no other layer sets the key: that is how File keys
@@ -112,11 +122,23 @@ func (s *Snapshot[V]) Store(v *V) { s.p.Store(v) }
 
 // rawValue is the pflag.Value of every flag: it records the text and nothing
 // else. pflag never applies a default and never rejects a value (ADR 0003).
-type rawValue struct{ typ, raw string }
+// It keeps every occurrence too: list and map keys use them all.
+type rawValue struct {
+	typ, raw string
+	all      []string
+}
 
 func (v *rawValue) String() string     { return v.raw }
-func (v *rawValue) Set(s string) error { v.raw = s; return nil }
+func (v *rawValue) Set(s string) error { v.raw = s; v.all = append(v.all, s); return nil }
 func (v *rawValue) Type() string       { return v.typ }
+
+// occurrences returns every value f was given, in order.
+func occurrences(f *pflag.Flag) []string {
+	if rv, ok := f.Value.(*rawValue); ok {
+		return rv.all
+	}
+	return []string{f.Value.String()}
+}
 
 // BindFlags registers the flags of the keys at idx on fs. The default goes
 // into the usage text; DefValue stays empty (ADR 0003).

@@ -18,21 +18,26 @@ var _ = engine.GeneratedV1
 
 // values holds every setting of the app.
 type values struct {
-	KS    string
-	KB    bool
-	KI    int
-	KI64  int64
-	KU    uint
-	KF    float64
-	KD    time.Duration
-	KD2   time.Duration
-	KSize int64
-	KNone time.Duration
-	KPath string
-	KFile []byte
-	KURL  *url.URL
-	KLoc  *time.Location
-	KUrl2 *url.URL
+	KS       string
+	KB       bool
+	KI       int
+	KI64     int64
+	KU       uint
+	KF       float64
+	KD       time.Duration
+	KD2      time.Duration
+	KSize    int64
+	KNone    time.Duration
+	KPath    string
+	KFile    []byte
+	KURL     *url.URL
+	KLoc     *time.Location
+	KUrl2    *url.URL
+	KTags    []string
+	KPorts   []int
+	KBackoff []time.Duration
+	KLabels  map[string]string
+	KNone2   []string
 }
 
 var keys = [...]engine.Key[values]{
@@ -135,6 +140,41 @@ var keys = [...]engine.Key[values]{
 		Set:   func(v *values, raw string) error { return engine.ParseURL(raw, &v.KUrl2) },
 		IsSet: func(v *values) bool { return v.KUrl2 != nil },
 	},
+	{
+		Path: "k.tags", Env: "K_K_TAGS", Flag: "k-tags",
+		Type: "strings", Desc: "strings", DefaultText: "[a,\"b,c\",\"\"]",
+		SetItems: func(v *values, items []string) error { return engine.ParseStrings(items, &v.KTags) },
+		IsSet:    func(v *values) bool { return len(v.KTags) != 0 },
+		Default:  func(v *values) { v.KTags = []string{"a", "b,c", ""} },
+	},
+	{
+		Path: "k.ports", Env: "K_K_PORTS", Flag: "k-ports",
+		Type: "ints", Desc: "ints", DefaultText: "[80,443]",
+		SetItems: func(v *values, items []string) error { return engine.ParseInts(items, &v.KPorts) },
+		IsSet:    func(v *values) bool { return len(v.KPorts) != 0 },
+		Default:  func(v *values) { v.KPorts = []int{80, 443} },
+	},
+	{
+		Path: "k.backoff", Env: "K_K_BACKOFF", Flag: "k-backoff",
+		Type: "durations", Desc: "durations", DefaultText: "[1s,1m0s]",
+		SetItems: func(v *values, items []string) error { return engine.ParseDurations(items, &v.KBackoff) },
+		IsSet:    func(v *values) bool { return len(v.KBackoff) != 0 },
+		Default:  func(v *values) { v.KBackoff = []time.Duration{1 * time.Second, 1 * time.Minute} },
+	},
+	{
+		Path: "k.labels", Env: "K_K_LABELS", Flag: "k-labels",
+		Type: "key=value", Desc: "stringmap", DefaultText: "[a=x=y,b=2]", Map: true,
+		SetItems: func(v *values, items []string) error { return engine.ParseStringMap(items, &v.KLabels) },
+		IsSet:    func(v *values) bool { return len(v.KLabels) != 0 },
+		Default:  func(v *values) { v.KLabels = map[string]string{"a": "x=y", "b": "2"} },
+	},
+	{
+		Path: "k.none2", Env: "K_K_NONE2", Flag: "k-none2",
+		Type: "strings", Desc: "empty list", DefaultText: "",
+		SetItems: func(v *values, items []string) error { return engine.ParseStrings(items, &v.KNone2) },
+		IsSet:    func(v *values) bool { return len(v.KNone2) != 0 },
+		Default:  func(v *values) { v.KNone2 = nil },
+	},
 }
 
 // app describes the whole application to the engine.
@@ -163,6 +203,11 @@ type K interface {
 	KURL() *url.URL
 	KLoc() *time.Location
 	KUrl2() *url.URL
+	KTags() []string
+	KPorts() []int
+	KBackoff() []time.Duration
+	KLabels() map[string]string
+	KNone2() []string
 }
 
 type kGroup struct{ r *root }
@@ -212,6 +257,21 @@ func (g *kGroup) KLoc() *time.Location { return g.r.cur.Load().KLoc }
 // KUrl2 returns k.url2: url without default
 func (g *kGroup) KUrl2() *url.URL { return g.r.cur.Load().KUrl2 }
 
+// KTags returns k.tags: strings
+func (g *kGroup) KTags() []string { return g.r.cur.Load().KTags }
+
+// KPorts returns k.ports: ints
+func (g *kGroup) KPorts() []int { return g.r.cur.Load().KPorts }
+
+// KBackoff returns k.backoff: durations
+func (g *kGroup) KBackoff() []time.Duration { return g.r.cur.Load().KBackoff }
+
+// KLabels returns k.labels: stringmap
+func (g *kGroup) KLabels() map[string]string { return g.r.cur.Load().KLabels }
+
+// KNone2 returns k.none2: empty list
+func (g *kGroup) KNone2() []string { return g.r.cur.Load().KNone2 }
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -227,7 +287,7 @@ type Run struct {
 // them. The slice is a copy.
 func (c *Run) Args() []string { return slices.Clone(c.args) }
 
-var keysRun = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}
+var keysRun = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}
 
 func newRun(v *values, args []string) *Run {
 	r := &root{}

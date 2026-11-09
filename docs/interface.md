@@ -242,8 +242,8 @@ with type-checked modifiers.
 | `File` | `[]byte` | the setting is a path, resolved like `Path`; contents are loaded eagerly from a regular file of at most 16 MiB |
 | `URL` | `*url.URL` | an absolute URL such as `https://host/path`; opaque forms such as `localhost:5432` are rejected |
 | `Location` | `*time.Location` | IANA name, `UTC` or `Local`; nil when unset |
-| `Strings`, `Ints`, `Durations` | `[]T` | flag repeatable or comma-separated; env comma-separated |
-| `StringMap` | `map[string]string` | env/flag `k=v,k2=v2` |
+| `Strings`, `Ints`, `Durations` | `[]T` | flag repeatable or comma-separated (CSV: quote an item holding a comma); env comma-separated; a list in the config file. The layer that sets it replaces the whole list |
+| `StringMap` | `map[string]string` | env/flag `k=v,k2=v2`, flag repeatable; a map in the config file |
 | `Text(name, desc, zero T)` | `T` | any `T` whose pointer implements `encoding.TextUnmarshaler` (`netip.Prefix`, your own types) |
 | `Group(name, desc, keys...)` | — | nesting; see §3.4 |
 

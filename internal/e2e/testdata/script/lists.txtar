@@ -1,0 +1,138 @@
+# M4.6: Strings, Ints, Durations and StringMap keys. Flags repeat or take
+# comma-separated items; pflag only records occurrences, and cfgx splits them
+# (ADR 0003), so malformed input is cfgx's problem report. Env vars are
+# comma-separated; the config file takes a list (or map) or a single value.
+# The layer that sets a key replaces the whole list.
+# testscript can't unset a variable, so the steps that set env vars are ordered.
+go generate ./...
+go build -o app$exe .
+
+exec ./app$exe run --help
+stdout '--srv-tag strings\s+Tags \(default \[a,"b,c"\]\)'
+stdout '--srv-port ints\s+Ports \(default \[80,443\]\)'
+stdout '--srv-backoff durations\s+Backoff steps \(default \[1s,1m0s\]\)'
+stdout '--srv-label key=value\s+Labels \(default \[env=dev\]\)'
+
+exec ./app$exe run
+stdout '^tags=\["a" "b,c"\] ports=\[80 443\] backoff=\[1s 1m0s\] labels=map\[env:dev\]\r?\n$'
+
+# A flag repeats, and each occurrence is comma-separated; quoting keeps a
+# comma in an item.
+exec ./app$exe run --srv-tag a --srv-tag 'b, "c,d"' --srv-port 1,2 --srv-port 3 --srv-label x=1,y=a=b --srv-label x=2
+stdout '^tags=\["a" "b" "c,d"\] ports=\[1 2 3\] backoff=\[1s 1m0s\] labels=map\[x:2 y:a=b\]\r?\n$'
+
+# An empty occurrence clears the list (A4), so a Required list then fails.
+exec ./app$exe run --srv-tag ''
+stdout '^tags=\[\] '
+! exec ./app$exe need --pool-hosts ''
+stderr '^  pool.hosts: is required, but is empty \(flag --pool-hosts\)\r?$'
+
+# The config file: a list's items are kept as they are, commas included; a
+# single value is split like an env var; a map is a map. Nothing under a
+# map key is an unknown key.
+cp files/app.yaml app.yaml
+exec ./app$exe run
+stdout '^tags=\["x,y" "z"\] ports=\[8080 8443\] backoff=\[2s\] labels=map\[region:eu team:core\]\r?\n$'
+! stderr .
+
+# Wrong shapes in the file.
+cp files/bad.yaml app.yaml
+! exec ./app$exe run
+cmp stderr want-file.txt
+cp files/app.yaml app.yaml
+
+# The env layer replaces the file's list, not merges with it.
+env APP_SRV_TAG='e1, "e,2"'
+env APP_SRV_LABEL=k=v
+exec ./app$exe run
+stdout '^tags=\["e1" "e,2"\] ports=\[8080 8443\] backoff=\[2s\] labels=map\[k:v\]\r?\n$'
+rm app.yaml
+
+# Malformed items are reported by cfgx, with their source.
+! exec ./app$exe run --srv-tag '"unclosed' --srv-port 80,x --srv-backoff 5 --srv-label nokey
+cmp stderr want-flags.txt
+
+
+-- want-flags.txt --
+app: invalid configuration (4 problems)
+  srv.backoff: item 1: "5" has no unit; write it like 90s, 5m or 1h30m (flag --srv-backoff)
+  srv.label: item 1: "nokey" isn't key=value (flag --srv-label)
+  srv.port: item 2: "x" is not an integer (flag --srv-port)
+  srv.tag: "\"unclosed" isn't a valid comma-separated list: extraneous or missing " in quoted-field (flag --srv-tag)
+-- want-file.txt --
+app: invalid configuration (4 problems)
+  srv.backoff: item 2 is a list; expected a single value (app.yaml:4:17)
+  srv.label: expected a map, found a list (app.yaml:5:10)
+  srv.port: expected a list, found a map (app.yaml:3:9)
+  srv.tag: item 1 is null (app.yaml:2:9)
+-- files/app.yaml --
+srv:
+  tag: ["x,y", z]
+  port: 8080, 8443
+  backoff:
+    - 2s
+  label:
+    team: core
+    region: eu
+-- files/bad.yaml --
+srv:
+  tag: [~]
+  port: {a: 1}
+  backoff: [1s, [2s]]
+  label: [a=1]
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	root.AddCommand(settings.RunCommand(&cobra.Command{Use: "run"},
+		func(_ context.Context, r *settings.Run) error {
+			fmt.Printf("tags=%q ports=%v backoff=%v labels=%v\n", r.SrvTag(), r.SrvPort(), r.SrvBackoff(), r.SrvLabel())
+			return nil
+		}))
+	root.AddCommand(settings.NeedCommand(&cobra.Command{Use: "need"},
+		func(_ context.Context, n *settings.Need) error { return nil }))
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import (
+	"time"
+
+	"github.com/epistemer/cfgx/dsl"
+)
+
+var Srv = dsl.Group("srv", "Server",
+	dsl.Strings("tag", "Tags").Default([]string{"a", "b,c"}),
+	dsl.Ints("port", "Ports").Default([]int{80, 443}),
+	dsl.Durations("backoff", "Backoff steps").Default([]time.Duration{time.Second, time.Minute}),
+	dsl.StringMap("label", "Labels").Default(map[string]string{"env": "dev"}),
+)
+
+var Pool = dsl.Group("pool", "Pool",
+	dsl.Strings("hosts", "Hosts").Required(),
+)
+
+var App = dsl.App("app", "Test app", Srv, Pool).ConfigFile("app", ".")
+
+var Run = dsl.Command("Run").Uses(Srv)
+
+var Need = dsl.Command("Need").Uses(Pool)
