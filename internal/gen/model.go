@@ -102,7 +102,7 @@ type KeyModel struct {
 	CompleteExts []string
 	CompleteDirs bool
 	CompleteFunc *FuncModel
-	Pos      ir.Pos
+	Pos          ir.Pos
 }
 
 // EnumModel is one value of an enum key.
