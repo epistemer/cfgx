@@ -42,12 +42,14 @@ var keys = [...]engine.Key[values]{
 		Deprecated: "use host instead",
 		Set:        func(v *values, raw string) error { return engine.ParseString(raw, &v.DBHost) },
 		IsSet:      func(v *values) bool { return v.DBHost != "" },
+		Show:       func(v *values) any { return v.DBHost },
 	},
 	{
 		Path: "server.port", Env: "ZP_SERVER_PORT", Flag: "port",
 		Type: "int", Desc: "Port", DefaultText: "7777",
 		Set:     func(v *values, raw string) error { return engine.ParseInt(raw, &v.ServerPort) },
 		IsSet:   func(v *values) bool { return v.ServerPort != 0 },
+		Show:    func(v *values) any { return v.ServerPort },
 		Default: func(v *values) { v.ServerPort = 7777 },
 	},
 	{
@@ -55,12 +57,14 @@ var keys = [...]engine.Key[values]{
 		Type: "bool", Desc: "Serve HTTPS", Bool: true,
 		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.ServerTLSEnabled) },
 		IsSet: func(v *values) bool { return v.ServerTLSEnabled },
+		Show:  func(v *values) any { return v.ServerTLSEnabled },
 	},
 	{
 		Path: "server.tls.cert", Env: "ZP_SERVER_TLS_CERT", Flag: "tls-cert",
 		Type: "string", Desc: "TLS certificate", DefaultText: "cert.pem", Quote: true, RelevantIf: []int{2},
 		Set:     func(v *values, raw string) error { return engine.ParseString(raw, &v.ServerTLSCert) },
 		IsSet:   func(v *values) bool { return v.ServerTLSCert != "" },
+		Show:    func(v *values) any { return v.ServerTLSCert },
 		Default: func(v *values) { v.ServerTLSCert = "cert.pem" },
 	},
 	{
@@ -68,12 +72,14 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "Workers",
 		Set:   func(v *values, raw string) error { return engine.ParseInt(raw, &v.SchedulerWorkers) },
 		IsSet: func(v *values) bool { return v.SchedulerWorkers != 0 },
+		Show:  func(v *values) any { return v.SchedulerWorkers },
 	},
 	{
 		Path: "scheduler.retry.max", Env: "ZP_SCHEDULER_RETRY_MAX", Flag: "scheduler-retry-max",
 		Type: "int", Desc: "Maximum retries", DefaultText: "3",
 		Set:     func(v *values, raw string) error { return engine.ParseInt(raw, &v.SchedulerRetryMax) },
 		IsSet:   func(v *values) bool { return v.SchedulerRetryMax != 0 },
+		Show:    func(v *values) any { return v.SchedulerRetryMax },
 		Default: func(v *values) { v.SchedulerRetryMax = 3 },
 	},
 	{
@@ -81,36 +87,42 @@ var keys = [...]engine.Key[values]{
 		Type: "int", Desc: "OTP length",
 		Set:   func(v *values, raw string) error { return engine.ParseInt(raw, &v.AuthOTPLength) },
 		IsSet: func(v *values) bool { return v.AuthOTPLength != 0 },
+		Show:  func(v *values) any { return v.AuthOTPLength },
 	},
 	{
 		Path: "auth.emailfrom", Env: "ZP_AUTH_EMAILFROM", Flag: "auth-emailfrom",
 		Type: "string", Desc: "Sender address for auth emails", Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.AuthEmailfrom) },
 		IsSet: func(v *values) bool { return v.AuthEmailfrom != "" },
+		Show:  func(v *values) any { return v.AuthEmailfrom },
 	},
 	{
 		Path: "auth.token", Env: "ZP_AUTH_TOKEN", Flag: "auth-token",
 		Type: "string", Desc: "Static API token", Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.AuthToken) },
 		IsSet: func(v *values) bool { return v.AuthToken != "" },
+		Show:  func(v *values) any { return v.AuthToken },
 	},
 	{
 		Path: "auth.keys", Env: "ZP_AUTH_KEYS", Flag: "auth-keys",
 		Type: "string", Desc: "API keys file", Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.AuthKeys) },
 		IsSet: func(v *values) bool { return v.AuthKeys != "" },
+		Show:  func(v *values) any { return v.AuthKeys },
 	},
 	{
 		Path: "smtp.host", Env: "ZP_SMTP_HOST", Flag: "smtp-host",
 		Type: "string", Desc: "SMTP server host", Quote: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.SMTPHost) },
 		IsSet: func(v *values) bool { return v.SMTPHost != "" },
+		Show:  func(v *values) any { return v.SMTPHost },
 	},
 	{
 		Path: "smtp.port", Env: "ZP_SMTP_PORT", Flag: "smtp-port",
 		Type: "int", Desc: "SMTP server port", DefaultText: "587",
 		Set:     func(v *values, raw string) error { return engine.ParseInt(raw, &v.SMTPPort) },
 		IsSet:   func(v *values) bool { return v.SMTPPort != 0 },
+		Show:    func(v *values) any { return v.SMTPPort },
 		Default: func(v *values) { v.SMTPPort = 587 },
 	},
 	{
@@ -118,24 +130,28 @@ var keys = [...]engine.Key[values]{
 		Type: "bool", Desc: "Use implicit TLS", Bool: true,
 		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.SMTPTLS) },
 		IsSet: func(v *values) bool { return v.SMTPTLS },
+		Show:  func(v *values) any { return v.SMTPTLS },
 	},
 	{
 		Path: "to.address", Env: "", Flag: "to-address",
 		Type: "string", Desc: "Recipient", FlagOnly: true, Quote: true, Required: true,
 		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.TestEmailToAddress) },
 		IsSet: func(v *values) bool { return v.TestEmailToAddress != "" },
+		Show:  func(v *values) any { return v.TestEmailToAddress },
 	},
 	{
 		Path: "down", Env: "", Flag: "down",
 		Type: "bool", Desc: "Apply down migrations", FlagOnly: true, Bool: true,
 		Set:   func(v *values, raw string) error { return engine.ParseBool(raw, &v.MigrateDown) },
 		IsSet: func(v *values) bool { return v.MigrateDown },
+		Show:  func(v *values) any { return v.MigrateDown },
 	},
 	{
 		Path: "steps", Env: "", Flag: "steps",
 		Type: "int", Desc: "Number of steps", FlagOnly: true,
 		Set:   func(v *values, raw string) error { return engine.ParseInt(raw, &v.MigrateSteps) },
 		IsSet: func(v *values) bool { return v.MigrateSteps != 0 },
+		Show:  func(v *values) any { return v.MigrateSteps },
 	},
 }
 
@@ -145,6 +161,13 @@ var app = engine.App[values]{
 	Keys:      keys[:],
 	Rules: []engine.Rule{
 		{Kind: engine.AtMostOne, Group: "auth", Keys: []int{8, 9}},
+	},
+	Profiles: map[string][]int{
+		"Serve":     keysServe,
+		"Retry":     keysRetry,
+		"TestEmail": keysTestEmail,
+		"Notify":    keysNotify,
+		"Migrate":   keysMigrate,
 	},
 }
 
@@ -366,6 +389,10 @@ func Test(edit func(v *Values)) *All {
 	}
 }
 
+// ConfigCommand returns the config subcommand: init, print, explain,
+// validate, schema and env. Add it to the root command.
+func ConfigCommand() *cobra.Command { return engine.ConfigCommand(&app) }
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -403,7 +430,7 @@ func newServe(v *values, args []string) *Serve {
 // ServeCommand binds the Serve configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysServe, newServe, run)
+	return engine.Command(cmd, &app, "Serve", keysServe, newServe, run)
 }
 
 // LoadServe loads the Serve configuration without cobra, from the
@@ -437,7 +464,7 @@ func newRetry(v *values, args []string) *Retry {
 // RetryCommand binds the Retry configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func RetryCommand(cmd *cobra.Command, run func(context.Context, *Retry) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysRetry, newRetry, run)
+	return engine.Command(cmd, &app, "Retry", keysRetry, newRetry, run)
 }
 
 // LoadRetry loads the Retry configuration without cobra, from the
@@ -486,7 +513,7 @@ func newTestEmail(v *values, args []string) *TestEmail {
 // TestEmailCommand binds the TestEmail configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func TestEmailCommand(cmd *cobra.Command, run func(context.Context, *TestEmail) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysTestEmail, newTestEmail, run)
+	return engine.Command(cmd, &app, "TestEmail", keysTestEmail, newTestEmail, run)
 }
 
 // LoadTestEmail loads the TestEmail configuration without cobra, from the
@@ -525,7 +552,7 @@ func newNotify(v *values, args []string) *Notify {
 // NotifyCommand binds the Notify configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func NotifyCommand(cmd *cobra.Command, run func(context.Context, *Notify) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysNotify, newNotify, run)
+	return engine.Command(cmd, &app, "Notify", keysNotify, newNotify, run)
 }
 
 // LoadNotify loads the Notify configuration without cobra, from the
@@ -565,7 +592,7 @@ func newMigrate(v *values, args []string) *Migrate {
 // MigrateCommand binds the Migrate configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) error) *cobra.Command {
-	return engine.Command(cmd, &app, keysMigrate, newMigrate, run)
+	return engine.Command(cmd, &app, "Migrate", keysMigrate, newMigrate, run)
 }
 
 // LoadMigrate loads the Migrate configuration without cobra, from the

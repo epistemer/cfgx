@@ -110,6 +110,7 @@ var keys = [...]engine.Key[values]{
 		Set: func(v *values, raw string) error { return engine.{{.Parse}}(raw, {{.ParseArgs}}&v.{{.Field}}) },
 		{{- end}}
 		IsSet: func(v *values) bool { return {{.IsSet}} },
+		Show: func(v *values) any { return {{.Show}} },
 		{{- if or .Checks .Validate}}
 		Check: func(v *values) error {
 		{{- range .Checks}}
@@ -160,6 +161,13 @@ var app = engine.App[values]{
 	Rules: []engine.Rule{
 	{{- range .Rules}}
 		{Kind: engine.{{.Kind}}, Group: {{printf "%q" .Group}}, Keys: []int{ {{- range $i, $k := .Keys}}{{if $i}}, {{end}}{{$k}}{{end -}} }},
+	{{- end}}
+	},
+	{{- end}}
+	{{- if .Commands}}
+	Profiles: map[string][]int{
+	{{- range .Commands}}
+		{{printf "%q" .Name}}: {{.KeysVar}},
 	{{- end}}
 	},
 	{{- end}}
@@ -269,6 +277,10 @@ func Test(edit func(v *Values)) *All {
 	}
 }
 
+// ConfigCommand returns the config subcommand: init, print, explain,
+// validate, schema and env. Add it to the root command.
+func ConfigCommand() *cobra.Command { return engine.ConfigCommand(&app) }
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -322,7 +334,7 @@ func new{{.Name}}(v *values, args []string) *{{.Name}} {
 // {{.Name}}Command binds the {{.Name}} configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
 func {{.Name}}Command(cmd *cobra.Command, run func(context.Context, *{{.Name}}) error) *cobra.Command {
-	return engine.Command(cmd, &app, {{.KeysVar}}, new{{.Name}}, run)
+	return engine.Command(cmd, &app, {{printf "%q" .Name}}, {{.KeysVar}}, new{{.Name}}, run)
 }
 
 // Load{{.Name}} loads the {{.Name}} configuration without cobra, from the

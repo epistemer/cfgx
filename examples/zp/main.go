@@ -47,6 +47,7 @@ func main() {
 				fmt.Printf("would send %q to %s <%s>: %s\n", t.Template(), t.ToName(), t.ToAddress(), mailer.New(t).Describe(t.ToAddress()))
 				return nil
 			}),
+		settings.ConfigCommand(),
 	)
 	if err := root.Execute(); err != nil {
 		os.Exit(1)

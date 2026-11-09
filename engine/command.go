@@ -65,11 +65,19 @@ func orList(s []string) string {
 	return strings.Join(s[:len(s)-1], ", ") + " or " + s[len(s)-1]
 }
 
-// Command binds the keys at idx to cmd and sets its RunE: load, build the
+// profileAnnotation names the profile a binder gave a cobra command, so
+// the config subcommand can find a command's keys by its command line.
+const profileAnnotation = "cfgx.profile"
+
+// Command binds the keys at idx, the profile's, to cmd and sets its RunE: load, build the
 // command's configuration with the positional arguments, run with
 // cmd.Context(). A configuration problem prints the problems, without the
 // usage text, and RunE returns the error, so Execute does too.
-func Command[V, C any](cmd *cobra.Command, a *App[V], idx []int, build func(*V, []string) *C, run func(context.Context, *C) error) *cobra.Command {
+func Command[V, C any](cmd *cobra.Command, a *App[V], profile string, idx []int, build func(*V, []string) *C, run func(context.Context, *C) error) *cobra.Command {
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+	cmd.Annotations[profileAnnotation] = profile
 	var local []int
 	for _, i := range append(append([]int(nil), idx...), conditions(a, idx)...) {
 		if !a.Keys[i].Global {

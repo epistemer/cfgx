@@ -690,6 +690,30 @@ unknown.
   added, `Required` dropped, descriptions changed. The report groups them
   under those headings; `-fail-breaking` exits 1 on a breaking change, for
   CI. A lock file of any IR version parses; unknown fields are ignored.
+- **[decided, M6.4]** The `config` subcommand (`engine.ConfigCommand`, generated
+  as `ConfigCommand()`):
+  - Scope: every key but command arguments, or the keys of the command
+    named by the remaining arguments, resolved with `cmd.Root().Find`, so a
+    nested command is `config validate db migrate`. Binders tag their
+    command with `Annotations["cfgx.profile"]`, and `App.Profiles` maps
+    profiles to key lists. Arguments are never in scope (A9).
+  - Sources: defaults, the config file and env. The subcommands load
+    through a flag set holding only `--config`, so a command's flags (and
+    global flags) never count.
+  - `print` and `explain` load with `Options.Partial`, skipping `Required`
+    and rules, so they work on an incomplete configuration; values that
+    don't parse are still problems. `validate` loads as a command would.
+    Problems print as at startup and exit non-zero.
+  - Values come from a generated `Show` per key: a `Secret` is `******`, a
+    URL is `Redacted()`, a `File` is `(N bytes)`, an enum or `Text` value is
+    its text, durations and sizes are canonical. `print` writes YAML by
+    config file path, with JSON values. `explain` shows the winning
+    source, `default runtime.NumCPU()` for a `DefaultFunc`, `unset`, and
+    `(not relevant)` for a key a `RelevantIf` condition leaves out.
+  - `env` lists the variables, their keys, and whether each is set now,
+    never values. `init` writes the example config to `<config>.yaml` (or
+    `-o`), refusing to overwrite without `--force`. `init` and `schema`
+    exist only when the app has a config file.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree
