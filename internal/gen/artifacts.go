@@ -203,7 +203,7 @@ func (a *artifacts) fileTree(keep func(*KeyModel) bool) *fileNode {
 // In .env.example (env true) it names the config key instead of the env
 // var.
 func (a *artifacts) keyNote(k *KeyModel, env bool) []string {
-	desc := strings.TrimSpace(k.Desc)
+	desc := strings.TrimSuffix(strings.TrimSpace(k.Desc), ".")
 	if len(k.Enum) > 0 {
 		texts := make([]string, len(k.Enum))
 		for i, e := range k.Enum {
@@ -268,7 +268,7 @@ func (a *artifacts) exampleYAML() []byte {
 			if c.key == nil {
 				b.WriteString("\n")
 				if c.desc != "" {
-					fmt.Fprintf(&b, "%s# %s\n", indent, c.desc)
+					comment(&b, indent, c.desc)
 				}
 				fmt.Fprintf(&b, "%s%s:\n", indent, c.name)
 				walk(c, indent+"  ")
@@ -278,7 +278,7 @@ func (a *artifacts) exampleYAML() []byte {
 				b.WriteString("\n")
 			}
 			for _, l := range a.keyNote(c.key, false) {
-				fmt.Fprintf(&b, "%s# %s\n", indent, l)
+				comment(&b, indent, l)
 			}
 			if v := value(c.key); v != nil {
 				fmt.Fprintf(&b, "%s# %s: %s\n", indent, c.name, jsonText(v))
@@ -309,7 +309,7 @@ func (a *artifacts) envExample() []byte {
 		n++
 		b.WriteString("\n")
 		for _, l := range a.keyNote(k, true) {
-			fmt.Fprintf(&b, "# %s\n", l)
+			comment(&b, "", l)
 		}
 		fmt.Fprintf(&b, "# %s=%s\n", k.Env, dotenvQuote(envValue(k)))
 	}
@@ -321,7 +321,7 @@ func (a *artifacts) envExample() []byte {
 
 // dotenvQuote double-quotes a value that a .env reader would otherwise cut.
 func dotenvQuote(s string) string {
-	if s == "" || !strings.ContainsAny(s, " \t#\"'\\$`") {
+	if s == "" || !strings.ContainsAny(s, " \t\r\n#\"'\\$`") {
 		return s
 	}
 	return strconv.Quote(s)
@@ -329,7 +329,7 @@ func dotenvQuote(s string) string {
 
 const (
 	durationPattern = `^([-+]?([0-9]+(\.[0-9]*)?|\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$`
-	sizePattern     = `^[0-9]+ ?([kKMGTPE]i?)?B?$`
+	sizePattern     = `^\s*[0-9]+\s*([bB]|[kKmMgGtTpP][iI]?[bB])?\s*$`
 )
 
 // keySchema is a key's JSON Schema.
@@ -361,7 +361,8 @@ func keySchema(k *KeyModel) map[string]any {
 	case ir.KindInts:
 		s["anyOf"] = []any{map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, map[string]any{"type": "string"}}
 	case ir.KindDurations:
-		s["anyOf"] = []any{map[string]any{"type": "array", "items": map[string]any{"type": "string", "pattern": durationPattern}}, map[string]any{"type": "string"}}
+		item := map[string]any{"anyOf": []any{map[string]any{"type": "string", "pattern": durationPattern}, map[string]any{"const": 0}}}
+		s["anyOf"] = []any{map[string]any{"type": "array", "items": item}, map[string]any{"type": "string"}}
 	case ir.KindStringMap:
 		s["anyOf"] = []any{map[string]any{"type": "object", "additionalProperties": scalarItem}, map[string]any{"type": "string"}}
 	case ir.KindURL:
@@ -386,6 +387,15 @@ func keySchema(k *KeyModel) map[string]any {
 		case ir.CheckPattern:
 			s["pattern"] = "^(?:" + c.Args[0] + ")$"
 		}
+	}
+	// A null value counts as absent, as an uncommented "key:" is.
+	switch {
+	case s["type"] != nil:
+		s["type"] = []any{s["type"], "null"}
+	case s["anyOf"] != nil:
+		s["anyOf"] = append(s["anyOf"].([]any), map[string]any{"type": "null"})
+	case s["enum"] != nil:
+		s["enum"] = append(toAny(s["enum"]), nil)
 	}
 	desc := k.Desc
 	if k.Deprecated != "" {
@@ -470,6 +480,25 @@ func addPath(s map[string]any, path []string, leaf map[string]any) {
 		return // a key, not a group
 	}
 	addPath(next, path[1:], leaf)
+}
+
+// toAny is an enum's values, []string, as []any.
+func toAny(v any) []any {
+	if xs, ok := v.([]string); ok {
+		out := make([]any, len(xs))
+		for i, x := range xs {
+			out[i] = x
+		}
+		return out
+	}
+	return v.([]any)
+}
+
+// comment writes text as comment lines at indent, one per line of text.
+func comment(b *strings.Builder, indent, text string) {
+	for _, l := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		fmt.Fprintf(b, "%s# %s\n", indent, strings.TrimRight(l, " \t"))
+	}
 }
 
 func mdCell(s string) string {
@@ -640,6 +669,11 @@ func Lock(app *ir.App) ([]byte, error) {
 		case map[string]any:
 			delete(v, "pos")
 			delete(v, "problems")
+			// A Secret's default is in the schema's source, but the lock
+			// file is for reading in PRs: it only says there is one.
+			if v["kind"] == string(ir.KindSecret) && v["default"] != nil && v["default"] != "" {
+				v["default"] = "******"
+			}
 			for _, x := range v {
 				strip(x)
 			}

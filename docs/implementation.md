@@ -659,7 +659,10 @@ unknown.
     `anyOf` where the file also takes a CSV string or a duration's `0`;
     enums, `minimum`/`maximum`, `minLength`/`maxLength` and `pattern` come
     from the key; defaults and examples are typed; aliases are deprecated
-    properties.
+    properties. Every key allows null, which cfgx reads as absent. The
+    schema is stricter than cfgx about quoting: cfgx reads `port: "7777"`,
+    but the schema wants `port: 7777`. A `Secret`'s default shows as
+    `******` in the lock file and nowhere else.
   - `docs/CONFIG.md` has a table per group (hidden keys included), the
     rules, and each command's arguments.
   - `cfgx.lock.json` is the IR as JSON, without positions, keys sorted.

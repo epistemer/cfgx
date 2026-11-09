@@ -129,15 +129,24 @@ log:
         "debug": {
           "default": false,
           "description": "Log SQL queries",
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "timeout": {
           "description": "Query timeout in seconds",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "url": {
           "description": "Database connection URL",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -148,7 +157,10 @@ log:
       "properties": {
         "verbose": {
           "description": "Log more",
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -160,16 +172,25 @@ log:
         "host": {
           "default": "localhost",
           "description": "Listen host",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "port": {
           "default": 8080,
           "description": "Listen port",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "tls": {
           "description": "Enable TLS",
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "type": "object"

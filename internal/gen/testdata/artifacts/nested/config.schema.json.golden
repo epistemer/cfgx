@@ -9,25 +9,37 @@
       "properties": {
         "emailfrom": {
           "description": "Sender address for auth emails",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "keys": {
           "description": "API keys file",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "otp": {
           "additionalProperties": false,
           "properties": {
             "length": {
               "description": "OTP length",
-              "type": "integer"
+              "type": [
+                "integer",
+                "null"
+              ]
             }
           },
           "type": "object"
         },
         "token": {
           "description": "Static API token",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -39,12 +51,18 @@
         "host": {
           "deprecated": true,
           "description": "Host Deprecated: use host instead",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "hostname": {
           "deprecated": true,
           "description": "Deprecated: use database.host. Host",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -60,14 +78,20 @@
             "max": {
               "default": 3,
               "description": "Maximum retries",
-              "type": "integer"
+              "type": [
+                "integer",
+                "null"
+              ]
             }
           },
           "type": "object"
         },
         "workers": {
           "description": "Workers",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -79,7 +103,10 @@
         "port": {
           "default": 7777,
           "description": "Port",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "tls": {
           "additionalProperties": false,
@@ -87,11 +114,17 @@
             "cert": {
               "default": "cert.pem",
               "description": "TLS certificate",
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "enabled": {
               "description": "Serve HTTPS",
-              "type": "boolean"
+              "type": [
+                "boolean",
+                "null"
+              ]
             }
           },
           "type": "object"
@@ -105,16 +138,25 @@
       "properties": {
         "host": {
           "description": "SMTP server host",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "port": {
           "default": 587,
           "description": "SMTP server port",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "tls": {
           "description": "Use implicit TLS",
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         }
       },
       "type": "object"

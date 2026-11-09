@@ -10,19 +10,32 @@
         "b": {
           "default": true,
           "description": "bool",
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "backoff": {
           "anyOf": [
             {
               "items": {
-                "pattern": "^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$",
-                "type": "string"
+                "anyOf": [
+                  {
+                    "pattern": "^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$",
+                    "type": "string"
+                  },
+                  {
+                    "const": 0
+                  }
+                ]
               },
               "type": "array"
             },
             {
               "type": "string"
+            },
+            {
+              "type": "null"
             }
           ],
           "default": [
@@ -34,11 +47,17 @@
         "cidr": {
           "default": "10.0.0.0/8",
           "description": "text",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "cpus": {
           "description": "computed default",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "d": {
           "anyOf": [
@@ -48,6 +67,9 @@
             },
             {
               "const": 0
+            },
+            {
+              "type": "null"
             }
           ],
           "default": "5m0s",
@@ -61,6 +83,9 @@
             },
             {
               "const": 0
+            },
+            {
+              "type": "null"
             }
           ],
           "default": "1.5s",
@@ -68,27 +93,42 @@
         },
         "dir": {
           "description": "directory",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "f": {
           "default": 0.25,
           "description": "float",
-          "type": "number"
+          "type": [
+            "number",
+            "null"
+          ]
         },
         "file": {
           "default": "ca.pem",
           "description": "file",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "i": {
           "default": -3,
           "description": "int",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "i64": {
           "default": 9223372036854775807,
           "description": "int64",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "labels": {
           "anyOf": [
@@ -104,6 +144,9 @@
             },
             {
               "type": "string"
+            },
+            {
+              "type": "null"
             }
           ],
           "default": {
@@ -115,18 +158,27 @@
         "loc": {
           "default": "UTC",
           "description": "location",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "name": {
           "description": "checked string",
           "maxLength": 8,
           "minLength": 1,
           "pattern": "^(?:[a-z]+)$",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "nm": {
           "description": "renamed",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "none": {
           "anyOf": [
@@ -136,6 +188,9 @@
             },
             {
               "const": 0
+            },
+            {
+              "type": "null"
             }
           ],
           "description": "no default"
@@ -154,6 +209,9 @@
             },
             {
               "type": "string"
+            },
+            {
+              "type": "null"
             }
           ],
           "description": "empty list"
@@ -161,14 +219,20 @@
         "path": {
           "default": "data//app.db",
           "description": "path",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "port": {
           "default": 80,
           "description": "checked int",
           "maximum": 65535,
           "minimum": 1,
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "ports": {
           "anyOf": [
@@ -180,6 +244,9 @@
             },
             {
               "type": "string"
+            },
+            {
+              "type": "null"
             }
           ],
           "default": [
@@ -191,7 +258,10 @@
         "s": {
           "default": "x",
           "description": "string",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "size": {
           "anyOf": [
@@ -200,8 +270,11 @@
               "type": "integer"
             },
             {
-              "pattern": "^[0-9]+ ?([kKMGTPE]i?)?B?$",
+              "pattern": "^\\s*[0-9]+\\s*([bB]|[kKmMgGtTpP][iI]?[bB])?\\s*$",
               "type": "string"
+            },
+            {
+              "type": "null"
             }
           ],
           "default": "1MiB",
@@ -221,6 +294,9 @@
             },
             {
               "type": "string"
+            },
+            {
+              "type": "null"
             }
           ],
           "default": [
@@ -234,18 +310,27 @@
           "default": 7,
           "description": "uint",
           "minimum": 0,
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "url": {
           "default": "https://example.com/x",
           "description": "url",
           "format": "uri",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "url2": {
           "description": "url without default",
           "format": "uri",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "wait": {
           "anyOf": [
@@ -255,6 +340,9 @@
             },
             {
               "const": 0
+            },
+            {
+              "type": "null"
             }
           ],
           "description": "checked duration"

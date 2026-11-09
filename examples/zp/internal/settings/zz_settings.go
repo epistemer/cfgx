@@ -655,7 +655,10 @@ storage:
       "properties": {
         "emailfrom": {
           "description": "Sender address for auth emails",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "jwt": {
           "additionalProperties": false,
@@ -663,23 +666,35 @@ storage:
             "private": {
               "default": "keys/priv.pem",
               "description": "JWT private key (PEM)",
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "public": {
               "default": "keys/pub.pem",
               "description": "JWT public key (PEM)",
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "type": "object"
         },
         "keys": {
           "description": "CSV file of API keys",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "mfa": {
           "description": "Require multi-factor authentication",
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "otp": {
           "additionalProperties": false,
@@ -689,7 +704,10 @@ storage:
               "description": "OTP length",
               "maximum": 10,
               "minimum": 4,
-              "type": "integer"
+              "type": [
+                "integer",
+                "null"
+              ]
             },
             "ttl": {
               "anyOf": [
@@ -699,6 +717,9 @@ storage:
                 },
                 {
                   "const": 0
+                },
+                {
+                  "type": "null"
                 }
               ],
               "default": "5m0s",
@@ -718,6 +739,9 @@ storage:
                 },
                 {
                   "const": 0
+                },
+                {
+                  "type": "null"
                 }
               ],
               "default": "24h0m0s",
@@ -728,7 +752,10 @@ storage:
         },
         "token": {
           "description": "Static API token",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -740,22 +767,34 @@ storage:
         "host": {
           "default": "localhost",
           "description": "Database server host",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "name": {
           "description": "Database name",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "password": {
           "description": "Database password",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "port": {
           "default": 5432,
           "description": "Database server port",
           "maximum": 65535,
           "minimum": 1,
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "ssl_mode": {
           "deprecated": true,
@@ -763,7 +802,8 @@ storage:
           "enum": [
             "disable",
             "require",
-            "verify-full"
+            "verify-full",
+            null
           ]
         },
         "sslmode": {
@@ -772,13 +812,17 @@ storage:
           "enum": [
             "disable",
             "require",
-            "verify-full"
+            "verify-full",
+            null
           ]
         },
         "user": {
           "default": "postgres",
           "description": "Database user",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -789,14 +833,18 @@ storage:
       "properties": {
         "color": {
           "description": "Force colored output even without a TTY",
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "format": {
           "default": "text",
           "description": "Output format",
           "enum": [
             "text",
-            "json"
+            "json",
+            null
           ]
         },
         "level": {
@@ -806,7 +854,8 @@ storage:
             "debug",
             "info",
             "warn",
-            "error"
+            "error",
+            null
           ]
         }
       },
@@ -821,13 +870,17 @@ storage:
           "description": "Task execution mode",
           "enum": [
             "sequential",
-            "parallel"
+            "parallel",
+            null
           ]
         },
         "location": {
           "default": "Africa/Cairo",
           "description": "Scheduler timezone",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "retry": {
           "additionalProperties": false,
@@ -841,6 +894,9 @@ storage:
                 },
                 {
                   "const": 0
+                },
+                {
+                  "type": "null"
                 }
               ],
               "default": "1m0s",
@@ -849,14 +905,20 @@ storage:
             "max": {
               "default": 3,
               "description": "Maximum retries",
-              "type": "integer"
+              "type": [
+                "integer",
+                "null"
+              ]
             }
           },
           "type": "object"
         },
         "workers": {
           "description": "Concurrent workers",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -868,7 +930,10 @@ storage:
         "host": {
           "default": "0.0.0.0",
           "description": "Listen address",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "max_header": {
           "anyOf": [
@@ -877,8 +942,11 @@ storage:
               "type": "integer"
             },
             {
-              "pattern": "^[0-9]+ ?([kKMGTPE]i?)?B?$",
+              "pattern": "^\\s*[0-9]+\\s*([bB]|[kKmMgGtTpP][iI]?[bB])?\\s*$",
               "type": "string"
+            },
+            {
+              "type": "null"
             }
           ],
           "default": "1MiB",
@@ -889,7 +957,10 @@ storage:
           "description": "Listen port",
           "maximum": 65535,
           "minimum": 1,
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "rate": {
           "additionalProperties": false,
@@ -897,12 +968,18 @@ storage:
             "burst": {
               "default": 20,
               "description": "Burst capacity per IP",
-              "type": "integer"
+              "type": [
+                "integer",
+                "null"
+              ]
             },
             "limit": {
               "default": 100,
               "description": "Requests per second per IP",
-              "type": "integer"
+              "type": [
+                "integer",
+                "null"
+              ]
             }
           },
           "type": "object"
@@ -918,6 +995,9 @@ storage:
                 },
                 {
                   "const": 0
+                },
+                {
+                  "type": "null"
                 }
               ],
               "default": "20s",
@@ -931,6 +1011,9 @@ storage:
                 },
                 {
                   "const": 0
+                },
+                {
+                  "type": "null"
                 }
               ],
               "default": "1m0s",
@@ -945,16 +1028,25 @@ storage:
             "cert": {
               "default": "ssl/cert.pem",
               "description": "TLS certificate",
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             },
             "enabled": {
               "description": "Serve HTTPS",
-              "type": "boolean"
+              "type": [
+                "boolean",
+                "null"
+              ]
             },
             "key": {
               "default": "ssl/key.pem",
               "description": "TLS private key",
-              "type": "string"
+              "type": [
+                "string",
+                "null"
+              ]
             }
           },
           "type": "object"
@@ -972,29 +1064,45 @@ storage:
           "enum": [
             "PLAIN",
             "LOGIN",
-            "CRAM-MD5"
+            "CRAM-MD5",
+            null
           ]
         },
         "host": {
           "description": "SMTP server host",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "password": {
           "description": "SMTP password",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "port": {
           "default": 587,
           "description": "SMTP server port",
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         },
         "tls": {
           "description": "Use implicit TLS",
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "user": {
           "description": "SMTP user",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -1006,7 +1114,10 @@ storage:
         "bolt": {
           "default": "bolt.db",
           "description": "Bolt database file; also holds runtime settings",
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
