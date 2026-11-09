@@ -96,6 +96,12 @@ type KeyModel struct {
 	NoFile   bool
 	Example  string
 	declPath string // the path the schema declared, which rules name
+	// Complete is set when the schema gave the flag a completion: file
+	// extensions, directories, or a function.
+	Complete     bool
+	CompleteExts []string
+	CompleteDirs bool
+	CompleteFunc *FuncModel
 	Pos      ir.Pos
 }
 

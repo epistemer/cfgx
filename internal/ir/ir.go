@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 15
+const Version = 16
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -131,6 +131,9 @@ type Key struct {
 	Hidden  bool     `json:"hidden,omitempty"`
 	// Example is shown in example files instead of the default, as text.
 	Example *string `json:"example,omitempty"`
+	// Complete is the flag's shell completion; nil means the default
+	// (an enum's values, else file names).
+	Complete *Completion `json:"complete,omitempty"`
 	// Checks are the key's constraints, in declaration order.
 	Checks []Check `json:"checks,omitempty"`
 	// Validate and DefaultFunc are functions the generated code calls.
@@ -154,6 +157,15 @@ const (
 type Check struct {
 	Kind string   `json:"kind"`
 	Args []string `json:"args"`
+}
+
+// Completion is how a flag's value completes in the shell.
+type Completion struct {
+	// Exts limits file names to these extensions (without the dot); Dirs
+	// completes directories only; Func names a func(string) []string.
+	Exts []string `json:"exts,omitempty"`
+	Dirs bool     `json:"dirs,omitempty"`
+	Func *FuncRef `json:"func,omitempty"`
 }
 
 // FuncRef names a top-level function the schema passed, from

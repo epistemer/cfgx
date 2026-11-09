@@ -273,7 +273,7 @@ zone name (A6).
 | `.Alias(oldPath...)` | old file key / env / flag still accepted, with a deprecation warning. Renames only: a type or unit change needs a migration (open question §11) |
 | `.Deprecated(msg)` | warn when set |
 | `.Hidden()` | omitted from help and example files (still documented in `docs/CONFIG.md`) |
-| `.Complete(c)` | completion: `dsl.Files(globs...)`, `dsl.Dirs()`, or a top-level func. Enums complete automatically |
+| `.Complete(c)` | completion: `dsl.Files("*.pem", ...)`, `dsl.Dirs()`, or `dsl.CompleteFunc(f)` with a top-level `func(toComplete string) []string`. Enums complete automatically |
 | `.Reloadable()` | value is re-read when the config file changes (§7; after v0.1.0) |
 | `.Mutable()` / `.Epoch(n)` | value can be changed at runtime and persisted (§4, §7) |
 

@@ -599,6 +599,19 @@ unknown.
     `Sources` don't apply to them.
   - `Hidden` sets pflag's `Hidden`. `Example` is checked like a default and
     recorded for M6's example files.
+- **[decided, M4.10]** Completion:
+  - `Complete(dsl.Files("*.pem", "*.crt"))` filters file names by
+    extension (patterns must be `*.ext`); `dsl.Dirs()` completes
+    directories; `dsl.CompleteFunc(f)` calls a top-level `func(toComplete
+    string) []string` under `Validate`'s rules, and turns file names off.
+    The interface said `.Complete(c)` takes "a top-level func"; Go can't
+    pass a function where `Files` and `Dirs` values go, so it's wrapped in
+    `CompleteFunc`.
+  - Enums complete their values, filtered by what's typed, with no file
+    names. `--config` completes the app's formats (`yaml`, `yml`, `json`).
+  - The engine registers completions with `RegisterFlagCompletionFunc` on
+    the command whose flags it binds, and on the root for global keys. A
+    key without a flag can't have a completion.
 - **[decided, ADR 0005]** One parser for both formats: `go.yaml.in/yaml/v4`,
   loading into `yaml.Node`. It rejects multi-document files and reports line and
   column in errors (`*yaml.LoadError`). The walker that builds cfgx's node tree

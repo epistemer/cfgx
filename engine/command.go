@@ -30,8 +30,21 @@ func BindRoot[V any](root *cobra.Command, a *App[V], options ...cfgx.Option) {
 	roots.Store(root, r)
 	if a.ConfigFile != "" {
 		root.PersistentFlags().Var(&rawValue{typ: "path"}, "config", a.configUsage())
+		var exts []string
+		for _, f := range a.Formats {
+			if f == "yaml" {
+				exts = append(exts, "yaml", "yml")
+			} else {
+				exts = append(exts, f)
+			}
+		}
+		if len(exts) == 0 {
+			exts = []string{"yaml", "yml", "json"}
+		}
+		_ = root.RegisterFlagCompletionFunc("config", fileExts(exts))
 	}
 	BindFlags(root.PersistentFlags(), a.Keys, a.Global)
+	bindCompletions(root, a.Keys, a.Global)
 }
 
 // configUsage describes --config, with where the search looks.
@@ -62,6 +75,7 @@ func Command[V, C any](cmd *cobra.Command, a *App[V], idx []int, build func(*V, 
 		}
 	}
 	BindFlags(cmd.Flags(), a.Keys, local)
+	bindCompletions(cmd, a.Keys, local)
 	cmd.RunE = func(cmd *cobra.Command, args []string) error {
 		r, bound := roots.Load(cmd.Root())
 		if !bound && (a.ConfigFile != "" || len(a.Global) > 0) {
