@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 14
+const Version = 15
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -116,6 +116,21 @@ type Key struct {
 	Type *Type `json:"type,omitempty"`
 	// Enum lists an enum's values, in declaration order.
 	Enum []EnumValue `json:"enum,omitempty"`
+	// Naming and source modifiers (M4.9). Short is a one-letter flag; Flag
+	// and Env replace the derived names whole; FileKey replaces the key's
+	// segment of its file path, and GoName its segment of Go names. "" keeps
+	// the derived name.
+	Short   string `json:"short,omitempty"`
+	Flag    string `json:"flag,omitempty"`
+	Env     string `json:"env,omitempty"`
+	FileKey string `json:"fileKey,omitempty"`
+	GoName  string `json:"goName,omitempty"`
+	// Sources limits where the value may come from: "flag", "env", "file".
+	// nil means all three.
+	Sources []string `json:"sources,omitempty"`
+	Hidden  bool     `json:"hidden,omitempty"`
+	// Example is shown in example files instead of the default, as text.
+	Example *string `json:"example,omitempty"`
 	// Checks are the key's constraints, in declaration order.
 	Checks []Check `json:"checks,omitempty"`
 	// Validate and DefaultFunc are functions the generated code calls.

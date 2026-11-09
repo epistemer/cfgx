@@ -47,6 +47,8 @@ type values struct {
 	KName    string
 	KCpus    int
 	KWait    time.Duration
+	KRenamed string
+	KFk      string
 }
 
 var patternKName1 = regexp.MustCompile("^(?:[a-z]+)$")
@@ -243,6 +245,18 @@ var keys = [...]engine.Key[values]{
 			return nil
 		},
 	},
+	{
+		Path: "k.nm", Env: "NAME_ENV", Flag: "name-flag",
+		Type: "string", Desc: "renamed", Short: "n", Hidden: true, Quote: true,
+		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.KRenamed) },
+		IsSet: func(v *values) bool { return v.KRenamed != "" },
+	},
+	{
+		Path: "k.file_key", Env: "K_K_FK", Flag: "",
+		Type: "string", Desc: "env only, renamed in the file", NoFile: true, Quote: true,
+		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.KFk) },
+		IsSet: func(v *values) bool { return v.KFk != "" },
+	},
 }
 
 // app describes the whole application to the engine.
@@ -281,6 +295,8 @@ type K interface {
 	KName() string
 	KCpus() int
 	KWait() time.Duration
+	KRenamed() string
+	KFk() string
 }
 
 type kGroup struct{ r *root }
@@ -360,6 +376,12 @@ func (g *kGroup) KCpus() int { return g.r.cur.Load().KCpus }
 // KWait returns k.wait: checked duration
 func (g *kGroup) KWait() time.Duration { return g.r.cur.Load().KWait }
 
+// KRenamed returns k.nm: renamed
+func (g *kGroup) KRenamed() string { return g.r.cur.Load().KRenamed }
+
+// KFk returns k.file_key: env only, renamed in the file
+func (g *kGroup) KFk() string { return g.r.cur.Load().KFk }
+
 // BindRoot prepares the root command: it adds --config and the flags of
 // global settings, and records options such as cfgx.WithLogger. Call it
 // before Execute.
@@ -375,7 +397,7 @@ type Run struct {
 // them. The slice is a copy.
 func (c *Run) Args() []string { return slices.Clone(c.args) }
 
-var keysRun = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24}
+var keysRun = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26}
 
 func newRun(v *values, args []string) *Run {
 	r := &root{}

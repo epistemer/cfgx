@@ -267,9 +267,9 @@ zone name (A6).
 | `.Validate(f)` | top-level `func(T) error`, where T is the getter's type; runs after the constraints, when the key is set; closures rejected at generate time |
 | `.Tags(t...)` | add to tag interfaces |
 | `.Short('p')` | short flag |
-| `.Flag(name)`, `.Env(name)`, `.Key(name)` | override derived names |
-| `.GoName(name)` | override derived getter name |
-| `.Sources(dsl.Flag, dsl.Env, dsl.File)` | restrict where a value may come from |
+| `.Flag(name)`, `.Env(name)`, `.Key(name)` | override derived names: the whole flag or env var name (no prefix added), or the key's name in the config file |
+| `.GoName(name)` | override the key's segment of the getter name |
+| `.Sources(dsl.FromFlag, dsl.FromEnv, dsl.FromFile)` | restrict where a value may come from (`dsl.File` is the File key constructor, hence `From…`) |
 | `.Alias(oldPath...)` | old file key / env / flag still accepted, with a deprecation warning. Renames only: a type or unit change needs a migration (open question §11) |
 | `.Deprecated(msg)` | warn when set |
 | `.Hidden()` | omitted from help and example files (still documented in `docs/CONFIG.md`) |

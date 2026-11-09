@@ -71,6 +71,9 @@ var keys = [...]engine.Key[values]{
 	{
 		Path: {{printf "%q" .Path}}, Env: {{printf "%q" .Env}}, Flag: {{printf "%q" .Flag}},
 		Type: {{printf "%q" .FlagType}}, Desc: {{printf "%q" .Desc}},
+		{{- if .Short}} Short: {{printf "%q" .Short}},{{end}}
+		{{- if .Hidden}} Hidden: true,{{end}}
+		{{- if .NoFile}} NoFile: true,{{end}}
 		{{- if .FlagOnly}} FlagOnly: true,{{end}}
 		{{- if .HasDefault}} DefaultText: {{printf "%q" .DefaultText}},{{end}}
 		{{- if .Quote}} Quote: true,{{end}}

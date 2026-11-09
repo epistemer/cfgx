@@ -88,7 +88,15 @@ type KeyModel struct {
 	Validate    *FuncModel
 	DefaultFrom string     // the DefaultFunc's name, for --help
 	defaultFunc *FuncModel // the DefaultFunc, if any
-	Pos         ir.Pos
+	// M4.9: Short is the one-letter flag; Hidden leaves the flag out of
+	// --help; NoFile keeps the key out of the config file (Sources);
+	// Example is the text example files show.
+	Short    string
+	Hidden   bool
+	NoFile   bool
+	Example  string
+	declPath string // the path the schema declared, which rules name
+	Pos      ir.Pos
 }
 
 // EnumModel is one value of an enum key.
@@ -96,7 +104,7 @@ type EnumModel struct{ Text, Lit string }
 
 // fileEnv is env's _FILE variant if km has one, else "".
 func fileEnv(km *KeyModel, env string) string {
-	if !km.FileEnv {
+	if !km.FileEnv || env == "" {
 		return ""
 	}
 	return env + "_FILE"
@@ -338,6 +346,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		nm.init[strings.ToLower(w)] = w
 	}
 	flags, envs, fields, paths := map[string]ir.Pos{}, map[string]ir.Pos{}, map[string]ir.Pos{}, map[string]ir.Pos{}
+	shorts := map[string]ir.Pos{}
 	groups := map[string]*GroupModel{}
 	var groupPaths []string
 
@@ -451,6 +460,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			}
 			seen[k.Name] = true
 			km := &KeyModel{Index: len(m.Keys), Path: path + "." + k.Name, Desc: k.Desc, Pos: k.Pos}
+			km.declPath = km.Path
 			if strings.TrimSpace(k.Desc) == "" {
 				bad(k.Pos, "key %s needs a description", km.Path)
 			}
@@ -458,6 +468,12 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			km.Getter = km.Field
 			km.Flag = joinDash(gm.flagPrefix, dashed(k.Name))
 			km.Env = prefix + "_" + strings.ToUpper(strings.ReplaceAll(km.Path, ".", "_"))
+			if !naming(km, k, app, bad, func(goName string) { km.Field = gm.Iface + goName; km.Getter = km.Field }) {
+				continue
+			}
+			if k.FileKey != "" {
+				km.Path = path + "." + k.FileKey
+			}
 			if reservedMethods[km.Getter] {
 				bad(k.Pos, "getter %s of %s is reserved for a method on command types; rename the key", km.Getter, km.Path)
 			}
@@ -483,11 +499,14 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 					km.Tags = append(km.Tags, t)
 				}
 			}
+			if !afterKind(km, k, app, prefix, bad) {
+				continue
+			}
 			for _, c := range []struct {
 				seen map[string]ir.Pos
 				name string
 				what string
-			}{{flags, km.Flag, "flag --"}, {envs, km.Env, "env var "}, {envs, fileEnv(km, km.Env), "env var "}, {fields, km.Field, "Go name "}, {paths, km.Path, "file key "}} {
+			}{{flags, km.Flag, "flag --"}, {shorts, km.Short, "short flag -"}, {envs, km.Env, "env var "}, {envs, fileEnv(km, km.Env), "env var "}, {fields, km.Field, "Go name "}, {paths, km.Path, "file key "}} {
 				if c.name == "" {
 					continue
 				}
@@ -576,15 +595,20 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	}
 	// A computed method can't share a name with a getter or another computed
 	// method in its group's interface, embedded groups included.
-	// Getters are unique, so any repeated name involves a computed method;
-	// check every group, since a nested group's computed method can clash
-	// with a getter or computed method of an ancestor.
+	// Two getters with one name (GoName) are reported as a Go name
+	// collision, so only repeats beyond the getters count; check every
+	// group, since a nested group's computed method can clash with a
+	// getter or computed method of an ancestor.
 	reported := map[string]bool{}
 	for _, gm := range m.Groups {
 		names := methodNames(gm)
+		getters := map[string]int{}
+		for _, k := range gm.AllKeys {
+			getters[k.Getter]++
+		}
 		sorted := make([]string, 0, len(names))
 		for name, n := range names {
-			if n > 1 && !reported[name] {
+			if n > 1 && n > getters[name] && !reported[name] {
 				sorted = append(sorted, name)
 			}
 		}
@@ -730,6 +754,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 
 		cmdFlags := map[string]ir.Pos{}
 		cmdGetters := map[string]ir.Pos{}
+		cmdShorts := map[string]ir.Pos{}
 		for _, idx := range cm.KeyIdx {
 			k := m.Keys[idx]
 			cmdFlags[k.Flag] = k.Pos
@@ -754,10 +779,29 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			if strings.TrimSpace(k.Desc) == "" {
 				bad(k.Pos, "key %s needs a description", km.Path)
 			}
+			km.declPath = km.Path
 			km.Getter = nm.pascal(k.Name)
 			km.Field = c.Name + km.Getter
 			km.Flag = dashed(k.Name)
 			km.Env = ""
+			switch {
+			case k.Env != "" || k.FileKey != "" || k.Sources != nil:
+				bad(k.Pos, "argument %s of %s is flag-only, so Env, Key and Sources don't apply", km.Path, c.Name)
+				continue
+			case !naming(km, k, app, bad, func(goName string) { km.Getter = goName; km.Field = c.Name + goName }):
+				continue
+			}
+			if km.Short != "" {
+				if km.Short == "h" {
+					bad(k.Pos, "short flag -h of %s collides with the built-in help flag", km.Path)
+				} else if prev, ok := shorts[km.Short]; ok {
+					bad(k.Pos, "short flag -%s of %s collides with another key's (declared at %s)", km.Short, km.Path, prev)
+				} else if prev, ok := cmdShorts[km.Short]; ok {
+					bad(k.Pos, "short flag -%s of %s collides with another flag on %s (declared at %s)", km.Short, km.Path, c.Name, prev)
+				}
+				cmdShorts[km.Short] = k.Pos
+			}
+			km.Hidden = k.Hidden
 
 			if reservedMethods[km.Getter] {
 				bad(k.Pos, "getter %s of %s is reserved for a method on command types; rename the key", km.Getter, km.Path)
@@ -860,7 +904,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 func checkRules(app *ir.App, m *Model, bad func(ir.Pos, string, ...any)) {
 	byPath := map[string]*KeyModel{}
 	for _, k := range m.Keys {
-		byPath[k.Path] = k
+		byPath[k.declPath] = k
 	}
 	for _, r := range app.Rules {
 		var keys []*KeyModel

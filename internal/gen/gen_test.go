@@ -245,6 +245,8 @@ func allKinds() *ir.App {
 				Validate: &ir.FuncRef{Path: "errors", Name: "New"}},
 			{Name: "cpus", Desc: "computed default", Kind: ir.KindInt, DefaultFunc: &ir.FuncRef{Path: "runtime", Name: "NumCPU"}},
 			{Name: "wait", Desc: "checked duration", Kind: ir.KindDuration, Checks: []ir.Check{{Kind: ir.CheckMin, Args: []string{"1500ms"}}}},
+			{Name: "nm", Desc: "renamed", Kind: ir.KindString, Short: "n", Flag: "name-flag", Env: "NAME_ENV", GoName: "Renamed", Hidden: true},
+			{Name: "fk", Desc: "env only, renamed in the file", Kind: ir.KindString, FileKey: "file_key", Sources: []string{"env"}},
 		}}},
 		Commands: []ir.Command{{Name: "Run", Uses: []string{"k"}}},
 	}
@@ -684,5 +686,26 @@ func TestFuncRefRules(t *testing.T) {
 	a.Groups[0].Keys = []ir.Key{{Name: "x", Desc: "x", Kind: ir.KindString, Checks: []ir.Check{{Kind: ir.CheckMin, Args: []string{"1"}}}}}
 	if _, err := Build(a, "settings"); err == nil || !strings.Contains(err.Error(), "Min, Max and Range need a number or duration key") {
 		t.Errorf("Min on a string: %v", err)
+	}
+}
+
+// Rules name keys by the path the schema declared, which Key changes only
+// in the config file.
+func TestRuleOnRenamedKey(t *testing.T) {
+	a := allKinds()
+	a.Groups[0].Keys = []ir.Key{
+		{Name: "a", Desc: "a", Kind: ir.KindString, FileKey: "alpha"},
+		{Name: "b", Desc: "b", Kind: ir.KindString},
+	}
+	a.Rules = []ir.Rule{{Kind: ir.RuleAtMostOne, Group: "k", Keys: []string{"k.a", "k.b"}}}
+	m, err := Build(a, "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Keys[0].Path != "k.alpha" || m.Keys[0].Env != "K_K_A" || m.Keys[0].Flag != "k-a" || m.Keys[0].Getter != "KA" {
+		t.Errorf("renamed key: %+v", m.Keys[0])
+	}
+	if len(m.Rules) != 1 || fmt.Sprint(m.Rules[0].Keys) != "[0 1]" {
+		t.Errorf("rules: %+v", m.Rules)
 	}
 }
