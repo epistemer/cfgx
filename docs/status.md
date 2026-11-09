@@ -4,6 +4,29 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M4.6 list and map keys
+
+- **Landed:**
+  - `dsl.Strings`, `dsl.Ints`, `dsl.Durations` and `dsl.StringMap`.
+  - A flag can repeat or take comma-separated items: `--tag a --tag b,c`.
+    Env vars are comma-separated, and the config file takes a real list or
+    map.
+  - Items are parsed as CSV, so `"a,b"` keeps its comma. Malformed input is
+    reported by cfgx with its source, never by pflag.
+  - The layer that sets a key replaces the whole list; layers never merge.
+  - Fuzzers cover the CSV splitter and the map parser.
+- **Reviewed:** Gemini 3.8 Flash (High) on the diff, about 295k tokens
+  ([review 0013](reviews/0013-gemini-m4.6-review.md)). No findings.
+- **Decided for you** (implementation.md §3.4):
+  - An empty item is allowed in `Strings` but rejected in `Ints` and
+    `Durations`, where it would quietly become 0.
+  - In a `StringMap`, a later item with the same key wins, so a script can
+    override `--label a=1` with a later `--label a=2`.
+  - An empty list or map is nil.
+- **Next:** M4.7 (`Text`), M4.8 (constraints and validators), M4.9 (naming
+  modifiers), M4.10 (completion).
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M4.5 path, file, URL and zone keys
 
 - **Landed:**
