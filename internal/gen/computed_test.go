@@ -135,7 +135,7 @@ func TestComputed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, src)
 	}
-	for _, want := range []string{`\trand2 "math/rand/v2"`, `\ttime "time"`, `\tDSN\(\) string\s+// computed`, `\tRetryPolicy\(\) \(time.Duration, error\)\s+// computed`} {
+	for _, want := range []string{`\trand2 "math/rand/v2"`, `\t"time"`, `\tDSN\(\) string\s+// computed`, `\tRetryPolicy\(\) \(time.Duration, error\)\s+// computed`} {
 		if !regexp.MustCompile(want).Match(src) {
 			t.Errorf("generated file lacks %s", want)
 		}

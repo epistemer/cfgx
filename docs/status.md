@@ -4,6 +4,28 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-09: M4.1 numeric and duration keys
+
+- **Landed:**
+  - New key types: `Int64`, `Uint`, `Float`, `Duration` (a unit is required)
+    and `ByteSize` (`512KB`, `1MiB`).
+  - Defaults are checked with the same parser as file values, and written
+    canonically: `5m0s` in `--help`, `5 * time.Minute` in the code.
+  - The DSL's key types now share one generic base, so each new kind takes a
+    few lines, and each key type still offers only its own modifiers.
+- **Reviewed:** Gemini 3.8 Flash (High) on the diff, about 190k tokens
+  ([review 0009](reviews/0009-gemini-m4.1-review.md)). One finding was fixed
+  (`+1` for a `Uint`); four were false positives, two of them disproved by
+  running Go.
+- **Decided for you:** the kind details in implementation.md §2.2a. Among
+  them: fractional sizes such as `1.5GB` are rejected in v0.1.0, and NaN and
+  infinities are rejected.
+- **Next:** M4.2 (`Enum`), then M4.4 and M4.5 (secrets and file-backed kinds),
+  M4.6 (lists and maps), M4.7, M4.8 (constraints and validators), M4.9 and
+  M4.10. With the kinds table in place, M4.5–M4.7 suit Gemini on a cheap
+  model.
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M5.7 generate-time checks
 
 - **Landed:**

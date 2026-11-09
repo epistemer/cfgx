@@ -209,6 +209,74 @@ func TestRules(t *testing.T) {
 	}
 }
 
+// allKinds has one key of every kind, with and without defaults.
+func allKinds() *ir.App {
+	return &ir.App{
+		Version: ir.Version, Name: "kinds", Desc: "Kinds", EnvPrefix: "K",
+		Groups: []ir.Group{{Name: "k", Desc: "Every kind", Keys: []ir.Key{
+			{Name: "s", Desc: "string", Kind: ir.KindString, Default: str("x")},
+			{Name: "b", Desc: "bool", Kind: ir.KindBool, Default: str("true")},
+			{Name: "i", Desc: "int", Kind: ir.KindInt, Default: str("-3")},
+			{Name: "i64", Desc: "int64", Kind: ir.KindInt64, Default: str("9223372036854775807")},
+			{Name: "u", Desc: "uint", Kind: ir.KindUint, Default: str("7")},
+			{Name: "f", Desc: "float", Kind: ir.KindFloat, Default: str("0.25")},
+			{Name: "d", Desc: "duration", Kind: ir.KindDuration, Default: str("300000000000ns")},
+			{Name: "d2", Desc: "odd duration", Kind: ir.KindDuration, Default: str("1500ms")},
+			{Name: "size", Desc: "bytesize", Kind: ir.KindByteSize, Default: str("1048576")},
+			{Name: "none", Desc: "no default", Kind: ir.KindDuration},
+		}}},
+		Commands: []ir.Command{{Name: "Run", Uses: []string{"k"}}},
+	}
+}
+
+func TestKindsGolden(t *testing.T) {
+	m, err := Build(allKinds(), "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := Render(m)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, src)
+	}
+	golden.Assert(t, filepath.Join("testdata", "kinds.golden"), src)
+	got := map[string][2]string{}
+	for _, k := range m.Keys {
+		got[k.Path] = [2]string{k.DefaultText, k.DefaultLit}
+	}
+	for path, want := range map[string][2]string{
+		"k.d":    {"5m0s", "5 * time.Minute"},
+		"k.d2":   {"1.5s", "1500 * time.Millisecond"},
+		"k.size": {"1MiB", "1048576"},
+		"k.f":    {"0.25", "0.25"},
+	} {
+		if got[path] != want {
+			t.Errorf("%s: got %q, want %q", path, got[path], want)
+		}
+	}
+}
+
+func TestKindDefaults(t *testing.T) {
+	for kind, bad := range map[ir.Kind]string{
+		ir.KindDuration: "30", ir.KindByteSize: "1.5MiB", ir.KindFloat: "NaN", ir.KindUint: "-1", ir.KindInt64: "x",
+	} {
+		a := allKinds()
+		a.Groups[0].Keys = []ir.Key{{Name: "x", Desc: "x", Kind: kind, Default: str(bad)}}
+		if _, err := Build(a, "settings"); err == nil || !strings.Contains(err.Error(), "default of k.x") {
+			t.Errorf("%s default %q: got %v", kind, bad, err)
+		}
+	}
+	// A zero duration default is allowed in exclusive rules.
+	a := allKinds()
+	a.Groups[0].Keys = []ir.Key{
+		{Name: "a", Desc: "a", Kind: ir.KindDuration, Default: str("0s")},
+		{Name: "b", Desc: "b", Kind: ir.KindDuration},
+	}
+	a.Rules = []ir.Rule{{Kind: ir.RuleAtMostOne, Group: "k", Keys: []string{"k.a", "k.b"}}}
+	if _, err := Build(a, "settings"); err != nil {
+		t.Error(err)
+	}
+}
+
 func TestLowerGo(t *testing.T) {
 	for in, want := range map[string]string{"DB": "db", "HTTPServer": "httpServer", "Mail": "mail", "MyDB": "myDB", "X": "x",
 		"DB1": "db1", "HTTP2": "http2", "HTTP2Server": "http2Server", "S3Bucket": "s3Bucket"} {
@@ -248,7 +316,7 @@ func TestChecks(t *testing.T) {
 		{"unknown group", func(a *ir.App) { a.Commands[0].Uses = append(a.Commands[0].Uses, "nope") }, `"nope", which isn't in the dsl.App`},
 		{"bad command name", func(a *ir.App) { a.Commands[0].Name = "serve" }, "exported Go identifier"},
 		{"command collides with group", func(a *ir.App) { a.Commands[0].Name = "Database" }, "collides"},
-		{"bad int default", func(a *ir.App) { a.Groups[0].Keys[1].Default = str("x") }, "isn't an int"},
+		{"bad int default", func(a *ir.App) { a.Groups[0].Keys[1].Default = str("x") }, `default of database.port: "x" is not an integer`},
 		{"bad env prefix", func(a *ir.App) { a.EnvPrefix = "demo" }, "env prefix"},
 		{"reserved getter", func(a *ir.App) {
 			a.Groups = append(a.Groups, ir.Group{Name: "on", Desc: "x", Keys: []ir.Key{{Name: "change", Desc: "x", Kind: ir.KindBool}}})
@@ -491,6 +559,7 @@ func TestGeneratedCodeCompiles(t *testing.T) {
 		"no config file": func(a *ir.App) { a.ConfigFile = ""; a.SearchPaths = nil; a.Global = nil },
 		"formats":        func(a *ir.App) { a.Formats = []string{"json"}; a.SearchPaths = nil },
 		"nested":         func(a *ir.App) { *a = *nested() },
+		"kinds":          func(a *ir.App) { *a = *allKinds() },
 		"no commands":    func(a *ir.App) { a.Commands = nil },
 		"no groups": func(a *ir.App) {
 			a.Groups = nil
