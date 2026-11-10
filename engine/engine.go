@@ -95,6 +95,12 @@ type Key[V any] struct {
 	// back to the same value: what a typed write stores. Mutable keys
 	// have it.
 	Format func(v *V) (string, error)
+	// Kind, Schema and Tags describe the key to the store's admin API:
+	// its kind (int, duration, enum, ...), the JSON Schema of its value,
+	// and its tags. Apps with a store have them.
+	Kind   string
+	Schema string
+	Tags   []string
 	// Complete is how the flag's value completes in the shell; nil means an
 	// enum's values, or else the shell's default, file names.
 	Complete *Completion

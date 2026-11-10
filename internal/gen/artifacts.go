@@ -35,6 +35,18 @@ func Artifacts(m *Model) (map[string][]byte, error) {
 	if env := a.envExample(); env != nil {
 		out[".env.example"] = env
 	}
+	if m.StoreAlias != "" {
+		// The admin API describes each key's value to forms.
+		for _, k := range m.Keys {
+			var b strings.Builder
+			enc := json.NewEncoder(&b)
+			enc.SetEscapeHTML(false)
+			if err := enc.Encode(keySchema(k, false)); err != nil {
+				return nil, err
+			}
+			k.Schema = strings.TrimSuffix(b.String(), "\n")
+		}
+	}
 	out["docs/CONFIG.md"] = a.configMD()
 	lock, err := Lock(m.app)
 	if err != nil {
@@ -332,8 +344,9 @@ const (
 	sizePattern     = `^\s*[0-9]+\s*([bB]|[kKmMgGtTpP][iI]?[bB])?\s*$`
 )
 
-// keySchema is a key's JSON Schema.
-func keySchema(k *KeyModel) map[string]any {
+// keySchema is a key's JSON Schema. In the config file, null means absent,
+// so nullable allows it.
+func keySchema(k *KeyModel, nullable bool) map[string]any {
 	s := map[string]any{}
 	str := func() { s["type"] = "string" }
 	scalarItem := map[string]any{"type": []string{"string", "number", "boolean"}}
@@ -390,6 +403,7 @@ func keySchema(k *KeyModel) map[string]any {
 	}
 	// A null value counts as absent, as an uncommented "key:" is.
 	switch {
+	case !nullable:
 	case s["type"] != nil:
 		s["type"] = []any{s["type"], "null"}
 	case s["anyOf"] != nil:
@@ -430,7 +444,7 @@ func (a *artifacts) jsonSchema() ([]byte, error) {
 				props[c.name] = o
 				continue
 			}
-			props[c.name] = keySchema(c.key)
+			props[c.name] = keySchema(c.key, true)
 		}
 		return map[string]any{"type": "object", "properties": props, "additionalProperties": false}
 	}
@@ -441,7 +455,7 @@ func (a *artifacts) jsonSchema() ([]byte, error) {
 			continue
 		}
 		for _, al := range k.Aliases {
-			ks := keySchema(k)
+			ks := keySchema(k, true)
 			ks["deprecated"] = true
 			ks["description"] = fmt.Sprintf("Deprecated: use %s. %s", k.Path, k.Desc)
 			delete(ks, "default")

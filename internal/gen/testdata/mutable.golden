@@ -70,6 +70,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:   func(v *values) bool { return v.KS != "" },
 		Show:    func(v *values) any { return v.KS },
 		Format:  func(v *values) (string, error) { return v.KS, nil },
+		Kind:    "string",
+		Schema:  `{"default":"x","description":"string","type":"string"}`,
 		Default: func(v *values) { v.KS = "x" },
 	},
 	{
@@ -79,6 +81,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:   func(v *values) bool { return v.KB },
 		Show:    func(v *values) any { return v.KB },
 		Format:  func(v *values) (string, error) { return engine.FormatBool(v.KB), nil },
+		Kind:    "bool",
+		Schema:  `{"default":true,"description":"bool","type":"boolean"}`,
 		Default: func(v *values) { v.KB = true },
 	},
 	{
@@ -88,6 +92,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:   func(v *values) bool { return v.KI != 0 },
 		Show:    func(v *values) any { return v.KI },
 		Format:  func(v *values) (string, error) { return engine.FormatInt(v.KI), nil },
+		Kind:    "int",
+		Schema:  `{"default":-3,"description":"int","type":"integer"}`,
 		Default: func(v *values) { v.KI = -3 },
 	},
 	{
@@ -97,6 +103,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:   func(v *values) bool { return v.KI64 != 0 },
 		Show:    func(v *values) any { return v.KI64 },
 		Format:  func(v *values) (string, error) { return engine.FormatInt64(v.KI64), nil },
+		Kind:    "int64",
+		Schema:  `{"default":9223372036854775807,"description":"int64","type":"integer"}`,
 		Default: func(v *values) { v.KI64 = 9223372036854775807 },
 	},
 	{
@@ -106,6 +114,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:   func(v *values) bool { return v.KU != 0 },
 		Show:    func(v *values) any { return v.KU },
 		Format:  func(v *values) (string, error) { return engine.FormatUint(v.KU), nil },
+		Kind:    "uint",
+		Schema:  `{"default":7,"description":"uint","minimum":0,"type":"integer"}`,
 		Default: func(v *values) { v.KU = 7 },
 	},
 	{
@@ -115,6 +125,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:   func(v *values) bool { return v.KF != 0 },
 		Show:    func(v *values) any { return v.KF },
 		Format:  func(v *values) (string, error) { return engine.FormatFloat(v.KF), nil },
+		Kind:    "float",
+		Schema:  `{"default":0.25,"description":"float","type":"number"}`,
 		Default: func(v *values) { v.KF = 0.25 },
 	},
 	{
@@ -124,6 +136,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:   func(v *values) bool { return v.KD != 0 },
 		Show:    func(v *values) any { return v.KD.String() },
 		Format:  func(v *values) (string, error) { return engine.FormatDuration(v.KD), nil },
+		Kind:    "duration",
+		Schema:  `{"anyOf":[{"pattern":"^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$","type":"string"},{"const":0}],"default":"5m0s","description":"duration"}`,
 		Default: func(v *values) { v.KD = 5 * time.Minute },
 	},
 	{
@@ -133,6 +147,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:   func(v *values) bool { return v.KD2 != 0 },
 		Show:    func(v *values) any { return v.KD2.String() },
 		Format:  func(v *values) (string, error) { return engine.FormatDuration(v.KD2), nil },
+		Kind:    "duration",
+		Schema:  `{"anyOf":[{"pattern":"^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$","type":"string"},{"const":0}],"default":"1.5s","description":"odd duration"}`,
 		Default: func(v *values) { v.KD2 = 1500 * time.Millisecond },
 	},
 	{
@@ -142,6 +158,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:   func(v *values) bool { return v.KSize != 0 },
 		Show:    func(v *values) any { return engine.FormatByteSize(v.KSize) },
 		Format:  func(v *values) (string, error) { return engine.FormatByteSize(v.KSize), nil },
+		Kind:    "bytesize",
+		Schema:  `{"anyOf":[{"minimum":0,"type":"integer"},{"pattern":"^\\s*[0-9]+\\s*([bB]|[kKmMgGtTpP][iI]?[bB])?\\s*$","type":"string"}],"default":"1MiB","description":"bytesize"}`,
 		Default: func(v *values) { v.KSize = 1048576 },
 	},
 	{
@@ -151,20 +169,26 @@ var keys = [...]engine.Key[values]{
 		IsSet:  func(v *values) bool { return v.KNone != 0 },
 		Show:   func(v *values) any { return v.KNone.String() },
 		Format: func(v *values) (string, error) { return engine.FormatDuration(v.KNone), nil },
+		Kind:   "duration",
+		Schema: `{"anyOf":[{"pattern":"^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$","type":"string"},{"const":0}],"description":"no default"}`,
 	},
 	{
 		Path: "k.path", Env: "K_K_PATH", Flag: "k-path",
 		Type: "path", Desc: "path", DefaultText: "data//app.db", Quote: true, Resolve: true,
-		Set:   func(v *values, raw string) error { return engine.ParsePath(raw, &v.KPath) },
-		IsSet: func(v *values) bool { return v.KPath != "" },
-		Show:  func(v *values) any { return v.KPath },
+		Set:    func(v *values, raw string) error { return engine.ParsePath(raw, &v.KPath) },
+		IsSet:  func(v *values) bool { return v.KPath != "" },
+		Show:   func(v *values) any { return v.KPath },
+		Kind:   "path",
+		Schema: `{"default":"data//app.db","description":"path","type":"string"}`,
 	},
 	{
 		Path: "k.file", Env: "K_K_FILE", Flag: "k-file",
 		Type: "file", Desc: "file", DefaultText: "ca.pem", Quote: true, File: true, MaxFileSize: 16777216,
-		Set:   func(v *values, raw string) error { return engine.ParseBytes(raw, &v.KFile) },
-		IsSet: func(v *values) bool { return len(v.KFile) != 0 },
-		Show:  func(v *values) any { return engine.ShowBytes(v.KFile) },
+		Set:    func(v *values, raw string) error { return engine.ParseBytes(raw, &v.KFile) },
+		IsSet:  func(v *values) bool { return len(v.KFile) != 0 },
+		Show:   func(v *values) any { return engine.ShowBytes(v.KFile) },
+		Kind:   "file",
+		Schema: `{"default":"ca.pem","description":"file","type":"string"}`,
 	},
 	{
 		Path: "k.url", Env: "K_K_URL", Flag: "k-url",
@@ -173,6 +197,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:  func(v *values) bool { return v.KURL != nil },
 		Show:   func(v *values) any { return engine.ShowURL(v.KURL) },
 		Format: func(v *values) (string, error) { return engine.FormatURL(v.KURL), nil },
+		Kind:   "url",
+		Schema: `{"default":"https://example.com/x","description":"url","format":"uri","type":"string"}`,
 	},
 	{
 		Path: "k.loc", Env: "K_K_LOC", Flag: "k-loc",
@@ -181,6 +207,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:  func(v *values) bool { return v.KLoc != nil },
 		Show:   func(v *values) any { return engine.ShowLocation(v.KLoc) },
 		Format: func(v *values) (string, error) { return engine.FormatLocation(v.KLoc), nil },
+		Kind:   "location",
+		Schema: `{"default":"UTC","description":"location","type":"string"}`,
 	},
 	{
 		Path: "k.url2", Env: "K_K_URL2", Flag: "k-url2",
@@ -189,6 +217,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:  func(v *values) bool { return v.KUrl2 != nil },
 		Show:   func(v *values) any { return engine.ShowURL(v.KUrl2) },
 		Format: func(v *values) (string, error) { return engine.FormatURL(v.KUrl2), nil },
+		Kind:   "url",
+		Schema: `{"description":"url without default","format":"uri","type":"string"}`,
 	},
 	{
 		Path: "k.tags", Env: "K_K_TAGS", Flag: "k-tags",
@@ -197,6 +227,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:    func(v *values) bool { return len(v.KTags) != 0 },
 		Show:     func(v *values) any { return v.KTags },
 		Format:   func(v *values) (string, error) { return engine.FormatStrings(v.KTags), nil },
+		Kind:     "strings",
+		Schema:   `{"anyOf":[{"items":{"type":["string","number","boolean"]},"type":"array"},{"type":"string"}],"default":["a","b,c",""],"description":"strings"}`,
 		Default:  func(v *values) { v.KTags = []string{"a", "b,c", ""} },
 	},
 	{
@@ -206,6 +238,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:    func(v *values) bool { return len(v.KPorts) != 0 },
 		Show:     func(v *values) any { return v.KPorts },
 		Format:   func(v *values) (string, error) { return engine.FormatInts(v.KPorts), nil },
+		Kind:     "ints",
+		Schema:   `{"anyOf":[{"items":{"type":"integer"},"type":"array"},{"type":"string"}],"default":[80,443],"description":"ints"}`,
 		Default:  func(v *values) { v.KPorts = []int{80, 443} },
 	},
 	{
@@ -215,6 +249,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:    func(v *values) bool { return len(v.KBackoff) != 0 },
 		Show:     func(v *values) any { return engine.ShowDurations(v.KBackoff) },
 		Format:   func(v *values) (string, error) { return engine.FormatDurations(v.KBackoff), nil },
+		Kind:     "durations",
+		Schema:   `{"anyOf":[{"items":{"anyOf":[{"pattern":"^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$","type":"string"},{"const":0}]},"type":"array"},{"type":"string"}],"default":["1s","1m0s"],"description":"durations"}`,
 		Default:  func(v *values) { v.KBackoff = []time.Duration{1 * time.Second, 1 * time.Minute} },
 	},
 	{
@@ -224,6 +260,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:    func(v *values) bool { return len(v.KLabels) != 0 },
 		Show:     func(v *values) any { return v.KLabels },
 		Format:   func(v *values) (string, error) { return engine.FormatStringMap(v.KLabels) },
+		Kind:     "stringmap",
+		Schema:   `{"anyOf":[{"additionalProperties":{"type":["string","number","boolean"]},"type":"object"},{"type":"string"}],"default":{"a":"x=y","b":"2"},"description":"stringmap"}`,
 		Default:  func(v *values) { v.KLabels = map[string]string{"a": "x=y", "b": "2"} },
 	},
 	{
@@ -233,6 +271,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:    func(v *values) bool { return len(v.KNone2) != 0 },
 		Show:     func(v *values) any { return v.KNone2 },
 		Format:   func(v *values) (string, error) { return engine.FormatStrings(v.KNone2), nil },
+		Kind:     "strings",
+		Schema:   `{"anyOf":[{"items":{"type":["string","number","boolean"]},"type":"array"},{"type":"string"}],"description":"empty list"}`,
 		Default:  func(v *values) { v.KNone2 = nil },
 	},
 	{
@@ -242,6 +282,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:  func(v *values) bool { return engine.NonZero(v.KCidr) },
 		Show:   func(v *values) any { return engine.ShowText(v.KCidr) },
 		Format: func(v *values) (string, error) { return engine.FormatText(v.KCidr) },
+		Kind:   "text",
+		Schema: `{"default":"10.0.0.0/8","description":"text","type":"string"}`,
 	},
 	{
 		Path: "k.port", Env: "K_K_PORT", Flag: "k-port",
@@ -250,6 +292,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:  func(v *values) bool { return v.KPort != 0 },
 		Show:   func(v *values) any { return v.KPort },
 		Format: func(v *values) (string, error) { return engine.FormatInt(v.KPort), nil },
+		Kind:   "int",
+		Schema: `{"default":80,"description":"checked int","maximum":65535,"minimum":1,"type":"integer"}`,
 		Check: func(v *values) error {
 			if err := engine.AtLeast(v.KPort, 1, "1"); err != nil {
 				return err
@@ -268,6 +312,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:  func(v *values) bool { return v.KName != "" },
 		Show:   func(v *values) any { return v.KName },
 		Format: func(v *values) (string, error) { return v.KName, nil },
+		Kind:   "string",
+		Schema: `{"description":"checked string","maxLength":8,"minLength":1,"pattern":"^(?:[a-z]+)$","type":"string"}`,
 		Check: func(v *values) error {
 			if err := engine.Length(v.KName, 1, 8); err != nil {
 				return err
@@ -285,6 +331,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:       func(v *values) bool { return v.KCpus != 0 },
 		Show:        func(v *values) any { return v.KCpus },
 		Format:      func(v *values) (string, error) { return engine.FormatInt(v.KCpus), nil },
+		Kind:        "int",
+		Schema:      `{"description":"computed default","type":"integer"}`,
 		DefaultFrom: "runtime.NumCPU",
 		Default:     func(v *values) { v.KCpus = runtime.NumCPU() },
 	},
@@ -295,6 +343,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:  func(v *values) bool { return v.KWait != 0 },
 		Show:   func(v *values) any { return v.KWait.String() },
 		Format: func(v *values) (string, error) { return engine.FormatDuration(v.KWait), nil },
+		Kind:   "duration",
+		Schema: `{"anyOf":[{"pattern":"^([-+]?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)(ns|us|µs|ms|s|m|h))+$|^0$","type":"string"},{"const":0}],"description":"checked duration"}`,
 		Check: func(v *values) error {
 			if err := engine.AtLeast(v.KWait, 1500*time.Millisecond, "1.5s"); err != nil {
 				return err
@@ -309,6 +359,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:    func(v *values) bool { return v.KRenamed != "" },
 		Show:     func(v *values) any { return v.KRenamed },
 		Format:   func(v *values) (string, error) { return v.KRenamed, nil },
+		Kind:     "string",
+		Schema:   `{"description":"renamed","type":"string"}`,
 		Complete: &engine.Completion{Exts: []string{"pem", "crt"}},
 	},
 	{
@@ -318,6 +370,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:    func(v *values) bool { return v.KDir != "" },
 		Show:     func(v *values) any { return v.KDir },
 		Format:   func(v *values) (string, error) { return v.KDir, nil },
+		Kind:     "path",
+		Schema:   `{"description":"directory","type":"string"}`,
 		Complete: &engine.Completion{Dirs: true},
 	},
 	{
@@ -327,6 +381,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:  func(v *values) bool { return v.KFk != "" },
 		Show:   func(v *values) any { return v.KFk },
 		Format: func(v *values) (string, error) { return v.KFk, nil },
+		Kind:   "string",
+		Schema: `{"description":"env only, renamed in the file","type":"string"}`,
 	},
 	{
 		Path: "k.day", Env: "K_K_DAY", Flag: "k-day",
@@ -337,6 +393,8 @@ var keys = [...]engine.Key[values]{
 		IsSet:  func(v *values) bool { return v.KDay != 0 },
 		Show:   func(v *values) any { return engine.ShowEnum(v.KDay, enumTextsKDay, enumValuesKDay) },
 		Format: func(v *values) (string, error) { return engine.FormatEnum(v.KDay, enumTextsKDay, enumValuesKDay) },
+		Kind:   "enum",
+		Schema: `{"description":"enum","enum":["sunday","monday"]}`,
 	},
 }
 

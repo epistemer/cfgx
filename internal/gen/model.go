@@ -73,6 +73,8 @@ type KeyModel struct {
 	IsSet                    string // Go expression on v: is the value non-zero?
 	Show                     string // Go expression on v: the value for config print
 	Format                   string // Go expression on v of (string, error): its canonical text
+	Kind                     string // the IR kind, for the store's admin API
+	Schema                   string // JSON Schema of the value, for the admin API (apps with a store)
 	HasDefault               bool
 	DefaultText, DefaultLit  string
 	Quote, Bool              bool
@@ -498,7 +500,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			}
 			seen[k.Name] = true
 			km := &KeyModel{Index: len(m.Keys), Path: path + "." + k.Name, Desc: k.Desc, Pos: k.Pos}
-			km.declPath, km.ir = km.Path, k
+			km.declPath, km.ir, km.Kind = km.Path, k, string(k.Kind)
 			if strings.TrimSpace(k.Desc) == "" {
 				bad(k.Pos, "key %s needs a description", km.Path)
 			}
@@ -864,7 +866,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			if strings.TrimSpace(k.Desc) == "" {
 				bad(k.Pos, "key %s needs a description", km.Path)
 			}
-			km.declPath, km.ir = km.Path, k
+			km.declPath, km.ir, km.Kind = km.Path, k, string(k.Kind)
 			km.Getter = nm.pascal(k.Name)
 			km.Field = c.Name + km.Getter
 			km.Flag = dashed(k.Name)

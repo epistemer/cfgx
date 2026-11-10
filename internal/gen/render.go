@@ -116,6 +116,13 @@ var keys = [...]engine.Key[values]{
 		{{- if .Mutable}}
 		Format: func(v *values) (string, error) { return {{.Format}} },
 		{{- end}}
+		{{- if $.StoreAlias}}
+		Kind: {{printf "%q" .Kind}},
+		{{- if .Tags}} Tags: []string{ {{- range $i, $t := .Tags}}{{if $i}}, {{end}}{{printf "%q" $t}}{{end -}} },{{end}}
+		{{- if .Schema}}
+		Schema: {{lit .Schema}},
+		{{- end}}
+		{{- end}}
 		{{- if or .Checks .Validate}}
 		Check: func(v *values) error {
 		{{- range .Checks}}
