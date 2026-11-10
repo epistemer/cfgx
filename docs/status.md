@@ -4,6 +4,20 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-11: v0.1.0 released; M9 complete
+
+- **Landed:** [CHANGELOG.md](../CHANGELOG.md), then the `v0.1.0` tag.
+  `go install github.com/epistemer/cfgx/cmd/cfgx@v0.1.0` works through the
+  module proxy. Every roadmap item through M9 is done.
+- **Decided by you:** tag v0.1.0 as is. The API proposals P1–P8 in
+  [api-review.md](api-review.md) stay open for a later release,
+  including the three I recommended (P2, P6, P7).
+- **Next:** nothing on the roadmap. The ordered backlog after v0.1.0 is
+  in the roadmap; Argon High's milestone reviews of M3, M4 and M7 can run
+  once its quota is back, around 2026-11-14.
+- **Waiting on you:** whether to take up any API proposals, and when to
+  call it v1.0.0.
+
 ## 2026-11-11: M9.4 docs and README
 
 - **Landed:** a new README. It says what cfgx does and has a quickstart
