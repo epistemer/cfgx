@@ -4,7 +4,8 @@ go build -o cfgx$exe github.com/epistemer/cfgx/cmd/cfgx
 mkdir hello
 cd hello
 exec ../cfgx$exe init -cfgx $CFGX_ROOT example.com/hello
-stdout '^Created example.com/hello\. Next: go build \. && \./hello serve\r?$'
+stdout '^Created example.com/hello\. Next: \./hello serve\r?$'
+exists hello$exe
 exists go.mod go.sum .gitignore README.md main.go serve.go internal/settings/zz_settings.go internal/logging/logging.go
 exists hello.example.yaml hello.schema.json docs/CONFIG.md cfgx.lock.json
 grep '^tool github.com/epistemer/cfgx/cmd/cfgx$' go.mod
@@ -27,7 +28,7 @@ stderr 'level=warning msg="unknown key \\"servr\\" in hello.yaml:1:1; did you me
 
 # A second init refuses, and changes nothing.
 ! exec ../cfgx$exe init example.com/hello
-stderr 'refusing to overwrite go.mod, .gitignore, README.md'
+stderr 'refusing to overwrite go.mod, go.sum, internal/settings/zz_settings.go, hello.example.yaml'
 
 -- files/hello.yaml --
 servr:

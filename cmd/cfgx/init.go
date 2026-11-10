@@ -17,6 +17,8 @@ import (
 	"sort"
 	"strings"
 	"text/template"
+
+	modmodule "golang.org/x/mod/module"
 )
 
 // skeleton holds the files cfgx init writes (ADR 0007), as templates.
@@ -39,13 +41,16 @@ var majorRE = regexp.MustCompile(`^v[0-9]+$`)
 // newInitData derives the names from a module path: the program is named
 // after its last element, as go build names it.
 func newInitData(module string) (initData, error) {
-	if module == "" || strings.ContainsAny(module, " \t\\") || strings.HasPrefix(module, "/") || strings.HasSuffix(module, "/") {
-		return initData{}, fmt.Errorf("%q isn't a module path, such as example.com/hello", module)
+	if err := modmodule.CheckImportPath(module); err != nil {
+		return initData{}, fmt.Errorf("%q isn't a module path, such as example.com/hello: %v", module, err)
 	}
 	elems := strings.Split(module, "/")
 	bin := elems[len(elems)-1]
 	if len(elems) > 1 && majorRE.MatchString(bin) {
 		bin = elems[len(elems)-2]
+	}
+	if bin == "" || bin == "." || bin == ".." {
+		return initData{}, fmt.Errorf("%q has no name for the program", module)
 	}
 	// The app's name gives the env prefix: lower-case letters and digits,
 	// in words joined by single dashes, starting with a letter.
@@ -126,13 +131,16 @@ func initModule(ctx context.Context, module, local string, stdout, stderr io.Wri
 	if err != nil {
 		return err
 	}
-	paths := make([]string, 0, len(files)+1)
+	paths := make([]string, 0, len(files))
 	for p := range files {
 		paths = append(paths, p)
 	}
 	sort.Strings(paths)
+	// What go mod and cfgx gen write, too.
+	made := []string{"go.mod", "go.sum", "internal/settings/zz_settings.go", d.Bin + ".example.yaml",
+		d.Bin + ".schema.json", ".env.example", "docs/CONFIG.md", "cfgx.lock.json"}
 	var exist []string
-	for _, p := range append([]string{"go.mod"}, paths...) {
+	for _, p := range append(made, paths...) {
 		if _, err := os.Lstat(filepath.FromSlash(p)); err == nil {
 			exist = append(exist, p)
 		} else if !errors.Is(err, fs.ErrNotExist) {
@@ -147,6 +155,17 @@ func initModule(ctx context.Context, module, local string, stdout, stderr io.Wri
 			return err
 		}
 	}
+	// If a step fails, everything init made goes, so it can run again.
+	before, err := tree(".")
+	if err != nil {
+		return err
+	}
+	done := false
+	defer func() {
+		if !done {
+			undo(before)
+		}
+	}()
 	for _, p := range paths {
 		f := filepath.FromSlash(p)
 		if err := os.MkdirAll(filepath.Dir(f), 0o755); err != nil {
@@ -160,7 +179,7 @@ func initModule(ctx context.Context, module, local string, stdout, stderr io.Wri
 	if local != "" {
 		steps = append(steps, []string{"mod", "edit",
 			"-require=" + cfgxModule + "@v0.0.0-00010101000000-000000000000",
-			"-replace=" + cfgxModule + "=" + local,
+			"-replace=" + cfgxModule + "=" + filepath.ToSlash(local),
 			"-tool=" + cfgxModule + "/cmd/cfgx"})
 	} else {
 		steps = append(steps, []string{"get", "-tool", cfgxModule + "/cmd/cfgx@" + cfgxVersion()})
@@ -169,7 +188,7 @@ func initModule(ctx context.Context, module, local string, stdout, stderr io.Wri
 		[]string{"mod", "tidy"},
 		[]string{"generate", "./..."},
 		[]string{"mod", "tidy"},
-		[]string{"build", "./..."},
+		[]string{"build", "."},
 	)
 	for _, s := range steps {
 		fmt.Fprintln(stderr, "go", strings.Join(s, " "))
@@ -179,8 +198,36 @@ func initModule(ctx context.Context, module, local string, stdout, stderr io.Wri
 			return fmt.Errorf("go %s: %v", strings.Join(s, " "), err)
 		}
 	}
-	fmt.Fprintf(stdout, "Created %s. Next: go build . && ./%s serve\n", module, d.Bin)
+	done = true
+	fmt.Fprintf(stdout, "Created %s. Next: ./%s serve\n", module, d.Bin)
 	return nil
+}
+
+// tree lists every path under dir.
+func tree(dir string) (map[string]bool, error) {
+	out := map[string]bool{}
+	err := filepath.WalkDir(dir, func(p string, _ fs.DirEntry, err error) error {
+		if err == nil {
+			out[p] = true
+		}
+		return err
+	})
+	return out, err
+}
+
+// undo removes what isn't in before, deepest first.
+func undo(before map[string]bool) {
+	after, _ := tree(".")
+	var made []string
+	for p := range after {
+		if !before[p] {
+			made = append(made, p)
+		}
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(made)))
+	for _, p := range made {
+		os.Remove(p)
+	}
 }
 
 // cfgxVersion is the version of the running cfgx, which the new module

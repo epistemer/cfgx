@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"net"
 	"net/http"
 
 	"github.com/sirupsen/logrus"
@@ -19,10 +19,14 @@ func serve(ctx context.Context, s settings.Server, log *logrus.Logger) error {
 	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprintln(w, "hello from {{.Bin}}")
 	})
-	srv := &http.Server{Addr: s.ServerAddr(), Handler: mux}
+	ln, err := net.Listen("tcp", s.ServerAddr())
+	if err != nil {
+		return err
+	}
+	srv := &http.Server{Handler: mux}
 	errc := make(chan error, 1)
-	go func() { errc <- srv.ListenAndServe() }()
-	log.WithField("addr", s.ServerAddr()).Info("listening")
+	go func() { errc <- srv.Serve(ln) }()
+	log.WithField("addr", ln.Addr().String()).Info("listening")
 	select {
 	case err := <-errc:
 		return err
@@ -31,8 +35,5 @@ func serve(ctx context.Context, s settings.Server, log *logrus.Logger) error {
 	log.Info("shutting down")
 	sctx, cancel := context.WithTimeout(context.Background(), s.ServerShutdownTimeout())
 	defer cancel()
-	if err := srv.Shutdown(sctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		return err
-	}
-	return nil
+	return srv.Shutdown(sctx)
 }

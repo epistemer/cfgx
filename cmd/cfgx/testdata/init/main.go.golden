@@ -20,8 +20,12 @@ import (
 
 func main() {
 	// Interrupt or SIGTERM cancels the context, so commands can stop
-	// cleanly.
+	// cleanly; a second one stops the program at once.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
 	err := newRoot().ExecuteContext(ctx)
 	stop()
 	if err != nil {

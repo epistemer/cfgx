@@ -52,7 +52,7 @@ func TestInitNames(t *testing.T) {
 			t.Errorf("%s: %+v, %v; want %+v", module, d, err, want)
 		}
 	}
-	for _, bad := range []string{"", "/abs", "a b", "trailing/"} {
+	for _, bad := range []string{"", "/abs", "a b", "trailing/", `example.com/foo"bar`, "example.com//v2", "example.com/a\nb"} {
 		if _, err := newInitData(bad); err == nil {
 			t.Errorf("%q accepted", bad)
 		}
@@ -77,5 +77,23 @@ func TestInitRefuses(t *testing.T) {
 	}
 	if code := initCmd(context.Background(), nil, &out, &errb); code != 2 {
 		t.Errorf("no module path: exit %d", code)
+	}
+}
+
+// A failed step removes what init made, so it can run again.
+func TestInitUndo(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	if err := os.WriteFile("notes.txt", []byte("mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", "") // no go command: the first step fails
+	var out, errb bytes.Buffer
+	if code := initCmd(context.Background(), []string{"example.com/hello"}, &out, &errb); code != 1 || !strings.Contains(errb.String(), "go mod init") {
+		t.Errorf("exit %d: %s", code, errb.String())
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 || entries[0].Name() != "notes.txt" {
+		t.Errorf("left %v", entries)
 	}
 }
