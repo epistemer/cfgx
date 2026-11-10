@@ -1,0 +1,282 @@
+# M7.9: a server exposes a small admin endpoint over Store(). An update
+# through it fires OnChange and survives a restart; a stored value that
+# hides an env var says so; an invalid stored value falls back; the app's
+# own bucket lives in the same file; an epoch bump discards stored values.
+go generate ./...
+go build -o app$exe .
+
+# An update through the endpoint is validated, stored and reported to
+# OnChange; the app keeps its own bucket in the same file.
+exec ./app$exe serve &
+exec ./app$exe client GET /settings/rate.limit
+stdout '^100 default\r?$'
+exec ./app$exe client PUT /settings/rate.limit 250
+stdout '^ok\r?$'
+exec ./app$exe client GET /settings/rate.limit
+stdout '^250 store\r?$'
+! exec ./app$exe client PUT /settings/rate.limit -- -1
+stderr 'rate.limit: must be at least 1'
+exec ./app$exe client GET /own
+stdout '^world\r?$'
+exec ./app$exe client POST /quit
+wait
+stdout 'changed \[rate.limit\] to 250'
+! stdout 'to -1'
+
+# The value survives a restart of the server, and so does the app's bucket.
+rm addr.txt
+exec ./app$exe serve &
+exec ./app$exe client GET /settings/rate.limit
+stdout '^250 store\r?$'
+exec ./app$exe client GET /own
+stdout '^world\r?$'
+exec ./app$exe client POST /quit
+wait
+
+# A stored value that no longer parses is ignored, and the default applies.
+exec ./app$exe inject rate.limit abc
+exec ./app$exe show
+stdout '^limit 100\r?$'
+stderr 'rate.limit: the stored value is ignored \("abc" is not an integer\); using the default'
+
+# A release that bumps the key's epoch moves the value stored through the
+# endpoint to history, once, and the default applies.
+rm addr.txt
+exec ./app$exe serve &
+exec ./app$exe client PUT /settings/rate.limit 300
+exec ./app$exe client POST /quit
+wait
+exec ./app$exe show
+stdout '^limit 300\r?$'
+cp files/schema_epoch.go internal/settings/schema/schema.go
+go generate ./...
+go build -o app$exe .
+exec ./app$exe show --history
+stdout '^limit 100\r?$'
+stdout '^history: reset by cfgx \(epoch 1 discards values from epoch 0\), 300 by admin\r?$'
+stderr 'rate.limit: the stored value 300 is from epoch 0, and the key is at epoch 1 now; it moves to history, using the default'
+exec ./app$exe show
+stdout '^limit 100\r?$'
+! stderr epoch
+
+# A stored value that hides an env var says so at startup.
+rm addr.txt
+exec ./app$exe serve &
+exec ./app$exe client PUT /settings/rate.limit 250
+exec ./app$exe client POST /quit
+wait
+env APP_RATE_LIMIT=120
+exec ./app$exe show
+stdout '^limit 250\r?$'
+stderr 'rate.limit: stored value 250 \(admin, \d{4}-\d\d-\d\d\) overrides env APP_RATE_LIMIT=120'
+
+-- files/schema_epoch.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var bolt = dsl.Path("bolt", "Store file").Default("app.db")
+
+var Storage = dsl.Group("storage", "Storage", bolt)
+
+var Rate = dsl.Group("rate", "Rate limits",
+	dsl.Int("limit", "Requests per second").Default(100).Min(1).Mutable().Epoch(1),
+)
+
+var App = dsl.App("app", "Test app", Storage, Rate).Store(bolt)
+
+var (
+	Serve = dsl.Command("Serve").Uses(Rate)
+	Show  = dsl.Command("Show").Uses(Rate)
+)
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var bolt = dsl.Path("bolt", "Store file").Default("app.db")
+
+var Storage = dsl.Group("storage", "Storage", bolt)
+
+var Rate = dsl.Group("rate", "Rate limits",
+	dsl.Int("limit", "Requests per second").Default(100).Min(1).Mutable(),
+)
+
+var App = dsl.App("app", "Test app", Storage, Rate).Store(bolt)
+
+var (
+	Serve = dsl.Command("Serve").Uses(Rate)
+	Show  = dsl.Command("Show").Uses(Rate)
+)
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- main.go --
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/spf13/cobra"
+	bolt "go.etcd.io/bbolt"
+
+	"github.com/epistemer/cfgx"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app", SilenceUsage: true}
+	var history bool
+	show := settings.ShowCommand(&cobra.Command{Use: "show"}, func(_ context.Context, s *settings.Show) error {
+		fmt.Println("limit", s.RateLimit())
+		if !history {
+			return nil
+		}
+		h, err := s.Store().History("rate.limit", 2)
+		if err != nil {
+			return err
+		}
+		var es []string
+		for _, r := range h {
+			if r.Reset {
+				es = append(es, fmt.Sprintf("reset by %s (%s)", r.UpdatedBy, r.Reason))
+			} else {
+				es = append(es, r.Value+" by "+r.UpdatedBy)
+			}
+		}
+		fmt.Println("history:", strings.Join(es, ", "))
+		return nil
+	})
+	show.Flags().BoolVar(&history, "history", false, "print the last two history entries")
+	settings.BindRoot(root)
+	root.AddCommand(
+		settings.ServeCommand(&cobra.Command{Use: "serve"}, serve),
+		show,
+		&cobra.Command{Use: "client", Args: cobra.RangeArgs(2, 3), RunE: client},
+		&cobra.Command{Use: "inject", Args: cobra.ExactArgs(2), RunE: inject},
+	)
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+
+// serve runs the admin endpoint until POST /quit.
+func serve(ctx context.Context, s *settings.Serve) error {
+	db := s.Store().DB()
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte("app"))
+		if err != nil {
+			return err
+		}
+		return b.Put([]byte("hello"), []byte("world"))
+	}); err != nil {
+		return err
+	}
+	s.OnChange(func(c settings.Change) {
+		fmt.Println("changed", c.Keys(), "to", s.RateLimit())
+	})
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return err
+	}
+	quit := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /settings/{key}", func(w http.ResponseWriter, r *http.Request) {
+		st, err := s.Store().Get(r.PathValue("key"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		fmt.Fprintln(w, st.Value, st.Source)
+	})
+	mux.HandleFunc("PUT /settings/{key}", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		err := s.Store().Update(r.Context(), map[string]string{r.PathValue("key"): string(body)}, cfgx.By("admin"))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		fmt.Fprintln(w, "ok")
+	})
+	mux.HandleFunc("GET /own", func(w http.ResponseWriter, r *http.Request) {
+		db.View(func(tx *bolt.Tx) error {
+			fmt.Fprintln(w, string(tx.Bucket([]byte("app")).Get([]byte("hello"))))
+			return nil
+		})
+	})
+	mux.HandleFunc("POST /quit", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "bye")
+		close(quit)
+	})
+	srv := &http.Server{Handler: mux}
+	go srv.Serve(ln)
+	// Publish the address only once it is listening.
+	if err := os.WriteFile("addr.tmp", []byte(ln.Addr().String()), 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename("addr.tmp", "addr.txt"); err != nil {
+		return err
+	}
+	<-quit
+	sctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	return srv.Shutdown(sctx)
+}
+
+// client sends one request to the running server: METHOD PATH [BODY].
+func client(cmd *cobra.Command, args []string) error {
+	var addr []byte
+	for deadline := time.Now().Add(20 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+		var err error
+		if addr, err = os.ReadFile("addr.txt"); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			return errors.New("the server didn't start")
+		}
+	}
+	var body io.Reader
+	if len(args) == 3 {
+		body = strings.NewReader(args[2])
+	}
+	req, err := http.NewRequest(args[0], "http://"+string(addr)+args[1], body)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	out, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return errors.New(strings.TrimSpace(string(out)))
+	}
+	fmt.Print(string(out))
+	return nil
+}
+
+// inject stores a raw record behind cfgx's back, as an older release or a
+// stray write would have.
+func inject(cmd *cobra.Command, args []string) error {
+	db, err := bolt.Open("app.db", 0o600, &bolt.Options{Timeout: time.Second})
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	rec, _ := json.Marshal(map[string]any{"value": args[1], "updated_at": time.Now().UTC(), "updated_by": "inject"})
+	return db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket([]byte("cfgx")).Bucket([]byte("settings")).Put([]byte(args[0]), rec)
+	})
+}
