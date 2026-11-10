@@ -221,3 +221,106 @@ func TestConcurrentWrites(t *testing.T) {
 		t.Errorf("records %v, values %+v", recs, v)
 	}
 }
+
+// OnChange callbacks run after the swap, one at a time, in commit order,
+// with the keys whose values changed; a callback may write.
+func TestOnChange(t *testing.T) {
+	w := loadWriter(t, writeApp(t.TempDir()), map[string]string{"WT_RATE": "50"})
+	ctx := context.Background()
+	var mu sync.Mutex
+	var got []string
+	var running, overlap int32
+	w.OnChange(func(paths []string) {
+		mu.Lock()
+		running++
+		if running > 1 {
+			overlap++
+		}
+		got = append(got, fmt.Sprintf("%v rate=%d", paths, w.Snapshot().Load().Rate))
+		mu.Unlock()
+		mu.Lock()
+		running--
+		mu.Unlock()
+	})
+	burst := func(n int) func(*Edits[wrVals]) error {
+		return func(e *Edits[wrVals]) error { e.Set(2, func(v *wrVals) { v.Burst = n }); return nil }
+	}
+	_ = w.Write(ctx, setRate(200))
+	_ = w.Write(ctx, burst(3))
+	_ = w.Write(ctx, func(e *Edits[wrVals]) error {
+		e.Set(1, func(v *wrVals) { v.Rate = 300 })
+		e.Set(2, func(v *wrVals) { v.Burst = 4 })
+		return nil
+	})
+	_ = w.Write(ctx, setRate(300))  // no change: no callback
+	_ = w.Write(ctx, setRate(5000)) // invalid: no callback
+	if want := "[[rate] rate=200 [burst] rate=200 [rate burst] rate=300]"; fmt.Sprint(got) != want {
+		t.Errorf("got %v\nwant %s", got, want)
+	}
+
+	// Storing the value the env var gives changes the value from 300; the
+	// reset then changes no value: no callback.
+	got = nil
+	_ = w.Write(ctx, setRate(50))
+	_ = w.Write(ctx, func(e *Edits[wrVals]) error { e.Reset(1); return nil })
+	if fmt.Sprint(got) != "[[rate] rate=50]" {
+		t.Errorf("got %v", got)
+	}
+
+	// A callback that writes doesn't deadlock; its write's callback runs
+	// after it returns.
+	got = nil
+	once := sync.Once{}
+	w.OnChange(func(paths []string) {
+		once.Do(func() {
+			if err := w.Write(ctx, burst(9)); err != nil {
+				t.Error(err)
+			}
+		})
+	})
+	_ = w.Write(ctx, setRate(70))
+	if len(got) != 2 || got[1] != "[burst] rate=70" {
+		t.Errorf("got %v", got)
+	}
+
+	// Concurrent writers: every change is reported, never two callbacks at
+	// once.
+	got = nil
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = w.Write(ctx, setRate(100+i))
+		}()
+	}
+	wg.Wait()
+	if len(got) != 20 || overlap != 0 {
+		t.Errorf("%d callbacks, %d overlapping", len(got), overlap)
+	}
+}
+
+// A callback that panics doesn't stop the others, or later changes; the
+// writer running it panics once they have run.
+func TestOnChangePanic(t *testing.T) {
+	w := loadWriter(t, writeApp(t.TempDir()), nil)
+	var calls []string
+	w.OnChange(func(p []string) {
+		calls = append(calls, "a")
+		if len(calls) == 1 {
+			panic("boom")
+		}
+	})
+	w.OnChange(func([]string) { calls = append(calls, "b") })
+	func() {
+		defer func() {
+			if r := recover(); r != "boom" {
+				t.Errorf("recovered %v", r)
+			}
+		}()
+		_ = w.Write(context.Background(), setRate(10))
+	}()
+	if err := w.Write(context.Background(), setRate(20)); err != nil || fmt.Sprint(calls) != "[a b a b]" {
+		t.Errorf("%v, calls %v", err, calls)
+	}
+}

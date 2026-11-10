@@ -52,6 +52,12 @@ type Writer[V any] struct {
 	records map[string]storage.Record
 	bad     map[string]error
 	res     *Result[V]
+
+	// OnChange callbacks, the changes queued for them, and whether a
+	// writer is running them; also guarded by mu.
+	subs     []func(paths []string)
+	queue    [][]string
+	draining bool
 }
 
 // errClosed is what writes to a closed store return.
@@ -169,6 +175,14 @@ func (w *Writer[V]) Write(ctx context.Context, fill func(*Edits[V]) error, optio
 		return nil
 	}
 
+	err := w.commit(ctx, e, o)
+	w.drain()
+	return err
+}
+
+// commit is the locked part of a write: build, validate, store, swap. A
+// write that changes values queues their keys for the OnChange callbacks.
+func (w *Writer[V]) commit(ctx context.Context, e *Edits[V], o opts.Write) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.backend == nil {
@@ -216,9 +230,89 @@ func (w *Writer[V]) Write(ctx context.Context, fill func(*Edits[V]) error, optio
 	if err := w.backend.Apply(changes); err != nil {
 		return err
 	}
+	old := w.snap.Load()
 	w.records, w.bad, w.res, w.reads = recs, bad, res, reads
 	w.snap.Store(res.Values)
+	var changed []string
+	for _, i := range w.idx {
+		k := &w.a.Keys[i]
+		if k.Mutable && valueText(k, old) != valueText(k, res.Values) {
+			changed = append(changed, k.Path)
+		}
+	}
+	if len(changed) > 0 && len(w.subs) > 0 {
+		w.queue = append(w.queue, changed)
+	}
 	return nil
+}
+
+// valueText is k's value in v as text, to compare two values.
+func valueText[V any](k *Key[V], v *V) string {
+	if k.Format != nil {
+		if s, err := k.Format(v); err == nil {
+			return s
+		}
+	}
+	return plainText(k.Show(v))
+}
+
+// OnChange adds fn to the functions called after a write changes values,
+// with the paths of the keys whose values changed, in table order. They
+// run one at a time, in the order the writes committed, after the new
+// values are in place and the write's lock is released, so fn may write
+// too. They run on the goroutine of a writer, not always the one whose
+// write changed the values: a write can return before its callbacks run.
+// fn should not panic; if it does, the other callbacks still run, and the
+// writer running them panics afterwards.
+func (w *Writer[V]) OnChange(fn func(paths []string)) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.subs = append(w.subs, fn)
+}
+
+// drain runs the queued callbacks, unless another writer is running them
+// already, in which case it runs these too. A callback that panics doesn't
+// stop the others: every queued callback runs, and then the first panic is
+// raised again here, on the goroutine of the writer that ran it.
+func (w *Writer[V]) drain() {
+	w.mu.Lock()
+	if w.draining {
+		w.mu.Unlock()
+		return
+	}
+	w.draining = true
+	var first any
+	panicked := false
+	for len(w.queue) > 0 {
+		paths := w.queue[0]
+		w.queue[0] = nil
+		w.queue = w.queue[1:]
+		subs := w.subs[:len(w.subs):len(w.subs)]
+		w.mu.Unlock()
+		for _, fn := range subs {
+			if p, ok := call(fn, paths); ok && !panicked {
+				first, panicked = p, true
+			}
+		}
+		w.mu.Lock()
+	}
+	w.draining = false
+	w.mu.Unlock()
+	if panicked {
+		panic(first)
+	}
+}
+
+// call runs fn, and returns what it panicked with, if it did.
+func call(fn func([]string), paths []string) (p any, panicked bool) {
+	defer func() {
+		if panicked {
+			p = recover()
+		}
+	}()
+	panicked = true
+	fn(paths)
+	return nil, false
 }
 
 // replay loads the command's keys again from the bootstrap sources, with

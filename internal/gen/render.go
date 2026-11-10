@@ -252,6 +252,34 @@ func (u *Update) Set{{.Getter}}(v {{.GoType}}) {
 // Reset{{.Getter}} removes {{.Path}}'s stored value.
 func (u *Update) Reset{{.Getter}}() { u.e.Reset({{.Index}}) }
 {{end}}
+// Key names a mutable setting, for Change.Has.
+type Key string
+
+// The mutable settings.
+const (
+{{- range .Mutable}}
+	Key{{.Getter}} Key = {{printf "%q" .Path}}
+{{- end}}
+)
+
+// Change lists the settings whose values a write changed, for OnChange.
+type Change struct{ keys []Key }
+
+// Has reports whether any of keys changed.
+func (c Change) Has(keys ...Key) bool {
+	for _, k := range keys {
+		for _, ck := range c.keys {
+			if k == ck {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Keys returns the settings that changed, in the order the schema declares
+// them.
+func (c Change) Keys() []Key { return append([]Key(nil), c.keys...) }
 {{end -}}
 // Values holds every setting of the app as plain fields, nested like the
 // groups, for Test.
