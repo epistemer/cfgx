@@ -53,6 +53,21 @@ func (k *EnumKey[T]) Default(v T) *EnumKey[T] {
 	return k
 }
 
+// Example is shown in example files instead of the default, and must be
+// one of the values.
+func (k *EnumKey[T]) Example(v T) *EnumKey[T] {
+	text, err := enumText(reflect.ValueOf(&v).Elem())
+	if err != nil {
+		k.problems = append(k.problems, fmt.Sprintf("example: %v", err))
+		return k
+	}
+	if !slices.Contains(k.values, v) {
+		k.problems = append(k.problems, fmt.Sprintf("example %q isn't one of the values", text))
+	}
+	k.example = &text
+	return k
+}
+
 // describe records T and the values in the IR, and every problem with them.
 func (k *EnumKey[T]) describe() {
 	t := reflect.TypeFor[T]()

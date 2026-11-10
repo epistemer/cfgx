@@ -16,6 +16,7 @@ type Problem struct {
 // reports them all at once.
 type Errors []Problem
 
+// Error lists every problem, one per line.
 func (e Errors) Error() string {
 	var b strings.Builder
 	if len(e) == 1 {

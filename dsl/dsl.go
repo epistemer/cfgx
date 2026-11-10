@@ -534,7 +534,8 @@ func Command(goName string) *CommandDef {
 	return c
 }
 
-// Uses adds groups to the command.
+// Uses adds groups and tags to the command. A group gives it every key in
+// the group and its nested groups; a tag gives it just the tagged keys.
 func (c *CommandDef) Uses(items ...Usable) *CommandDef {
 	c.uses = append(c.uses, items...)
 	return c

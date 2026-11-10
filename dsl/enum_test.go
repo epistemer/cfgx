@@ -2,6 +2,7 @@ package dsl
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/epistemer/cfgx/internal/ir"
@@ -63,5 +64,30 @@ func TestEnumDefault(t *testing.T) {
 	k = Enum("a", "A", "x").Default("z")
 	if len(k.problems) != 1 {
 		t.Errorf("problems = %v", k.problems)
+	}
+}
+
+// An example, like a default, must be one of the values (review 0037).
+func TestEnumExample(t *testing.T) {
+	k := Enum("a", "A", "x", "y").Example("y")
+	if k.example == nil || *k.example != "y" || len(k.problems) != 0 {
+		t.Errorf("example = %v, problems = %v", k.example, k.problems)
+	}
+	k = Enum("a", "A", "x").Example("z")
+	if len(k.problems) != 1 || k.problems[0] != `example "z" isn't one of the values` {
+		t.Errorf("problems = %q", k.problems)
+	}
+}
+
+// A map's default and example keys must survive their text form.
+func TestStringMapKeys(t *testing.T) {
+	k := StringMap("m", "M").Default(map[string]string{"a": "1"}).Example(map[string]string{"b": "2"})
+	if len(k.problems) != 0 || *k.def != "a=1" || *k.example != "b=2" {
+		t.Errorf("problems %q, def %v, example %v", k.problems, k.def, k.example)
+	}
+	k = StringMap("m", "M").Default(map[string]string{"a=b": "1"}).Example(map[string]string{" c": "2"})
+	want := []string{`default key "a=b" must be non-empty, without = or outer spaces`, `example key " c" must be non-empty, without = or outer spaces`}
+	if !slices.Equal(k.problems, want) {
+		t.Errorf("problems = %q", k.problems)
 	}
 }
