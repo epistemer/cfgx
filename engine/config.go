@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/epistemer/cfgx/internal/opts"
+	"github.com/epistemer/cfgx/internal/storage"
 )
 
 // ConfigCommand returns the config subcommand (interface §8): init, print,
@@ -34,10 +35,13 @@ func ConfigCommand[V any](a *App[V]) *cobra.Command {
 			Short: short + "; for one command's keys, name it",
 			RunE: func(cmd *cobra.Command, args []string) error {
 				cmd.SilenceUsage = true
-				idx, err := c.scope(cmd, args)
+				idx, profile, err := c.scope(cmd, args)
 				if err != nil {
 					return err
 				}
+				// The store's values are shown for every key, or for a
+				// command that has the store.
+				c.withStore = c.a.OpenStore != nil && (profile == "" || c.a.StoreProfiles[profile])
 				return run(cmd, idx)
 			},
 		}
@@ -75,25 +79,28 @@ func ConfigCommand[V any](a *App[V]) *cobra.Command {
 	return root
 }
 
-type configCmd[V any] struct{ a *App[V] }
+type configCmd[V any] struct {
+	a         *App[V]
+	withStore bool // load stored values, from a store opened read-only
+}
 
 // scope is the keys a subcommand covers: every key but command arguments,
 // or the keys of the command args names.
-func (c *configCmd[V]) scope(cmd *cobra.Command, args []string) ([]int, error) {
+func (c *configCmd[V]) scope(cmd *cobra.Command, args []string) ([]int, string, error) {
 	var idx []int
+	profile := ""
 	if len(args) == 0 {
 		for i := range c.a.Keys {
 			idx = append(idx, i)
 		}
 	} else {
 		target, rest, err := cmd.Root().Find(args)
-		profile := ""
 		if err == nil && len(rest) == 0 && target != cmd.Root() {
 			profile = target.Annotations[profileAnnotation]
 		}
 		keys, ok := c.a.Profiles[profile]
 		if profile == "" || !ok {
-			return nil, fmt.Errorf("%q isn't a command with a configuration", strings.Join(args, " "))
+			return nil, "", fmt.Errorf("%q isn't a command with a configuration", strings.Join(args, " "))
 		}
 		idx = keys
 	}
@@ -104,7 +111,7 @@ func (c *configCmd[V]) scope(cmd *cobra.Command, args []string) ([]int, error) {
 			out = append(out, i)
 		}
 	}
-	return out, nil
+	return out, profile, nil
 }
 
 // load loads the keys at idx from defaults, the file and env: the only
@@ -114,7 +121,14 @@ func (c *configCmd[V]) load(cmd *cobra.Command, idx []int, partial bool) (*Resul
 	if f := cmd.Flags().Lookup("config"); f != nil {
 		fs.AddFlag(f)
 	}
-	res, err := Load(c.a, fs, idx, Options{Partial: partial})
+	o := Options{Partial: partial}
+	if c.withStore {
+		o.Store = StoreReadOnly
+	}
+	res, err := Load(c.a, fs, idx, o)
+	if res.Store != nil {
+		res.Store.Close()
+	}
 	var ro *opts.Root
 	if r, ok := roots.Load(cmd.Root()); ok {
 		ro = r.(*opts.Root)
@@ -229,9 +243,15 @@ func (c *configCmd[V]) explain(cmd *cobra.Command, idx []int) error {
 		if o := res.Origins[i]; len(o) > 0 {
 			last := o[len(o)-1]
 			source = last.String()
-			if last.Layer == LayerDefault && k.DefaultFrom != "" {
+			switch {
+			case last.Layer == LayerDefault && k.DefaultFrom != "":
 				source = "default " + k.DefaultFrom + "()"
+			case last.Layer == LayerStore:
+				source = storeSource(res.Records[i], o[:len(o)-1])
 			}
+		}
+		if why, ok := res.Invalid[i]; ok {
+			source += " (stored value ignored: " + why + ")"
 		}
 		if res.Irrelevant[i] {
 			source += " (not relevant)"
@@ -333,4 +353,29 @@ func (t *textTable) Flush() error {
 	}
 	_, err := io.WriteString(t.out, b.String())
 	return err
+}
+
+// storeSource is explain's source for a stored value: when, who and why,
+// and the sources it hides.
+//
+//	store (2026-11-02, admin@zp: "PCI review"), hides env ZP_AUTH_OTP_LENGTH
+func storeSource(r storage.Record, below []Origin) string {
+	who := r.UpdatedAt.Format("2006-01-02")
+	if r.UpdatedBy != "" {
+		who += ", " + r.UpdatedBy
+	}
+	if r.Reason != "" {
+		who += ": " + strconv.Quote(r.Reason)
+	}
+	s := "store (" + who + ")"
+	var hidden []string
+	for _, o := range below {
+		if o.Layer != LayerDefault {
+			hidden = append(hidden, o.String())
+		}
+	}
+	if len(hidden) > 0 {
+		s += ", hides " + strings.Join(hidden, ", ")
+	}
+	return s
 }

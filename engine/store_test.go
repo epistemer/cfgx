@@ -2,6 +2,7 @@ package engine
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -201,5 +202,57 @@ func TestEpochs(t *testing.T) {
 	}
 	if recs, _, _ := res.Store.Records(); recs["rate"].Raw != "300" {
 		t.Error("a newer epoch's record was removed")
+	}
+}
+
+func loadReadOnly(t *testing.T, a *App[stVals]) *Result[stVals] {
+	t.Helper()
+	res, err := Load(a, nil, []int{0, 1, 2}, Options{Store: StoreReadOnly,
+		LookupEnv: func(string) (string, bool) { return "", false }, Environ: func() []string { return nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Store != nil {
+		res.Store.Close()
+	}
+	return res
+}
+
+// The config subcommands open the store read-only: a missing file stays
+// missing, a held store is skipped with a warning, records from older
+// epochs stay put, and there is no writer.
+func TestStoreReadOnly(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.db")
+	a := storeApp(dir)
+	if res := loadReadOnly(t, a); res.Values.Rate != 100 || len(res.Warnings) != 0 || res.Writer != nil {
+		t.Errorf("missing file: rate %d, warnings %q", res.Values.Rate, stWarnings(res))
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("the file was created: %v", err)
+	}
+
+	put(t, path, map[string]string{"rate": "250"})
+	if res := loadReadOnly(t, a); res.Values.Rate != 250 || res.Writer != nil {
+		t.Errorf("stored: rate %d", res.Values.Rate)
+	}
+
+	a.Keys[1].Epoch = 2
+	res := loadReadOnly(t, a)
+	if res.Values.Rate != 100 || !strings.Contains(stWarnings(res), "the program moves it to history when it next opens the store") {
+		t.Errorf("older epoch: rate %d, warnings %q", res.Values.Rate, stWarnings(res))
+	}
+	b, err := store.Open(path, storage.Options{Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recs, _, _ := b.Records(); recs["rate"].Raw != "250" {
+		t.Error("a read-only load retired the record")
+	}
+	// Held by another opener: values without the store, and a warning.
+	res = loadReadOnly(t, a)
+	b.Close()
+	if !strings.Contains(stWarnings(res), "showing values without the store: ") || !strings.Contains(stWarnings(res), storage.ErrLocked.Error()) {
+		t.Errorf("held: warnings %q", stWarnings(res))
 	}
 }

@@ -85,6 +85,11 @@ const (
 	// StoreReadWrite opens the store, creating its file if need be, and
 	// fails if it can't.
 	StoreReadWrite
+	// StoreReadOnly opens the store read-only, for the config subcommands:
+	// a missing file is skipped (and never created), a store another
+	// process holds is skipped with a warning, and records from older
+	// epochs stay where they are.
+	StoreReadOnly
 )
 
 // Result is what Load found.
@@ -178,25 +183,33 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 		// the store, so its records can be layered over the rest.
 		l.loadKey(v, a.StoreKey)
 		pending = slices.DeleteFunc(pending, func(i int) bool { return i == a.StoreKey })
+		l.readOnly = o.Store == StoreReadOnly
 		if l.state[a.StoreKey] == loadedOK {
-			b, err := a.openStore(v, false)
-			if err != nil {
+			b, err := a.openStore(v, l.readOnly)
+			switch {
+			case l.readOnly && errors.Is(err, storage.ErrNotExist):
+				// Nothing stored yet; config never creates the file.
+			case l.readOnly && err != nil:
+				l.warn(fmt.Sprintf("showing values without the store: %v", err))
+			case err != nil:
 				return res, err
 			}
-			res.Store = b
-			recs, bad, err := b.Records()
-			if err != nil {
-				b.Close()
-				res.Store = nil
-				return res, err
+			if b != nil {
+				res.Store = b
+				recs, bad, err := b.Records()
+				if err != nil {
+					b.Close()
+					res.Store = nil
+					return res, err
+				}
+				l.records, l.badRecords = recs, bad
 			}
-			l.records, l.badRecords = recs, bad
 		} else if l.state[a.StoreKey] == irrelevant {
 			return res, fmt.Errorf("%s names the store, but isn't relevant", a.Keys[a.StoreKey].Path)
 		}
 	}
 	l.loadAll(v, pending)
-	if len(l.retire) > 0 && res.Store != nil {
+	if len(l.retire) > 0 && res.Store != nil && !l.readOnly {
 		if err := res.Store.Apply(l.retire); err != nil {
 			l.warn(fmt.Sprintf("can't move values from older epochs to history: %v", err))
 		} else {
@@ -208,7 +221,7 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 	if err := l.finish(v); err != nil {
 		return res, err
 	}
-	if res.Store != nil {
+	if res.Store != nil && !l.readOnly {
 		res.Writer = newWriter(l, idx)
 	}
 	return res, nil
@@ -297,6 +310,9 @@ type loader[V any] struct {
 	fs     *pflag.FlagSet
 	lookup func(string) (string, bool)
 	reads  map[string]string
+	// readOnly is StoreReadOnly: records from older epochs are only
+	// ignored.
+	readOnly bool
 	// strict makes a stored value that doesn't pass the key's checks a
 	// problem, instead of a warning: it is a write's new value.
 	strict map[int]bool
@@ -1008,6 +1024,11 @@ func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origi
 	// A record from an older epoch was for what the key used to mean: it
 	// moves to history. One from a newer epoch is for a newer program.
 	switch {
+	case rec.Epoch < k.Epoch && l.readOnly:
+		l.warn(fmt.Sprintf("%s: the stored value is ignored (it is from epoch %d, and the key is at epoch %d now; the program moves it to history when it next opens the store); %s",
+			k.Path, rec.Epoch, k.Epoch, next), slog.String("key", k.Path), slog.String("source", "store"))
+		l.invalid(i, fmt.Sprintf("from epoch %d, older than %d", rec.Epoch, k.Epoch))
+		return win, origins, true
 	case rec.Epoch < k.Epoch:
 		l.retire = append(l.retire, storage.Change{Key: k.Path, History: storage.Record{
 			Epoch: k.Epoch, UpdatedAt: time.Now().UTC(), UpdatedBy: "cfgx", Reset: true,
