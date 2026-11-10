@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"sync"
@@ -52,6 +53,9 @@ type Writer[V any] struct {
 	bad     map[string]error
 	res     *Result[V]
 }
+
+// errClosed is what writes to a closed store return.
+var errClosed = errors.New("cfgx: the store is closed")
 
 // newWriter keeps what l loaded from, for writes to replay.
 func newWriter[V any](l *loader[V], idx []int) *Writer[V] {
@@ -168,7 +172,7 @@ func (w *Writer[V]) Write(ctx context.Context, fill func(*Edits[V]) error, optio
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.backend == nil {
-		return fmt.Errorf("cfgx: the store is closed")
+		return errClosed
 	}
 	recs, bad := maps.Clone(w.records), maps.Clone(w.bad)
 	now := w.now().UTC()

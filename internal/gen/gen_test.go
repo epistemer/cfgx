@@ -281,6 +281,9 @@ func TestMutableGolden(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := Artifacts(m); err != nil {
+		t.Fatal(err)
+	}
 	src, err := Render(m)
 	if err != nil {
 		t.Fatalf("%v\n%s", err, src)

@@ -4,6 +4,31 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M7.5 admin API
+
+- **Landed:** `store.Store`, the admin API for a settings dashboard: `Keys`
+  (kind, tags, a JSON Schema per key), `Get`, `List` (value, source, the
+  sources a stored value hides, the last change, why a stored value was
+  ignored), `Update` and `Reset` with text values through M7.4's pipeline,
+  `History`, `DB` and `Bucket`. Every kind's text round-trips: writing back
+  what `Get` returns changes nothing.
+- **Decided for you:**
+  - `store.Record` has a `Reset` field, which interface §7.3 doesn't list.
+    Without it, a dashboard can't tell a reset in the history from a value
+    set to "".
+  - `store.New` is exported for generated code (M7.7 calls it).
+  - A static key's `Value` is what `config explain` shows (secrets masked,
+    URL passwords redacted); a mutable key's is the canonical text `Update`
+    takes back.
+  - `Schema` describes the value as the config file takes it (a list is an
+    array); `Update` takes the canonical text.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 101k tokens
+  ([review 0029](reviews/0029-gemini-m7.5-review.md)). 2 of 8 findings
+  accepted.
+- **Next:** M7.6, `OnChange`, `Change.Has`, `KeyX` constants and
+  `Snapshot()`.
+- **Waiting on you:** nothing.
+
 ## 2026-11-10: M7.4 write pipeline
 
 - **Landed:** writes to mutable keys, all or nothing.

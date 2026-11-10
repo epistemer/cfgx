@@ -938,6 +938,13 @@ parse it back like any source. `DefaultFunc` defaults are computed again
 on each write, so they should be deterministic. A `File` key can't be
 `Mutable`, and a `Mutable` Text key's type must implement `MarshalText`.
 
+**[decided, M7.5]** `store.Store` wraps `storage.Admin`, a non-generic
+view of the engine's `Writer` (so `cfgx/store` doesn't import the engine,
+whose tests import `cfgx/store`). Generated code makes it with
+`store.New(writer)`. Apps with a store get `Kind`, `Tags` and `Schema` (the
+key's JSON Schema without the config file's `null`) in their key table.
+`store.Record` adds `Reset`, so history shows resets.
+
 **Write pipeline**, shared by typed writes (`SetX`/`ResetX`) and dynamic ones
 (`Store.Update`/`Store.Reset` with text values). One mutex per process is held
 from step 1 to step 4, so concurrent writers can't lose each other's changes:
