@@ -150,3 +150,56 @@ func TestStoreFailures(t *testing.T) {
 		t.Errorf("held store: %v", err)
 	}
 }
+
+// A record from an older epoch moves to history; one from a newer epoch is
+// ignored and kept.
+func TestEpochs(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.db")
+	a := storeApp(dir)
+	a.Keys[1].Epoch = 2
+	put(t, path, map[string]string{"rate": "250"}) // epoch 0
+	res, err := loadStore(t, a, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Values.Rate != 100 {
+		t.Errorf("rate %d; want the default, 100", res.Values.Rate)
+	}
+	want := "rate: the stored value 250 is from epoch 0, and the key is at epoch 2 now; it moves to history, using the default"
+	if w := stWarnings(res); w != want {
+		t.Errorf("warning %q, want %q", w, want)
+	}
+	recs, _, _ := res.Store.Records()
+	h, _ := res.Store.History("rate", 0)
+	if _, still := recs["rate"]; still || len(h) != 2 || !h[0].Reset || h[0].Epoch != 2 || h[1].Raw != "250" {
+		t.Errorf("records %v, history %+v", recs, h)
+	}
+	res.Store.Close()
+
+	// The next start has nothing to say.
+	res, err = loadStore(t, a, nil)
+	if err != nil || len(res.Warnings) != 0 {
+		t.Errorf("%v, warnings %q", err, stWarnings(res))
+	}
+	res.Store.Close()
+
+	// A newer epoch's value is left alone.
+	a.Keys[1].Epoch = 1
+	b, err := store.Open(path, storage.Options{Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := storage.Record{Raw: "300", Epoch: 3, UpdatedAt: time.Now()}
+	if err := b.Apply([]storage.Change{{Key: "rate", Record: &r, History: r}}); err != nil {
+		t.Fatal(err)
+	}
+	b.Close()
+	res, err = loadStore(t, a, nil)
+	if err != nil || res.Values.Rate != 100 || !strings.Contains(stWarnings(res), "from epoch 3, newer than this program's 1") {
+		t.Errorf("rate %d, %v, warnings %q", res.Values.Rate, err, stWarnings(res))
+	}
+	if recs, _, _ := res.Store.Records(); recs["rate"].Raw != "300" {
+		t.Error("a newer epoch's record was removed")
+	}
+}

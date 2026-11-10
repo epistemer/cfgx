@@ -914,6 +914,15 @@ date. Records of keys that aren't mutable, or that the command doesn't load,
 are ignored. `Result.Records` keeps each loaded key's record for `explain`
 and `Store.List` (M7.8).
 
+**[decided, M7.3]** Epochs: a record carries the epoch it was written at.
+At load, a record from an older epoch than the key's moves to history: the
+current record is removed and a history entry (`reset`, by `cfgx`, with the
+reason "epoch N discards values from epoch M") is appended, in one
+transaction after the keys load; startup says so, and the next layer
+applies. A record from a newer epoch is ignored with a warning and kept, so
+rolling back a release doesn't destroy a value. Writes stamp the key's
+current epoch (M7.4).
+
 **Write pipeline**, shared by typed writes (`SetX`/`ResetX`) and dynamic ones
 (`Store.Update`/`Store.Reset` with text values). One mutex per process is held
 from step 1 to step 4, so concurrent writers can't lose each other's changes:

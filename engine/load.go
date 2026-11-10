@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/epistemer/cfgx"
 	"github.com/epistemer/cfgx/internal/node"
@@ -214,6 +215,11 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 		}
 		pending = later
 	}
+	if len(l.retire) > 0 && res.Store != nil {
+		if err := res.Store.Apply(l.retire); err != nil {
+			l.warn(fmt.Sprintf("can't move values from older epochs to history: %v", err))
+		}
+	}
 	res.Irrelevant = map[int]bool{}
 	for i, st := range l.state {
 		if st == irrelevant {
@@ -244,6 +250,8 @@ type loader[V any] struct {
 	// The store's records and the ones that failed to decode, by path.
 	records    map[string]storage.Record
 	badRecords map[string]error
+	// retire removes records from older epochs once keys have loaded.
+	retire []storage.Change
 }
 
 // conditions returns the RelevantIf conditions of the keys at idx, directly
@@ -920,9 +928,9 @@ func (l *loader[V]) unknownEnv(environ []string) {
 func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origin) (*candidate, []Origin) {
 	next := "using the default"
 	switch {
-	case win == nil:
+	case win == nil && k.Default == nil:
 		next = "leaving it unset"
-	case win.origin.Layer != LayerDefault:
+	case win != nil && win.origin.Layer != LayerDefault:
 		next = "using " + win.origin.String()
 	}
 	if err, bad := l.badRecords[k.Path]; bad {
@@ -933,6 +941,23 @@ func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origi
 	}
 	rec, ok := l.records[k.Path]
 	if !ok {
+		return win, origins
+	}
+	// A record from an older epoch was for what the key used to mean: it
+	// moves to history. One from a newer epoch is for a newer program.
+	switch {
+	case rec.Epoch < k.Epoch:
+		l.retire = append(l.retire, storage.Change{Key: k.Path, History: storage.Record{
+			Epoch: k.Epoch, UpdatedAt: time.Now().UTC(), UpdatedBy: "cfgx", Reset: true,
+			Reason: fmt.Sprintf("epoch %d discards values from epoch %d", k.Epoch, rec.Epoch),
+		}})
+		l.warn(fmt.Sprintf("%s: the stored value %s is from epoch %d, and the key is at epoch %d now; it moves to history, %s",
+			k.Path, rec.Raw, rec.Epoch, k.Epoch, next), slog.String("key", k.Path), slog.String("source", "store"))
+		return win, origins
+	case rec.Epoch > k.Epoch:
+		l.warn(fmt.Sprintf("%s: the stored value is ignored (it is from epoch %d, newer than this program's %d); %s",
+			k.Path, rec.Epoch, k.Epoch, next), slog.String("key", k.Path), slog.String("source", "store"))
+		l.invalid(i, fmt.Sprintf("from epoch %d, newer than %d", rec.Epoch, k.Epoch))
 		return win, origins
 	}
 	if l.res.Records == nil {
