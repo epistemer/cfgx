@@ -249,10 +249,37 @@ func TestStoreReadOnly(t *testing.T) {
 	if recs, _, _ := b.Records(); recs["rate"].Raw != "250" {
 		t.Error("a read-only load retired the record")
 	}
+	// An empty store key names no file: nothing to say.
+	a.Keys[0].DefaultText = ""
+	if res := loadReadOnly(t, a); len(res.Warnings) != 0 || res.Values.Rate != 100 {
+		t.Errorf("empty key: rate %d, warnings %q", res.Values.Rate, stWarnings(res))
+	}
+	a.Keys[0].DefaultText = path
 	// Held by another opener: values without the store, and a warning.
 	res = loadReadOnly(t, a)
 	b.Close()
 	if !strings.Contains(stWarnings(res), "showing values without the store: ") || !strings.Contains(stWarnings(res), storage.ErrLocked.Error()) {
 		t.Errorf("held: warnings %q", stWarnings(res))
+	}
+}
+
+func TestStoreSource(t *testing.T) {
+	day := time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC)
+	env := []Origin{{Layer: LayerDefault}, {LayerEnv, "ZP_X"}, {LayerFlag, "--x"}}
+	for _, c := range []struct {
+		r    storage.Record
+		want string
+	}{
+		{storage.Record{UpdatedAt: day, UpdatedBy: "admin@zp", Reason: "PCI review"}, `store (2026-11-02, admin@zp: "PCI review"), hides env ZP_X, flag --x`},
+		{storage.Record{UpdatedAt: day, Reason: "PCI review"}, `store (2026-11-02, "PCI review"), hides env ZP_X, flag --x`},
+		{storage.Record{UpdatedBy: "ops"}, `store (ops), hides env ZP_X, flag --x`},
+		{storage.Record{}, `store, hides env ZP_X, flag --x`},
+	} {
+		if got := storeSource(c.r, env); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.r, got, c.want)
+		}
+	}
+	if got := storeSource(storage.Record{UpdatedAt: day}, env[:1]); got != "store (2026-11-02)" {
+		t.Errorf("nothing hidden: %q", got)
 	}
 }

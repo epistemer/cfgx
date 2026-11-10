@@ -952,6 +952,13 @@ of whichever writer finds the queue idle; the others return at once. Each
 callback runs under `recover`, so one that panics doesn't stop the rest,
 and the draining writer raises the first panic again at the end.
 
+**[decided, M7.8]** `Options.Store = StoreReadOnly` is the `config`
+subcommands' mode, used when they cover every key or a command that has
+the store. A missing file or an empty store key is skipped silently. Any
+other failure to open the store or read its records is a warning, and
+loading carries on without stored values. Older-epoch records are only
+ignored, and there is no writer.
+
 **Write pipeline**, shared by typed writes (`SetX`/`ResetX`) and dynamic ones
 (`Store.Update`/`Store.Reset` with text values). One mutex per process is held
 from step 1 to step 4, so concurrent writers can't lose each other's changes:

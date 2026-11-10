@@ -29,7 +29,7 @@ func ConfigCommand[V any](a *App[V]) *cobra.Command {
 		Use:   "config",
 		Short: "Show, check and set up this program's configuration",
 	}
-	scoped := func(use, short string, run func(cmd *cobra.Command, idx []int) error) *cobra.Command {
+	scoped := func(use, short string, run func(cmd *cobra.Command, idx []int, withStore bool) error) *cobra.Command {
 		return &cobra.Command{
 			Use:   use + " [command]",
 			Short: short + "; for one command's keys, name it",
@@ -41,8 +41,8 @@ func ConfigCommand[V any](a *App[V]) *cobra.Command {
 				}
 				// The store's values are shown for every key, or for a
 				// command that has the store.
-				c.withStore = c.a.OpenStore != nil && (profile == "" || c.a.StoreProfiles[profile])
-				return run(cmd, idx)
+				withStore := c.a.OpenStore != nil && (profile == "" || c.a.StoreProfiles[profile])
+				return run(cmd, idx, withStore)
 			},
 		}
 	}
@@ -79,10 +79,7 @@ func ConfigCommand[V any](a *App[V]) *cobra.Command {
 	return root
 }
 
-type configCmd[V any] struct {
-	a         *App[V]
-	withStore bool // load stored values, from a store opened read-only
-}
+type configCmd[V any] struct{ a *App[V] }
 
 // scope is the keys a subcommand covers: every key but command arguments,
 // or the keys of the command args names.
@@ -115,14 +112,15 @@ func (c *configCmd[V]) scope(cmd *cobra.Command, args []string) ([]int, string, 
 }
 
 // load loads the keys at idx from defaults, the file and env: the only
-// flag it reads is --config.
-func (c *configCmd[V]) load(cmd *cobra.Command, idx []int, partial bool) (*Result[V], error) {
+// flag it reads is --config. With the store, stored values are loaded from
+// it opened read-only.
+func (c *configCmd[V]) load(cmd *cobra.Command, idx []int, partial, withStore bool) (*Result[V], error) {
 	fs := pflag.NewFlagSet("config", pflag.ContinueOnError)
 	if f := cmd.Flags().Lookup("config"); f != nil {
 		fs.AddFlag(f)
 	}
 	o := Options{Partial: partial}
-	if c.withStore {
+	if withStore {
 		o.Store = StoreReadOnly
 	}
 	res, err := Load(c.a, fs, idx, o)
@@ -204,8 +202,8 @@ func (c *configCmd[V]) shown(idx []int) []int {
 
 // print writes the effective configuration as YAML: every key, at its
 // config file path, with JSON values, which YAML reads too.
-func (c *configCmd[V]) print(cmd *cobra.Command, idx []int) error {
-	res, err := c.load(cmd, idx, true)
+func (c *configCmd[V]) print(cmd *cobra.Command, idx []int, withStore bool) error {
+	res, err := c.load(cmd, idx, true, withStore)
 	if err != nil {
 		return err
 	}
@@ -226,8 +224,8 @@ func (c *configCmd[V]) print(cmd *cobra.Command, idx []int) error {
 }
 
 // explain lists every key with its value and where the value came from.
-func (c *configCmd[V]) explain(cmd *cobra.Command, idx []int) error {
-	res, err := c.load(cmd, idx, true)
+func (c *configCmd[V]) explain(cmd *cobra.Command, idx []int, withStore bool) error {
+	res, err := c.load(cmd, idx, true, withStore)
 	if err != nil {
 		return err
 	}
@@ -256,14 +254,14 @@ func (c *configCmd[V]) explain(cmd *cobra.Command, idx []int) error {
 		if res.Irrelevant[i] {
 			source += " (not relevant)"
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", k.Path, show(k.Show(res.Values)), source, cell(def))
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", k.Path, show(k.Show(res.Values)), cell(source), cell(def))
 	}
 	return tw.Flush()
 }
 
 // validate loads the keys as a command would, Required and rules included.
-func (c *configCmd[V]) validate(cmd *cobra.Command, idx []int) error {
-	if _, err := c.load(cmd, idx, false); err != nil {
+func (c *configCmd[V]) validate(cmd *cobra.Command, idx []int, withStore bool) error {
+	if _, err := c.load(cmd, idx, false, withStore); err != nil {
 		return err
 	}
 	_, err := fmt.Fprintln(cmd.OutOrStdout(), "The configuration is valid.")
@@ -271,7 +269,7 @@ func (c *configCmd[V]) validate(cmd *cobra.Command, idx []int) error {
 }
 
 // env lists the env vars the keys read, and whether each is set now.
-func (c *configCmd[V]) env(cmd *cobra.Command, idx []int) error {
+func (c *configCmd[V]) env(cmd *cobra.Command, idx []int, _ bool) error {
 	tw := newTable(cmd.OutOrStdout())
 	fmt.Fprintln(tw, "VARIABLE\tKEY\tSET\tDESCRIPTION")
 	row := func(name, key, desc string) {
@@ -360,14 +358,22 @@ func (t *textTable) Flush() error {
 //
 //	store (2026-11-02, admin@zp: "PCI review"), hides env ZP_AUTH_OTP_LENGTH
 func storeSource(r storage.Record, below []Origin) string {
-	who := r.UpdatedAt.Format("2006-01-02")
-	if r.UpdatedBy != "" {
-		who += ", " + r.UpdatedBy
+	var parts []string
+	if !r.UpdatedAt.IsZero() {
+		parts = append(parts, r.UpdatedAt.Format("2006-01-02"))
 	}
-	if r.Reason != "" {
-		who += ": " + strconv.Quote(r.Reason)
+	switch {
+	case r.UpdatedBy != "" && r.Reason != "":
+		parts = append(parts, r.UpdatedBy+": "+strconv.Quote(r.Reason))
+	case r.UpdatedBy != "":
+		parts = append(parts, r.UpdatedBy)
+	case r.Reason != "":
+		parts = append(parts, strconv.Quote(r.Reason))
 	}
-	s := "store (" + who + ")"
+	s := "store"
+	if len(parts) > 0 {
+		s += " (" + strings.Join(parts, ", ") + ")"
+	}
 	var hidden []string
 	for _, o := range below {
 		if o.Layer != LayerDefault {

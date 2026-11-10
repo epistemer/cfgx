@@ -184,24 +184,26 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 		l.loadKey(v, a.StoreKey)
 		pending = slices.DeleteFunc(pending, func(i int) bool { return i == a.StoreKey })
 		l.readOnly = o.Store == StoreReadOnly
-		if l.state[a.StoreKey] == loadedOK {
+		noFile := l.readOnly && a.Keys[a.StoreKey].Show(v) == ""
+		if l.state[a.StoreKey] == loadedOK && !noFile {
 			b, err := a.openStore(v, l.readOnly)
+			var recs map[string]storage.Record
+			var bad map[string]error
+			if err == nil {
+				if recs, bad, err = b.Records(); err != nil {
+					b.Close()
+					b = nil
+				}
+			}
 			switch {
 			case l.readOnly && errors.Is(err, storage.ErrNotExist):
 				// Nothing stored yet; config never creates the file.
 			case l.readOnly && err != nil:
-				l.warn(fmt.Sprintf("showing values without the store: %v", err))
+				l.warn(fmt.Sprintf("showing values without the store: %v", err), slog.String("source", "store"))
 			case err != nil:
 				return res, err
-			}
-			if b != nil {
+			default:
 				res.Store = b
-				recs, bad, err := b.Records()
-				if err != nil {
-					b.Close()
-					res.Store = nil
-					return res, err
-				}
 				l.records, l.badRecords = recs, bad
 			}
 		} else if l.state[a.StoreKey] == irrelevant {
