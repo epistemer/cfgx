@@ -7,3 +7,6 @@
 
 # Local databases, such as an example's bolt.db
 *.db
+
+# Scratch packages the generator tests create and remove
+/internal/gen/zz*/

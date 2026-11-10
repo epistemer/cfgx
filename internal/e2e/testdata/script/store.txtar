@@ -9,9 +9,15 @@ go build -o app$exe .
 exec ./app$exe migrate
 ! exists data/app.db
 
+# config explain opens the store read-only and never creates it (M7.8).
+mkdir data
+exec ./app$exe config explain
+stdout '^rate.limit\s+100\s+default\s+100\r?$'
+! stderr .
+! exists data/app.db
+
 # serve has a mutable key: it opens (and creates) the file. The store key's
 # directory must exist, as for any path.
-mkdir data
 exec ./app$exe serve
 stdout '^served\r?$'
 exists data/app.db
@@ -26,10 +32,14 @@ exec ./app$exe admin --storage-bolt other.db
 exists other.db
 
 # While one process holds the store, another waits a second, then gives up.
-exec ./app$exe serve --hold 3s &
+# config explain carries on without stored values, and says so.
+exec ./app$exe serve --hold 5s &
 sleep 1s
 ! exec ./app$exe serve
 stderr 'data[/\\]app.db: store is held by a running process; change settings through the application'
+exec ./app$exe config explain
+stderr '^warning: showing values without the store: .*store is held by a running process'
+stdout '^rate.limit\s+100\s+default'
 wait
 
 # serve writes through the generated Update: the value is stored with its
@@ -41,14 +51,24 @@ exec ./app$exe serve
 stdout '^limit 250\r?$'
 ! exec ./app$exe serve --set -1
 stderr 'rate.limit: must be at least 1'
+
+# explain shows who stored the value, when, and the env var it hides; the
+# program warns about the shadowed env var at startup.
+env APP_RATE_LIMIT=120
+exec ./app$exe config explain
+stdout '^rate.limit\s+250\s+store \(\d{4}-\d\d-\d\d, e2e\), hides env APP_RATE_LIMIT\s+100\r?$'
+exec ./app$exe serve
+stderr 'rate.limit: stored value 250 \(e2e, \d{4}-\d\d-\d\d\) overrides env APP_RATE_LIMIT=120'
+
+# A reset brings the env value back.
 exec ./app$exe serve --reset
-stdout '^limit 100\r?$'
+stdout '^limit 120\r?$'
 
 # The admin API lists the command's keys, and LoadServe opens the store.
 exec ./app$exe admin --list
 stdout '^db.host=localhost \(default\)\r?$'
 exec ./app$exe load
-stdout '^loaded limit 100, history 2\r?$'
+stdout '^loaded limit 120, history 2\r?$'
 
 # An empty store key means there's no file to open.
 env APP_STORAGE_BOLT=
@@ -135,7 +155,7 @@ func main() {
 		fmt.Printf("loaded limit %d, history %d\n", s.RateLimit(), len(h))
 		return nil
 	}}
-	root.AddCommand(serve, load, admin,
+	root.AddCommand(serve, load, admin, settings.ConfigCommand(),
 		settings.MigrateCommand(&cobra.Command{Use: "migrate"}, func(context.Context, *settings.Migrate) error { return nil }),
 	)
 	if err := root.Execute(); err != nil {

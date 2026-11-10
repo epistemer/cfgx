@@ -4,6 +4,24 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M7.8 explain and read-only opens
+
+- **Landed:** `config explain` shows a stored value as
+  `store (2026-11-02, admin@zp: "PCI review"), hides env ZP_X`. For a
+  stored value that was ignored, it shows the source that applied, then
+  why. `print`, `explain` and `validate` open the store read-only:
+  - a missing file is never created
+  - a store another process holds is skipped with a warning
+  - values from older epochs are ignored without being moved to history
+  - `init`, `schema` and `env` never open the store
+  The store e2e script covers the missing, locked and stored cases, and
+  the startup warning about a hidden env var.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 349k tokens
+  ([review 0032](reviews/0032-gemini-m7.8-review.md)). All 7 findings
+  fixed.
+- **Next:** M7.9, the end-to-end admin test, which closes M7.
+- **Waiting on you:** nothing.
+
 ## 2026-11-10: M7.7 generated wiring
 
 - **Landed:** commands that have the store get `Store()`, `Snapshot()`

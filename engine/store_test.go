@@ -2,6 +2,7 @@ package engine
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -201,5 +202,84 @@ func TestEpochs(t *testing.T) {
 	}
 	if recs, _, _ := res.Store.Records(); recs["rate"].Raw != "300" {
 		t.Error("a newer epoch's record was removed")
+	}
+}
+
+func loadReadOnly(t *testing.T, a *App[stVals]) *Result[stVals] {
+	t.Helper()
+	res, err := Load(a, nil, []int{0, 1, 2}, Options{Store: StoreReadOnly,
+		LookupEnv: func(string) (string, bool) { return "", false }, Environ: func() []string { return nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Store != nil {
+		res.Store.Close()
+	}
+	return res
+}
+
+// The config subcommands open the store read-only: a missing file stays
+// missing, a held store is skipped with a warning, records from older
+// epochs stay put, and there is no writer.
+func TestStoreReadOnly(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "app.db")
+	a := storeApp(dir)
+	if res := loadReadOnly(t, a); res.Values.Rate != 100 || len(res.Warnings) != 0 || res.Writer != nil {
+		t.Errorf("missing file: rate %d, warnings %q", res.Values.Rate, stWarnings(res))
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("the file was created: %v", err)
+	}
+
+	put(t, path, map[string]string{"rate": "250"})
+	if res := loadReadOnly(t, a); res.Values.Rate != 250 || res.Writer != nil {
+		t.Errorf("stored: rate %d", res.Values.Rate)
+	}
+
+	a.Keys[1].Epoch = 2
+	res := loadReadOnly(t, a)
+	if res.Values.Rate != 100 || !strings.Contains(stWarnings(res), "the program moves it to history when it next opens the store") {
+		t.Errorf("older epoch: rate %d, warnings %q", res.Values.Rate, stWarnings(res))
+	}
+	b, err := store.Open(path, storage.Options{Timeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recs, _, _ := b.Records(); recs["rate"].Raw != "250" {
+		t.Error("a read-only load retired the record")
+	}
+	// An empty store key names no file: nothing to say.
+	a.Keys[0].DefaultText = ""
+	if res := loadReadOnly(t, a); len(res.Warnings) != 0 || res.Values.Rate != 100 {
+		t.Errorf("empty key: rate %d, warnings %q", res.Values.Rate, stWarnings(res))
+	}
+	a.Keys[0].DefaultText = path
+	// Held by another opener: values without the store, and a warning.
+	res = loadReadOnly(t, a)
+	b.Close()
+	if !strings.Contains(stWarnings(res), "showing values without the store: ") || !strings.Contains(stWarnings(res), storage.ErrLocked.Error()) {
+		t.Errorf("held: warnings %q", stWarnings(res))
+	}
+}
+
+func TestStoreSource(t *testing.T) {
+	day := time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC)
+	env := []Origin{{Layer: LayerDefault}, {LayerEnv, "ZP_X"}, {LayerFlag, "--x"}}
+	for _, c := range []struct {
+		r    storage.Record
+		want string
+	}{
+		{storage.Record{UpdatedAt: day, UpdatedBy: "admin@zp", Reason: "PCI review"}, `store (2026-11-02, admin@zp: "PCI review"), hides env ZP_X, flag --x`},
+		{storage.Record{UpdatedAt: day, Reason: "PCI review"}, `store (2026-11-02, "PCI review"), hides env ZP_X, flag --x`},
+		{storage.Record{UpdatedBy: "ops"}, `store (ops), hides env ZP_X, flag --x`},
+		{storage.Record{}, `store, hides env ZP_X, flag --x`},
+	} {
+		if got := storeSource(c.r, env); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.r, got, c.want)
+		}
+	}
+	if got := storeSource(storage.Record{UpdatedAt: day}, env[:1]); got != "store (2026-11-02)" {
+		t.Errorf("nothing hidden: %q", got)
 	}
 }
