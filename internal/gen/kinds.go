@@ -329,6 +329,7 @@ func newImporter(schema string) *importer {
 			"slices":                           "slices",
 			"time":                             "time",
 			"net/url":                          "url",
+			"github.com/epistemer/cfgx/store":  "store",
 		}}
 	for _, n := range im.names {
 		im.taken[n] = true

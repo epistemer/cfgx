@@ -668,6 +668,7 @@ func Lock(app *ir.App) ([]byte, error) {
 		switch v := v.(type) {
 		case map[string]any:
 			delete(v, "pos")
+			delete(v, "storePos")
 			delete(v, "problems")
 			// A Secret's default is in the schema's source, but the lock
 			// file is for reading in PRs: it only says there is one.

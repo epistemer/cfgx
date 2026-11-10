@@ -877,6 +877,29 @@ nested buckets:
 Records are JSON (raw text, epoch, `updated_at`, `updated_by`, reason), so the
 file stays inspectable with ordinary bbolt tools.
 
+**[decided, M7.1]** Built so far:
+- `internal/storage` is the seam: `Record` (JSON: `value`, `epoch`,
+  `updated_at`, `updated_by`, `reason`, and `reset` on history entries),
+  `Change`, `Backend` (`Records`, `Apply`, `History`, `Close`), `Options`
+  (`ReadOnly`, `Timeout`) and `Opener`. `ErrLocked` reads "store is held
+  by a running process; change settings through the application".
+- `cfgx/store.Open` implements it with bbolt v1.5.0: mode `0600`; a
+  read-only open of a missing file is `ErrNotExist` and creates nothing;
+  `meta/format` is `1`, and a newer format refuses to open. History
+  entries are keyed by `NextSequence()` and trimmed to 1000, counted with
+  a cursor (`Bucket.Stats` doesn't see the open transaction's writes).
+  A value over 64 KiB fails the whole batch.
+- The engine never imports bbolt: the generated `engine.App` gets
+  `OpenStore: store.Open` only when the schema declares `App.Store`, with
+  `StoreKey` and `StoreProfiles`. A command has the store when one of its
+  keys is `Mutable` or it says `WithStore()`; it then loads the store key
+  too (A7). The binder opens the file named by that key after loading,
+  with a 1 s timeout, and closes it after `run`. (Layering stored values,
+  M7.2, moves the open into loading.)
+- Generate-time checks: a `Mutable` secret (A10), a `Mutable` key or
+  `WithStore` in an app without a store, a `Mutable` argument, and an
+  `App.Store` key that isn't a `Path` key or is itself `Mutable`.
+
 **Write pipeline**, shared by typed writes (`SetX`/`ResetX`) and dynamic ones
 (`Store.Update`/`Store.Reset` with text values). One mutex per process is held
 from step 1 to step 4, so concurrent writers can't lose each other's changes:

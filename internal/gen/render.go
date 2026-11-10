@@ -85,6 +85,8 @@ var keys = [...]engine.Key[values]{
 		{{- if .Short}} Short: {{printf "%q" .Short}},{{end}}
 		{{- if .Hidden}} Hidden: true,{{end}}
 		{{- if .NoFile}} NoFile: true,{{end}}
+		{{- if .Mutable}} Mutable: true,{{end}}
+		{{- if .Epoch}} Epoch: {{.Epoch}},{{end}}
 		{{- if .FlagOnly}} FlagOnly: true,{{end}}
 		{{- if .HasDefault}} DefaultText: {{printf "%q" .DefaultText}},{{end}}
 		{{- if .Quote}} Quote: true,{{end}}
@@ -169,6 +171,15 @@ var app = engine.App[values]{
 	{{- range .Commands}}
 		{{printf "%q" .Name}}: {{.KeysVar}},
 	{{- end}}
+	},
+	{{- end}}
+	{{- if .StoreAlias}}
+	OpenStore: {{.StoreAlias}}.Open,
+	StoreKey:  {{.StoreIdx}},
+	StoreProfiles: map[string]bool{
+	{{- range .Commands}}{{if .HasStore}}
+		{{printf "%q" .Name}}: true,
+	{{- end}}{{end}}
 	},
 	{{- end}}
 	{{- if .GlobalIdx}}

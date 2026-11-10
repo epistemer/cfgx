@@ -32,6 +32,10 @@ type Model struct {
 	Warnings Problems
 
 	AppName, AppDesc string
+	// StoreIdx is the index of the App.Store key; -1 when the app has no
+	// store.
+	StoreIdx   int
+	StoreAlias string // cfgx/store's name in the generated file
 	// ExampleConfig and JSONSchema are embedded in the generated file for
 	// the config subcommand (M6.4); Artifacts fills them in.
 	ExampleConfig, JSONSchema string
@@ -104,6 +108,8 @@ type KeyModel struct {
 	Example  string
 	declPath string // the path the schema declared, which rules name
 	Leaf     string // the key's field in its group's Values struct
+	Mutable  bool   // kept in the store (M7)
+	Epoch    int
 	ir       ir.Key // the key as the schema declared it
 	// Complete is set when the schema gave the flag a completion: file
 	// extensions, directories, or a function.
@@ -186,6 +192,9 @@ type CommandModel struct {
 	Forward []*KeyModel
 	Args    []*KeyModel
 	KeyIdx  []int
+	// HasStore is true when a key is mutable or the command asked for the
+	// store; it then loads the App.Store key too (A7).
+	HasStore bool
 }
 
 // HasRoot reports whether the command type needs the values at all.
@@ -340,7 +349,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	}
 
 	m := &Model{Package: pkg, EnvPrefix: prefix, ConfigFile: app.ConfigFile, SearchPaths: app.SearchPaths, Formats: app.Formats,
-		AppName: app.Name, AppDesc: app.Desc, app: app}
+		AppName: app.Name, AppDesc: app.Desc, app: app, StoreIdx: -1}
 	checkConfigFile(app, bad)
 	// Every generated identifier, to catch collisions between them.
 	// Later milestones generate ConfigCommand (M6.4), Test, All and Values
@@ -517,6 +526,12 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			}
 			m.keyExtras(km, k, imp, bad)
 			km.Required = k.Required
+			km.Mutable, km.Epoch = k.Mutable, k.Epoch
+			if k.Mutable && (k.Kind == ir.KindSecret || k.Kind == ir.KindSecretFile) {
+				bad(k.Pos, "%s is a secret, which can't be Mutable in v0.1.0: the store isn't encrypted (A10)", km.Path)
+			} else if k.Mutable && app.Store == "" {
+				bad(k.Pos, "%s is Mutable, but the app has no store; add App.Store(pathKey)", km.Path)
+			}
 			for _, t := range k.Tags {
 				if _, ok := tagSet[t]; !ok {
 					bad(k.Pos, "key %s has tag %s, which isn't declared", km.Path, t)
@@ -710,6 +725,24 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	sort.Ints(m.GlobalIdx)
 
 	cmdNames := map[string]bool{}
+	// The App.Store key: a static Path key in a group (§7.3).
+	if app.Store != "" {
+		for _, k := range m.Keys {
+			if k.declPath == app.Store && !k.FlagOnly {
+				m.StoreIdx = k.Index
+			}
+		}
+		switch {
+		case m.StoreIdx < 0:
+			bad(app.StorePos, "App.Store's key %s isn't a key of the app", app.Store)
+		case m.Keys[m.StoreIdx].ir.Kind != ir.KindPath:
+			bad(app.StorePos, "App.Store's key %s must be a Path key, not %s", app.Store, m.Keys[m.StoreIdx].ir.Kind)
+		case m.Keys[m.StoreIdx].Mutable:
+			bad(app.StorePos, "App.Store's key %s can't be Mutable: the store can't name its own file", app.Store)
+		default:
+			m.StoreAlias = imp.name("github.com/epistemer/cfgx/store", "store")
+		}
+	}
 	for _, c := range app.Commands {
 		if !token.IsIdentifier(c.Name) || !token.IsExported(c.Name) {
 			bad(c.Pos, "command name %q must be an exported Go identifier, like Serve", c.Name)
@@ -893,10 +926,23 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			if len(k.Tags) > 0 {
 				bad(k.Pos, "argument %s of %s has tags, but arguments belong to no interface", km.Path, c.Name)
 			}
+			if k.Mutable {
+				bad(k.Pos, "argument %s of %s can't be Mutable: arguments are flags of one run", km.Path, c.Name)
+			}
 
 			cm.Args = append(cm.Args, km)
 			cm.KeyIdx = append(cm.KeyIdx, km.Index)
 			m.Keys = append(m.Keys, km)
+		}
+		cm.HasStore = c.WithStore
+		for _, i := range cm.KeyIdx {
+			cm.HasStore = cm.HasStore || m.Keys[i].Mutable
+		}
+		if c.WithStore && app.Store == "" {
+			bad(c.Pos, "command %s uses WithStore, but the app has no store; add App.Store(pathKey)", c.Name)
+		}
+		if cm.HasStore && m.StoreIdx >= 0 && !slices.Contains(cm.KeyIdx, m.StoreIdx) {
+			cm.KeyIdx = append(cm.KeyIdx, m.StoreIdx)
 		}
 		sort.Ints(cm.KeyIdx)
 		// Go promotes a method only if one embedded group has it, so a

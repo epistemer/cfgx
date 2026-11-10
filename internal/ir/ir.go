@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 16
+const Version = 17
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -72,6 +72,10 @@ type App struct {
 	Global []string `json:"global,omitempty"`
 	// GlobalOrphans are Global groups that weren't passed to dsl.App.
 	GlobalOrphans []Ref `json:"globalOrphans,omitempty"`
+	// Store is the path of the Path key naming the store's file
+	// (App.Store); "" means no store. StorePos is where it was declared.
+	Store    string `json:"store,omitempty"`
+	StorePos Pos    `json:"storePos,omitempty"`
 	// Initialisms are extra words written in capitals in Go names.
 	Initialisms []string  `json:"initialisms,omitempty"`
 	Groups      []Group   `json:"groups"`
@@ -131,6 +135,10 @@ type Key struct {
 	Hidden  bool     `json:"hidden,omitempty"`
 	// Example is shown in example files instead of the default, as text.
 	Example *string `json:"example,omitempty"`
+	// Mutable keys can change at runtime and are kept in the store; Epoch
+	// is their schema epoch (M7).
+	Mutable bool `json:"mutable,omitempty"`
+	Epoch   int  `json:"epoch,omitempty"`
 	// Complete is the flag's shell completion; nil means the default
 	// (an enum's values, else file names).
 	Complete *Completion `json:"complete,omitempty"`
@@ -241,6 +249,8 @@ type Command struct {
 	Uses []string `json:"uses"`
 	// Tags are the tags the command uses.
 	Tags []string `json:"tags,omitempty"`
+	// WithStore gives the command the store even without mutable keys.
+	WithStore bool `json:"withStore,omitempty"`
 	// Args are the flag-only arguments of the command.
 	Args []Key `json:"args,omitempty"`
 	// Orphans are groups the command uses that weren't passed to dsl.App.

@@ -1,0 +1,101 @@
+# M7.1: the store's lifecycle. A command with a mutable key, or WithStore,
+# opens the file the App.Store key names while loading, and closes it after
+# run. Commands without the store never touch it. A second process waits
+# for the lock, then says the store is held.
+go generate ./...
+go build -o app$exe .
+
+# migrate has no mutable key: no file.
+exec ./app$exe migrate
+! exists data/app.db
+
+# serve has a mutable key: it opens (and creates) the file. The store key's
+# directory must exist, as for any path.
+mkdir data
+exec ./app$exe serve
+stdout '^served\r?$'
+exists data/app.db
+
+# admin asked for the store with WithStore; the key's flag is bound for it,
+# and the path from the config file is relative to the file.
+mkdir conf
+cp files/app.yaml conf/app.yaml
+exec ./app$exe admin --config conf/app.yaml
+exists conf/store.db
+exec ./app$exe admin --storage-bolt other.db
+exists other.db
+
+# While one process holds the store, another waits a second, then gives up.
+exec ./app$exe serve --hold 3s &
+sleep 1s
+! exec ./app$exe serve
+stderr 'data[/\\]app.db: store is held by a running process; change settings through the application'
+wait
+
+# An empty store key means there's no file to open.
+env APP_STORAGE_BOLT=
+! exec ./app$exe serve
+stderr 'storage.bolt is empty, so there is no store file'
+
+-- files/app.yaml --
+storage:
+  bolt: store.db
+-- main.go --
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	"example.com/e2e/internal/settings"
+)
+
+func main() {
+	root := &cobra.Command{Use: "app"}
+	settings.BindRoot(root)
+	var hold time.Duration
+	serve := settings.ServeCommand(&cobra.Command{Use: "serve"},
+		func(context.Context, *settings.Serve) error {
+			time.Sleep(hold)
+			fmt.Println("served")
+			return nil
+		})
+	serve.Flags().DurationVar(&hold, "hold", 0, "hold the store this long")
+	root.AddCommand(serve,
+		settings.MigrateCommand(&cobra.Command{Use: "migrate"}, func(context.Context, *settings.Migrate) error { return nil }),
+		settings.AdminCommand(&cobra.Command{Use: "admin"}, func(context.Context, *settings.Admin) error { return nil }),
+	)
+	if err := root.Execute(); err != nil {
+		os.Exit(1)
+	}
+}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var bolt = dsl.Path("bolt", "Store file").Default("data/app.db")
+
+var Storage = dsl.Group("storage", "Storage", bolt)
+
+var Rate = dsl.Group("rate", "Rate limits",
+	dsl.Int("limit", "Requests per second").Default(100).Mutable(),
+)
+
+var DB = dsl.Group("db", "Database", dsl.String("host", "Host").Default("localhost"))
+
+var App = dsl.App("app", "Test app", Storage, Rate, DB).ConfigFile("app", ".").Store(bolt)
+
+var (
+	Serve   = dsl.Command("Serve").Uses(Rate)
+	Migrate = dsl.Command("Migrate").Uses(DB)
+	Admin   = dsl.Command("Admin").Uses(DB).WithStore()
+)
