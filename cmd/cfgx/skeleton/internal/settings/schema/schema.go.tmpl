@@ -1,0 +1,26 @@
+// Package schema declares {{.Bin}}'s settings. After a change, run
+// go generate ./... to update the generated code, the example config,
+// its JSON Schema and docs/CONFIG.md.
+package schema
+
+import (
+	"time"
+
+	"github.com/epistemer/cfgx/dsl"
+)
+
+var Log = dsl.Group("log", "Logging",
+	dsl.Enum("level", "Minimum log level", "debug", "info", "warn", "error").Default("info"),
+	dsl.Enum("format", "Output format", "text", "json").Default("text"),
+)
+
+var Server = dsl.Group("server", "HTTP server",
+	dsl.String("addr", "Address to listen on").Default("localhost:8080"),
+	dsl.Duration("shutdown_timeout", "How long to wait for requests to finish when stopping").Default(10*time.Second),
+)
+
+var App = dsl.App("{{.Name}}", "{{.Bin}}", Log, Server).
+	ConfigFile("{{.Bin}}", ".").
+	Global(Log)
+
+var Serve = dsl.Command("Serve").Uses(Server)

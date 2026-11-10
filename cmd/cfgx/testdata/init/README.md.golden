@@ -1,0 +1,24 @@
+# hello
+
+Created with `cfgx init`. Settings are declared in
+[internal/settings/schema](internal/settings/schema/schema.go); the code that
+reads them, the example config and [docs/CONFIG.md](docs/CONFIG.md) are
+generated from it.
+
+```sh
+go build .
+./hello serve                  # listens on localhost:8080
+./hello serve --server-addr :9090
+./hello config explain         # every setting, its value and where it came from
+```
+
+## Adding a setting
+
+1. Declare it in `internal/settings/schema/schema.go`, for example
+   `dsl.Int("max_body", "Largest request body, in bytes").Default(1 << 20)`
+   in the `Server` group.
+2. Run `go generate ./...`.
+3. Read it with the generated getter, `s.ServerMaxBody()`.
+
+It can then be set with `--server-max-body`, `HELLO_SERVER_MAX_BODY`
+or `server.max_body` in `hello.yaml` (see `hello.example.yaml`).

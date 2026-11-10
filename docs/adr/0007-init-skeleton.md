@@ -40,18 +40,24 @@ Option 2. The skeleton is:
   `signal.NotifyContext` (interrupt, and SIGTERM where it exists).
 - `internal/settings/settings.go`: the `//go:generate go tool cfgx gen
   ./schema` line.
-- `internal/settings/schema/schema.go`: a `Log` group (level, format) and
-  a `Server` group (addr, shutdown timeout); the app reads `<name>.yaml`
-  from the working directory; `Serve` uses both.
-- `internal/logging/logging.go`: `New(settings.Log) *logrus.Logger`, and
-  `Slog(*logrus.Logger) *slog.Logger`, the bridge.
+- `internal/settings/schema/schema.go`: a global `Log` group (level,
+  format) and a `Server` group (addr, shutdown timeout); the app reads
+  `<program>.yaml` from the working directory; `Serve` uses `Server`.
+- `internal/logging/logging.go`: `New() *logrus.Logger`, the logger before
+  the configuration loads (cfgx's own warnings need it during loading);
+  `Configure(*logrus.Logger, settings.Log)`, which a command that loads the
+  settings calls; and `Slog(*logrus.Logger) *slog.Logger`, the bridge.
+  `config` and `version` load no log settings and log at the default level.
+- A first interrupt or SIGTERM cancels the context; a second one stops the
+  program at once.
 - `cmd`-less layout: the module root is the program.
 - `.gitignore` (the binary, `*.db`) and a README that says how to add a key.
 - go.mod: `go mod init`, then `go get -tool github.com/epistemer/cfgx/cmd/cfgx`
-  at the version of the running cfgx, then `go generate`, `go mod tidy`,
-  `go build`.
+  at the version of the running cfgx, then `go mod tidy`, `go generate`,
+  `go mod tidy` and `go build .`, which leaves the program built.
 
-`init` refuses to run if any file it would write exists.
+`init` refuses to run if any file it or the go command would write exists,
+and removes what it made if a step fails, so it can run again.
 
 ## Consequences
 

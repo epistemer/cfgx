@@ -1,0 +1,125 @@
+// Package logging sets up the logrus logger, and the log/slog bridge that
+// routes cfgx's warnings into it.
+package logging
+
+import (
+	"context"
+	"log/slog"
+	"os"
+
+	"github.com/sirupsen/logrus"
+
+	"example.com/hello/internal/settings"
+)
+
+// New is the logger before the configuration is loaded: info and up, as
+// text, on stderr. Commands that load the log settings apply them with
+// Configure.
+func New() *logrus.Logger {
+	l := logrus.New()
+	l.SetOutput(os.Stderr)
+	return l
+}
+
+// Configure applies the log settings to l.
+func Configure(l *logrus.Logger, cfg settings.Log) error {
+	level, err := logrus.ParseLevel(cfg.LogLevel())
+	if err != nil {
+		return err
+	}
+	l.SetLevel(level)
+	if cfg.LogFormat() == "json" {
+		l.SetFormatter(&logrus.JSONFormatter{})
+	} else {
+		l.SetFormatter(&logrus.TextFormatter{})
+	}
+	return nil
+}
+
+// Slog is a *slog.Logger that writes to l, for libraries that log with
+// log/slog, such as cfgx. Groups become dotted field names.
+func Slog(l *logrus.Logger) *slog.Logger { return slog.New(&handler{l: l, fields: logrus.Fields{}}) }
+
+type handler struct {
+	l      *logrus.Logger
+	fields logrus.Fields // from WithAttrs, already named
+	group  string        // the prefix for attributes added from now on
+}
+
+func (h *handler) Enabled(_ context.Context, lv slog.Level) bool {
+	return h.l.IsLevelEnabled(level(lv))
+}
+
+func (h *handler) Handle(_ context.Context, r slog.Record) error {
+	fields := make(logrus.Fields, len(h.fields)+r.NumAttrs())
+	for k, v := range h.fields {
+		fields[k] = v
+	}
+	r.Attrs(func(a slog.Attr) bool {
+		add(fields, h.group, a)
+		return true
+	})
+	e := h.l.WithFields(fields)
+	if !r.Time.IsZero() {
+		e = e.WithTime(r.Time)
+	}
+	e.Log(level(r.Level), r.Message)
+	return nil
+}
+
+// add puts a into fields under prefix, flattening groups.
+func add(fields logrus.Fields, prefix string, a slog.Attr) {
+	a.Value = a.Value.Resolve()
+	if a.Equal(slog.Attr{}) {
+		return
+	}
+	key := a.Key
+	if prefix != "" && key != "" {
+		key = prefix + "." + key
+	} else if key == "" {
+		key = prefix
+	}
+	if a.Value.Kind() == slog.KindGroup {
+		for _, g := range a.Value.Group() {
+			add(fields, key, g)
+		}
+		return
+	}
+	if key != "" {
+		fields[key] = a.Value.Any()
+	}
+}
+
+func (h *handler) WithAttrs(as []slog.Attr) slog.Handler {
+	fields := make(logrus.Fields, len(h.fields)+len(as))
+	for k, v := range h.fields {
+		fields[k] = v
+	}
+	for _, a := range as {
+		add(fields, h.group, a)
+	}
+	return &handler{l: h.l, fields: fields, group: h.group}
+}
+
+func (h *handler) WithGroup(name string) slog.Handler {
+	if name == "" {
+		return h
+	}
+	g := name
+	if h.group != "" {
+		g = h.group + "." + name
+	}
+	return &handler{l: h.l, fields: h.fields, group: g}
+}
+
+func level(l slog.Level) logrus.Level {
+	switch {
+	case l >= slog.LevelError:
+		return logrus.ErrorLevel
+	case l >= slog.LevelWarn:
+		return logrus.WarnLevel
+	case l >= slog.LevelInfo:
+		return logrus.InfoLevel
+	}
+	return logrus.DebugLevel
+}

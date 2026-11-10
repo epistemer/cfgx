@@ -4,6 +4,30 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M8 `cfgx init`; M8 complete
+
+- **Landed:** `cfgx init <module path>` creates a cobra application with
+  a cfgx settings package (ADR 0007). It includes `serve`, `config` and
+  `version` commands, a signal-aware context, logrus with an slog bridge
+  that routes cfgx's warnings into it, `.gitignore` and a README. It then
+  runs `go mod init`, adds cfgx as a tool, generates and builds.
+  - It refuses to overwrite anything, and undoes its work if a step fails.
+  - `init.txtar` runs it in an empty directory, builds, and runs
+    `serve --help`, `config explain` and `version`.
+  - The skeleton was also tried by hand: it serves a request and shuts down
+    on SIGTERM.
+- **Decided for you:**
+  - The skeleton follows the roadmap's proposal, with logrus (ADR 0007).
+    The ownership terms make the skeleton my call.
+  - The config file is `<program>.yaml`.
+  - `-cfgx dir` points the new module at a local cfgx checkout.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 215k tokens
+  ([review 0034](reviews/0034-gemini-m8-review.md)). 10 of 12 findings
+  fixed.
+- **Next:** M9, hardening and v0.1.0: benchmarks, fuzzing in CI, the API
+  review, docs, the release.
+- **Waiting on you:** nothing.
+
 ## 2026-11-10: M7.9 end-to-end admin script; M7 complete
 
 - **Landed:** `admin.txtar`, in which a server exposes a small HTTP admin

@@ -308,8 +308,8 @@ hand (problem 3).
 | ✓ | ID | Item | Size | Done when |
 |---|----|------|------|-----------|
 | ☑ | M8.1 | **Decide the skeleton's contents** (your earlier list of standard pieces is still unanswered). Proposal: cobra root with an example `serve` command; a settings package and schema whose `Log` group configures logrus, plus the slog bridge that routes cfgx's warnings into it; a signal-aware context (`signal.NotifyContext`); a `version` command from `debug.ReadBuildInfo`; cobra completion; the go.mod `tool` directive; `.gitignore`; README. | S | ADR |
-| ☐ | M8.2 | Templates plus `cfgx init <module-path>`. It refuses to overwrite existing files, then runs `go mod init`, `go get -tool github.com/epistemer/cfgx/cmd/cfgx`, `go generate`, and `go build`. | M | Golden tests of the templates |
-| ☐ | M8.3 | End-to-end: `init` in an empty directory, then build, then `app serve --help`, then `app config explain` | S | testscript on all OSes |
+| ☑ | M8.2 | Templates plus `cfgx init <module-path>`. It refuses to overwrite existing files, then runs `go mod init`, `go get -tool github.com/epistemer/cfgx/cmd/cfgx`, `go generate`, and `go build`. | M | Golden tests of the templates |
+| ☑ | M8.3 | End-to-end: `init` in an empty directory, then build, then `app serve --help`, then `app config explain` | S | testscript on all OSes |
 
 **Exit:** a freshly initialized project builds and runs with zero manual edits.
 
