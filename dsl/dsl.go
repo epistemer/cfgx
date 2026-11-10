@@ -39,6 +39,8 @@ type AppDef struct {
 	formats               []Format
 	global                []*GroupDef
 	initialisms           []string
+	store                 *PathKey
+	storePos              ir.Pos
 	pos                   ir.Pos
 }
 
@@ -80,6 +82,14 @@ const (
 // Formats restricts the accepted config file formats. The default is both.
 func (a *AppDef) Formats(formats ...Format) *AppDef {
 	a.formats = append(a.formats, formats...)
+	return a
+}
+
+// Store keeps mutable keys in the built-in bbolt store, in the file the
+// static Path key pathKey names (interface §7.3). Every command that has the
+// store loads pathKey and gets its flag.
+func (a *AppDef) Store(pathKey *PathKey) *AppDef {
+	a.store, a.storePos = pathKey, caller(1)
 	return a
 }
 
@@ -254,6 +264,8 @@ type keyBase struct {
 	hidden     bool
 	example    *string
 	complete   *ir.Completion
+	mutable    bool
+	epoch      int
 	checks     []ir.Check
 	validate   *ir.FuncRef
 	defFunc    *ir.FuncRef
@@ -507,10 +519,11 @@ func (g *GroupDef) usable() {}
 
 // CommandDef is a config profile. Create it with Command.
 type CommandDef struct {
-	name string
-	uses []Usable
-	args []KeyDef
-	pos  ir.Pos
+	name      string
+	uses      []Usable
+	args      []KeyDef
+	withStore bool
+	pos       ir.Pos
 }
 
 // Command declares a config profile. goName names the generated type
@@ -524,6 +537,13 @@ func Command(goName string) *CommandDef {
 // Uses adds groups to the command.
 func (c *CommandDef) Uses(items ...Usable) *CommandDef {
 	c.uses = append(c.uses, items...)
+	return c
+}
+
+// WithStore gives the command the store though none of its keys is
+// mutable, for example to use Store().DB().
+func (c *CommandDef) WithStore() *CommandDef {
+	c.withStore = true
 	return c
 }
 
@@ -640,9 +660,16 @@ func Export(w io.Writer) error {
 		}
 		out.Global = append(out.Global, path)
 	}
+	if a.store != nil {
+		path, ok := keyPaths[&a.store.keyBase]
+		if !ok {
+			return fmt.Errorf("%s: App.Store's key %q isn't in a group passed to dsl.App", a.storePos, a.store.name)
+		}
+		out.Store, out.StorePos = path, a.storePos
+	}
 	argCommands := map[*keyBase]string{}
 	for _, c := range commands {
-		ic := ir.Command{Name: c.name, Pos: c.pos, Uses: []string{}}
+		ic := ir.Command{Name: c.name, Pos: c.pos, Uses: []string{}, WithStore: c.withStore}
 		for _, u := range c.uses {
 			if t, ok := u.(*TagDef); ok && t != nil {
 				ic.Tags = append(ic.Tags, t.name)
@@ -723,6 +750,8 @@ func (k *keyBase) export(tags []string) ir.Key {
 		Hidden:      k.hidden,
 		Example:     k.example,
 		Complete:    k.complete,
+		Mutable:     k.mutable,
+		Epoch:       k.epoch,
 		Checks:      k.checks,
 		Validate:    k.validate,
 		DefaultFunc: k.defFunc,

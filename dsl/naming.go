@@ -107,3 +107,22 @@ func (k *key[K, T, G]) Example(v T) K {
 	k.example = &s
 	return k.self
 }
+
+// Mutable lets the key change at runtime: the app writes it with Update or
+// Store().Update, the value is kept in the store (App.Store), and it wins
+// over flags, env vars, the config file and the default (interface §4).
+func (k *key[K, T, G]) Mutable() K {
+	k.mutable = true
+	return k.self
+}
+
+// Epoch sets the key's epoch, starting at 0. Raising it makes stored values
+// written under an older epoch go to history unused, for a release that
+// changes what the key means.
+func (k *key[K, T, G]) Epoch(n int) K {
+	if n < 0 {
+		k.problems = append(k.problems, fmt.Sprintf("Epoch(%d) must not be negative", n))
+	}
+	k.epoch = n
+	return k.self
+}

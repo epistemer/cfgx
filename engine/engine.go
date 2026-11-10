@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 
 	"github.com/spf13/pflag"
+
+	"github.com/epistemer/cfgx/internal/storage"
 )
 
 // GeneratedV1 is referenced by generated code, so code from a generator that
@@ -85,6 +87,10 @@ type Key[V any] struct {
 	DefaultFrom string
 	// Hidden leaves the flag out of --help.
 	Hidden bool
+	// Mutable keys can change at runtime and are kept in the store; Epoch
+	// is the key's schema epoch.
+	Mutable bool
+	Epoch   int
 	// Complete is how the flag's value completes in the shell; nil means an
 	// enum's values, or else the shell's default, file names.
 	Complete *Completion
@@ -110,6 +116,13 @@ type App[V any] struct {
 	// Profiles are the commands' key lists by name, for the config
 	// subcommand.
 	Profiles map[string][]int
+	// OpenStore opens the store, when the schema declares App.Store; it is
+	// cfgx/store's, so only programs with a store link bbolt. StoreKey is
+	// the index of the Path key naming its file, and StoreProfiles the
+	// commands that have it.
+	OpenStore     storage.Opener
+	StoreKey      int
+	StoreProfiles map[string]bool
 }
 
 // RuleKind is a kind of cross-key rule (interface §3.5).

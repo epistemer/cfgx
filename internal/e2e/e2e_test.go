@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 	"unicode"
 
 	"github.com/rogpeppe/go-internal/testscript"
@@ -90,6 +91,7 @@ func TestScript(t *testing.T) {
 			"go":         cmdGo,
 			"writebytes": cmdWriteBytes,
 			"mkfifo":     cmdMkfifo,
+			"sleep":      cmdSleep,
 		},
 		Setup: func(e *testscript.Env) error {
 			passEnv(e, goEnv)
@@ -280,4 +282,17 @@ func mustQuoteGoModToken(s string) bool {
 		}
 	}
 	return s == "" || strings.Contains(s, "//") || strings.Contains(s, "/*")
+}
+
+// cmdSleep waits: sleep 500ms. A script uses it to let a background
+// process get going.
+func cmdSleep(ts *testscript.TestScript, neg bool, args []string) {
+	if neg || len(args) != 1 {
+		ts.Fatalf("usage: sleep duration")
+	}
+	d, err := time.ParseDuration(args[0])
+	if err != nil {
+		ts.Fatalf("sleep: %v", err)
+	}
+	time.Sleep(d)
 }

@@ -9,9 +9,11 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/epistemer/cfgx"
 	"github.com/epistemer/cfgx/internal/opts"
+	"github.com/epistemer/cfgx/internal/storage"
 	"github.com/spf13/cobra"
 )
 
@@ -106,9 +108,37 @@ func Command[V, C any](cmd *cobra.Command, a *App[V], profile string, idx []int,
 			return err
 		}
 		logWarnings(cmd.Context(), logger, res.Warnings)
+		if a.OpenStore != nil && a.StoreProfiles[profile] {
+			st, err := a.openStore(res.Values, false)
+			if err != nil {
+				cmd.SilenceUsage = true
+				cmd.SilenceErrors = true
+				fmt.Fprintf(cmd.ErrOrStderr(), "%s: %v\n", cmd.Root().Name(), err)
+				return err
+			}
+			defer st.Close()
+		}
 		return run(cmd.Context(), build(res.Values, args))
 	}
 	return cmd
+}
+
+// storeTimeout is how long opening the store waits for another process to
+// let go of it.
+const storeTimeout = time.Second
+
+// openStore opens the store file that the App.Store key of v names.
+func (a *App[V]) openStore(v *V, readOnly bool) (storage.Backend, error) {
+	k := &a.Keys[a.StoreKey]
+	path, _ := k.Show(v).(string)
+	if path == "" {
+		return nil, fmt.Errorf("%s is empty, so there is no store file", k.Path)
+	}
+	b, err := a.OpenStore(path, storage.Options{ReadOnly: readOnly, Timeout: storeTimeout})
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return b, nil
 }
 
 func loggerFor(r *opts.Root, stderr io.Writer) *slog.Logger {
