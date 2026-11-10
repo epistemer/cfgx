@@ -4,6 +4,29 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-11: M9.4 docs and README
+
+- **Landed:** a new README. It says what cfgx does and has a quickstart
+  that goes from `cfgx init`, through adding a key and `go generate`, to
+  setting the key from a flag, an env var and the file. It also gives a
+  tour of a larger schema, mutable settings, testing, the benchmark
+  numbers, and links. "Pre-alpha" is gone; the status line says v0.1, and
+  that the API may change before v1.0.0.
+  - The quickstart was run step by step in an empty directory, and its
+    output is pasted from that run.
+  - Godoc examples: `Secret`, `Secret.Equal` and `Errors` in cfgx, which
+    run and check their output; a whole schema, `RelevantIf` and `Enum`
+    in dsl; an HTTP admin endpoint in store.
+  - The zp example's README no longer promises store keys "in M7.9"; it
+    points to the end-to-end script that has them.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 331k tokens
+  ([review 0038](reviews/0038-gemini-m9.4-review.md)). 10 of 11 findings
+  fixed. The worst: the quickstart's server blocked the terminal, and
+  nothing said how to see its answer.
+- **Next:** M9.5, the CHANGELOG and the v0.1.0 tag.
+- **Waiting on you:** the API proposals in api-review.md, three of
+  which I recommend before v0.1.0.
+
 ## 2026-11-11: M9.3 API review
 
 - **Landed:** [api-review.md](api-review.md) checks every exported
