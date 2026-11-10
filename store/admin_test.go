@@ -45,7 +45,7 @@ func adminApp(dir string) *engine.App[adVals] {
 		{Path: "tags", Env: "AD_TAGS", Kind: "strings", Mutable: true,
 			SetItems: func(v *adVals, items []string) error { return engine.ParseStrings(items, &v.Tags) },
 			IsSet:    func(v *adVals) bool { return len(v.Tags) != 0 }, Show: func(v *adVals) any { return v.Tags },
-			Format: func(v *adVals) (string, error) { return engine.FormatStrings(v.Tags), nil }},
+			Format: func(v *adVals) (string, error) { return engine.FormatStrings(v.Tags) }},
 		{Path: "mode", Env: "AD_MODE", Kind: "enum", Mutable: true, Enum: modeTexts,
 			Set:   func(v *adVals, r string) error { return engine.ParseEnum(r, modeTexts, modeValues, &v.Mode) },
 			IsSet: func(v *adVals) bool { return v.Mode != 0 }, Show: func(v *adVals) any { return engine.ShowEnum(v.Mode, modeTexts, modeValues) },

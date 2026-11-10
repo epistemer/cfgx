@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"net/url"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -63,7 +64,13 @@ func TestFormatRoundTrips(t *testing.T) {
 		roundTrip(t, l, FormatLocation, ParseLocation)
 	}
 	for _, s := range [][]string{nil, {""}, {"a", "b,c", ` d `, `say "hi"`, "two\nlines"}, {"", ""}} {
-		roundTrip(t, s, FormatStrings, items(ParseStrings))
+		roundTrip(t, s, func(s []string) string {
+			text, err := FormatStrings(s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return text
+		}, items(ParseStrings))
 	}
 	roundTrip(t, []int{1, -2}, FormatInts, items(ParseInts))
 	roundTrip(t, []time.Duration{time.Second, 5 * time.Minute}, FormatDurations, items(ParseDurations))
@@ -77,8 +84,13 @@ func TestFormatRoundTrips(t *testing.T) {
 	for _, m := range []map[string]string{nil, {"a": "1", "b": "x=y", "c": "", "d,e": " f"}} {
 		roundTrip(t, m, stringMap, items(ParseStringMap))
 	}
-	if _, err := FormatStringMap(map[string]string{"a=b": "1"}); err == nil {
-		t.Error("a map key holding = formatted")
+	for _, m := range []map[string]string{{"a=b": "1"}, {"": "1"}, {" a": "1"}, {"a": "x\ry"}} {
+		if _, err := FormatStringMap(m); err == nil {
+			t.Errorf("%q formatted", m)
+		}
+	}
+	if _, err := FormatStrings([]string{"a\r\nb"}); err == nil {
+		t.Error("an item with a carriage return formatted")
 	}
 
 	type level int
@@ -112,4 +124,53 @@ func TestFormatRoundTrips(t *testing.T) {
 	if _, err := FormatText(plain{1}); err == nil {
 		t.Error("a type without MarshalText formatted")
 	}
+}
+
+// A list's canonical text splits back into the same items.
+func FuzzFormatStrings(f *testing.F) {
+	for _, s := range []string{"a\x00b,c", "", "\x00", ` a `, `"q"`, "x\ny", "\r"} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		in := strings.Split(s, "\x00")
+		text, err := FormatStrings(in)
+		if err != nil {
+			return
+		}
+		var out []string
+		if err := items(ParseStrings)(text, &out); err != nil {
+			t.Fatalf("%q → %q: %v", in, text, err)
+		}
+		if !reflect.DeepEqual(out, in) {
+			t.Fatalf("%q → %q → %q", in, text, out)
+		}
+	})
+}
+
+// A map's canonical text, when it has one, parses back to the same map.
+func FuzzFormatStringMap(f *testing.F) {
+	for _, s := range []string{"a\x001", "a\x00x=y\x00b\x00", " k\x00v", "\x00v", "a,b\x00\"c\""} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		kv := strings.Split(s, "\x00")
+		m := map[string]string{}
+		for i := 0; i+1 < len(kv); i += 2 {
+			m[kv[i]] = kv[i+1]
+		}
+		text, err := FormatStringMap(m)
+		if err != nil {
+			return
+		}
+		var out map[string]string
+		if err := items(ParseStringMap)(text, &out); err != nil {
+			t.Fatalf("%q → %q: %v", m, text, err)
+		}
+		if len(m) == 0 && len(out) == 0 {
+			return
+		}
+		if !reflect.DeepEqual(out, m) {
+			t.Fatalf("%q → %q → %q", m, text, out)
+		}
+	})
 }

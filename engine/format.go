@@ -48,8 +48,16 @@ func FormatLocation(l *time.Location) string {
 	return l.String()
 }
 
-// FormatStrings is one CSV record, items quoted where they need it.
-func FormatStrings(s []string) string { return csvRecord(s, func(x string) string { return x }) }
+// FormatStrings is one CSV record, items quoted where they need it. An
+// item holding a carriage return has no text form: CSV turns \r\n into \n.
+func FormatStrings(s []string) (string, error) {
+	for _, x := range s {
+		if strings.Contains(x, "\r") {
+			return "", fmt.Errorf("item %q holds a carriage return, which its text form can't", x)
+		}
+	}
+	return csvRecord(s, func(x string) string { return x }), nil
+}
 
 // FormatInts is one CSV record.
 func FormatInts(n []int) string { return csvRecord(n, strconv.Itoa) }
@@ -57,13 +65,18 @@ func FormatInts(n []int) string { return csvRecord(n, strconv.Itoa) }
 // FormatDurations is one CSV record.
 func FormatDurations(d []time.Duration) string { return csvRecord(d, time.Duration.String) }
 
-// FormatStringMap is one CSV record of key=value items, sorted by key. A
-// key holding "=" has no text form: the parser splits at the first "=".
+// FormatStringMap is one CSV record of key=value items, sorted by key.
+// Some maps have no text form: a key that is empty, holds "=" (the parser
+// splits at the first) or has outer spaces (the parser trims them), and a
+// key or value holding a carriage return.
 func FormatStringMap(m map[string]string) (string, error) {
 	keys := slices.Sorted(maps.Keys(m))
 	for _, k := range keys {
-		if strings.Contains(k, "=") {
-			return "", fmt.Errorf("map key %q holds =, which its text form can't", k)
+		switch {
+		case k == "" || strings.Contains(k, "=") || strings.TrimSpace(k) != k:
+			return "", fmt.Errorf("map key %q is empty, holds = or has outer spaces, which its text form can't", k)
+		case strings.Contains(k+m[k], "\r"):
+			return "", fmt.Errorf("map item %q holds a carriage return, which its text form can't", k)
 		}
 	}
 	return csvRecord(keys, func(k string) string { return k + "=" + m[k] }), nil
