@@ -24,10 +24,11 @@ func storeApp(dir string) *App[stVals] {
 			Set:   func(v *stVals, r string) error { return ParsePath(r, &v.Bolt) },
 			IsSet: func(v *stVals) bool { return v.Bolt != "" }, Show: func(v *stVals) any { return v.Bolt }},
 		{Path: "rate", Env: "CFGXT_RATE", Flag: "rate", Mutable: true,
-			Set:     func(v *stVals, r string) error { return ParseInt(r, &v.Rate) },
-			IsSet:   func(v *stVals) bool { return v.Rate != 0 },
-			Check:   func(v *stVals) error { return AtMost(v.Rate, 1000, "1000") },
-			Default: func(v *stVals) { v.Rate = 100 }, DefaultText: "100"},
+			Set:      func(v *stVals, r string) error { return ParseInt(r, &v.Rate) },
+			IsSet:    func(v *stVals) bool { return v.Rate != 0 },
+			Check:    func(v *stVals) error { return AtMost(v.Rate, 1000, "1000") },
+			Required: true,
+			Default:  func(v *stVals) { v.Rate = 100 }, DefaultText: "100"},
 		{Path: "fixed", Env: "CFGXT_FIXED",
 			Set:   func(v *stVals, r string) error { return ParseInt(r, &v.Fixed) },
 			IsSet: func(v *stVals) bool { return v.Fixed != 0 }},
@@ -109,7 +110,7 @@ func TestStoreLayer(t *testing.T) {
 // A stored value that no longer passes the schema is ignored, with a
 // warning, and the next layer applies; the record stays.
 func TestInvalidStoredValue(t *testing.T) {
-	for stored, why := range map[string]string{"x": `"x" is not an integer`, "5000": "must be at most 1000"} {
+	for stored, why := range map[string]string{"x": `"x" is not an integer`, "5000": "must be at most 1000", "0": "is required, but the stored value is empty"} {
 		dir := t.TempDir()
 		a := storeApp(dir)
 		put(t, filepath.Join(dir, "app.db"), map[string]string{"rate": stored})

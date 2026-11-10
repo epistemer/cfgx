@@ -907,7 +907,8 @@ record, keyed by the key's path, is its top candidate: it is parsed into a
 scratch value and checked (constraints and `Validate`); if either fails,
 the record is ignored with "`<key>`: the stored value is ignored (`<why>`);
 using `<source>`", `Result.Invalid` says why, and the record stays in the
-store. A record that fails to decode is ignored the same way. A stored
+store. A record that fails to decode is ignored the same way, and so is an
+empty stored value for a `Required` key (empty means unset, A4). A stored
 value that wins over a flag or env var warns as specified, with who and the
 date. Records of keys that aren't mutable, or that the command doesn't load,
 are ignored. `Result.Records` keeps each loaded key's record for `explain`

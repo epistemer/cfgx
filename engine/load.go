@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -917,14 +918,18 @@ func (l *loader[V]) unknownEnv(environ []string) {
 // checks, is ignored with a warning, and kept in the store. One that hides
 // a flag or env var says so.
 func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origin) (*candidate, []Origin) {
-	next := "the default"
-	if win != nil && win.origin.Layer != LayerDefault {
-		next = win.origin.String()
+	next := "using the default"
+	switch {
+	case win == nil:
+		next = "leaving it unset"
+	case win.origin.Layer != LayerDefault:
+		next = "using " + win.origin.String()
 	}
 	if err, bad := l.badRecords[k.Path]; bad {
-		l.warn(fmt.Sprintf("%s: the stored value is ignored (%v); using %s", k.Path, err, next),
+		l.warn(fmt.Sprintf("%s: the stored value is ignored (%v); %s", k.Path, err, next),
 			slog.String("key", k.Path), slog.String("source", "store"))
 		l.invalid(i, err.Error())
+		return win, origins
 	}
 	rec, ok := l.records[k.Path]
 	if !ok {
@@ -937,11 +942,16 @@ func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origi
 	c := &candidate{raw: rec.Raw, origin: Origin{Layer: LayerStore}}
 	scratch := new(V)
 	err := apply(k, scratch, c, c.raw)
-	if err == nil && k.Check != nil && k.IsSet(scratch) {
+	switch {
+	case err != nil:
+	case k.Required && !k.IsSet(scratch):
+		// Empty stays empty: a required key can't take it from the store.
+		err = errors.New("is required, but the stored value is empty")
+	case k.Check != nil && k.IsSet(scratch):
 		err = k.Check(scratch)
 	}
 	if err != nil {
-		l.warn(fmt.Sprintf("%s: the stored value is ignored (%v); using %s", k.Path, err, next),
+		l.warn(fmt.Sprintf("%s: the stored value is ignored (%v); %s", k.Path, err, next),
 			slog.String("key", k.Path), slog.String("source", "store"))
 		l.invalid(i, err.Error())
 		return win, origins
