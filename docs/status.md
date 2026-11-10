@@ -4,6 +4,29 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-11: M9.3 API review
+
+- **Landed:** [api-review.md](api-review.md) checks every exported
+  identifier in `cfgx`, `dsl` and `store`: whether it's needed, its name,
+  its docs, whether misuse fails loudly, and whether it leaks internals.
+  `engine`'s package doc now says it has no compatibility promise.
+  - Doc fixes: `WithArgs` had a broken sentence, and the load options now
+    say only LoadX uses them. `Uses` takes tags too. dsl explains the
+    `K`, `T` and `G` that its method docs show.
+  - Bug fixes: an `Enum` example outside the enum's values, or a
+    `StringMap` example with a bad map key, used to pass silently. Both
+    now fail at generate time, as a bad default does.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 281k tokens
+  ([review 0037](reviews/0037-gemini-m9.3-review.md)). 7 of 10 findings
+  fixed or turned into proposals.
+- **Next:** M9.4 (docs and the README, which drops "pre-alpha"), then
+  M9.5 (v0.1.0).
+- **Waiting on you:** eight API proposals (P1–P8 in api-review.md).
+  I recommend three of them before v0.1.0:
+  - P2: options that do nothing where they're passed should fail.
+  - P6: add `store.ErrUnknownKey`.
+  - P7: `cfgx gen` should reject an app with no keys.
+
 ## 2026-11-10: M9.1 benchmarks against viper; M10 dropped
 
 - **Landed:** `examples/zp/bench`, a module of its own so viper never

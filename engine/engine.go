@@ -1,5 +1,3 @@
-// Package engine is the runtime behind generated code. Applications don't
-// use it directly: the generated settings package does.
 package engine
 
 import (

@@ -90,12 +90,23 @@ func StringMap(name, desc string) *StringMapKey {
 
 // Default sets the key's default. Keys can't be empty or hold an =.
 func (k *StringMapKey) Default(m map[string]string) *StringMapKey {
+	k.checkKeys("default", m)
+	return k.key.Default(m)
+}
+
+// Example is shown in example files instead of the default. Keys can't be
+// empty or hold an =.
+func (k *StringMapKey) Example(m map[string]string) *StringMapKey {
+	k.checkKeys("example", m)
+	return k.key.Example(m)
+}
+
+func (k *StringMapKey) checkKeys(what string, m map[string]string) {
 	for key := range m {
 		if strings.TrimSpace(key) == "" || strings.Contains(key, "=") || key != strings.TrimSpace(key) {
-			k.problems = append(k.problems, fmt.Sprintf("default key %q must be non-empty, without = or outer spaces", key))
+			k.problems = append(k.problems, fmt.Sprintf("%s key %q must be non-empty, without = or outer spaces", what, key))
 		}
 	}
-	return k.key.Default(m)
 }
 
 func mapText(m map[string]string) string {
