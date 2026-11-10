@@ -923,6 +923,21 @@ applies. A record from a newer epoch is ignored with a warning and kept, so
 rolling back a release doesn't destroy a value. Writes stamp the key's
 current epoch (M7.4).
 
+**[decided, M7.4]** The write pipeline is `engine.Writer`, which `Load`
+returns in `Result.Writer` when the store is open. The bootstrap isn't a
+second set of values: the writer keeps what the keys loaded from (the flag
+set, every env lookup's result, the parsed config file, and the files read,
+by path), and a write runs the same per-key loading again with the
+candidate records. So a write's validation is startup's, rules and
+`RelevantIf` included, and a key that isn't written can't change: a secret
+file rewritten since startup isn't read again. A written value that fails
+is a problem, not the startup warning. Setting a key to its stored value,
+or resetting a key with nothing stored, writes nothing. Typed setters store
+the key's canonical text (`Key.Format`, generated for mutable keys) and
+parse it back like any source. `DefaultFunc` defaults are computed again
+on each write, so they should be deterministic. A `File` key can't be
+`Mutable`, and a `Mutable` Text key's type must implement `MarshalText`.
+
 **Write pipeline**, shared by typed writes (`SetX`/`ResetX`) and dynamic ones
 (`Store.Update`/`Store.Reset` with text values). One mutex per process is held
 from step 1 to step 4, so concurrent writers can't lose each other's changes:

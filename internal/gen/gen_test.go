@@ -256,6 +256,38 @@ func allKinds() *ir.App {
 	}
 }
 
+// mutableKinds is allKinds with a store, an enum, and every key that can
+// be Mutable mutable.
+func mutableKinds() *ir.App {
+	a := allKinds()
+	a.Store = "k.path"
+	g := &a.Groups[0]
+	g.Keys = append(g.Keys, ir.Key{Name: "day", Desc: "enum", Kind: ir.KindEnum,
+		Type: &ir.Type{Path: "time", Pkg: "time", Name: "Weekday", Kind: "int"},
+		Enum: []ir.EnumValue{{Text: "sunday", Lit: "0", Zero: true}, {Text: "monday", Lit: "1"}}})
+	for i := range g.Keys {
+		if k := &g.Keys[i]; k.Name != "path" && k.Kind != ir.KindFile {
+			k.Mutable = true
+		}
+	}
+	g.Keys[2].Epoch = 3
+	return a
+}
+
+// A store's app gets an Update type with a setter and a reset per mutable
+// key, and each mutable key a Format.
+func TestMutableGolden(t *testing.T) {
+	m, err := Build(mutableKinds(), "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := Render(m)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, src)
+	}
+	golden.Assert(t, filepath.Join("testdata", "mutable.golden"), src)
+}
+
 func TestKindsGolden(t *testing.T) {
 	m, err := Build(allKinds(), "settings")
 	if err != nil {
@@ -600,6 +632,7 @@ func TestGeneratedCodeCompiles(t *testing.T) {
 		"formats":        func(a *ir.App) { a.Formats = []string{"json"}; a.SearchPaths = nil },
 		"nested":         func(a *ir.App) { *a = *nested() },
 		"kinds":          func(a *ir.App) { *a = *allKinds() },
+		"mutable":        func(a *ir.App) { *a = *mutableKinds() },
 		"no commands":    func(a *ir.App) { a.Commands = nil },
 		"no groups": func(a *ir.App) {
 			a.Groups = nil

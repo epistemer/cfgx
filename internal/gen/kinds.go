@@ -33,6 +33,10 @@ type kindSpec struct {
 	show     string   // Go expression, with %s for the field: the value as config print shows it; "" means the field itself
 	items    bool     // a list or map: parsed from items with SetItems
 	isMap    bool     // a map: items are key=value
+	// format is a Go expression of (string, error), with %s for the field:
+	// the value's canonical text, which a typed write stores; "" for kinds
+	// that can't be Mutable.
+	format string
 	// canon checks a default's text and returns its canonical text, shown in
 	// --help, and a Go expression for the generated code. An empty
 	// expression means the engine parses the text when loading instead.
@@ -41,19 +45,19 @@ type kindSpec struct {
 
 // kinds lists every kind the generator supports.
 var kinds = map[ir.Kind]kindSpec{
-	ir.KindString: {goType: "string", flagType: "string", parse: "ParseString", quote: true, isSet: `%s != ""`, zero: "",
+	ir.KindString: {format: `%s, nil`, goType: "string", flagType: "string", parse: "ParseString", quote: true, isSet: `%s != ""`, zero: "",
 		canon: func(s string) (string, string, error) { return s, strconv.Quote(s), nil }},
-	ir.KindBool: {goType: "bool", flagType: "bool", parse: "ParseBool", isBool: true, isSet: "%s", zero: "false",
+	ir.KindBool: {format: `engine.FormatBool(%s), nil`, goType: "bool", flagType: "bool", parse: "ParseBool", isBool: true, isSet: "%s", zero: "false",
 		canon: viaParser(engine.ParseBool, strconv.FormatBool, strconv.FormatBool)},
-	ir.KindInt: {goType: "int", flagType: "int", parse: "ParseInt", isSet: "%s != 0", zero: "0",
+	ir.KindInt: {format: `engine.FormatInt(%s), nil`, goType: "int", flagType: "int", parse: "ParseInt", isSet: "%s != 0", zero: "0",
 		canon: viaParser(engine.ParseInt, strconv.Itoa, strconv.Itoa)},
-	ir.KindInt64: {goType: "int64", flagType: "int64", parse: "ParseInt64", isSet: "%s != 0", zero: "0",
+	ir.KindInt64: {format: `engine.FormatInt64(%s), nil`, goType: "int64", flagType: "int64", parse: "ParseInt64", isSet: "%s != 0", zero: "0",
 		canon: viaParser(engine.ParseInt64, i64, i64)},
-	ir.KindUint: {goType: "uint", flagType: "uint", parse: "ParseUint", isSet: "%s != 0", zero: "0",
+	ir.KindUint: {format: `engine.FormatUint(%s), nil`, goType: "uint", flagType: "uint", parse: "ParseUint", isSet: "%s != 0", zero: "0",
 		canon: viaParser(engine.ParseUint, u, u)},
-	ir.KindFloat: {goType: "float64", flagType: "float", parse: "ParseFloat", isSet: "%s != 0", zero: "0",
+	ir.KindFloat: {format: `engine.FormatFloat(%s), nil`, goType: "float64", flagType: "float", parse: "ParseFloat", isSet: "%s != 0", zero: "0",
 		canon: viaParser(engine.ParseFloat, f64, f64)},
-	ir.KindDuration: {show: "%s.String()", goType: "time.Duration", flagType: "duration", parse: "ParseDuration", imports: []string{"time"}, isSet: "%s != 0", zero: "0s",
+	ir.KindDuration: {format: `engine.FormatDuration(%s), nil`, show: "%s.String()", goType: "time.Duration", flagType: "duration", parse: "ParseDuration", imports: []string{"time"}, isSet: "%s != 0", zero: "0s",
 		canon: viaParser(engine.ParseDuration, time.Duration.String, durationLit)},
 	ir.KindSecret: {show: "engine.ShowSecret(%s)", goType: "cfgx.Secret", parse: "ParseSecret", isSet: "%s.IsSet()", zero: "",
 		noFlag: true, fileEnv: true, maxFile: secretMax,
@@ -69,14 +73,14 @@ var kinds = map[ir.Kind]kindSpec{
 	ir.KindSecretFile: {show: "engine.ShowSecret(%s)", goType: "cfgx.Secret", flagType: "file", parse: "ParseSecret", quote: true, isSet: "%s.IsSet()", zero: "",
 		file: true, maxFile: secretMax,
 		canon: func(s string) (string, string, error) { return s, "", nil }},
-	ir.KindPath: {goType: "string", flagType: "path", parse: "ParsePath", quote: true, isSet: `%s != ""`, zero: "",
+	ir.KindPath: {format: `%s, nil`, goType: "string", flagType: "path", parse: "ParsePath", quote: true, isSet: `%s != ""`, zero: "",
 		resolve: true,
 		// Parsed when loading, so it is cleaned for the OS the app runs on.
 		canon: func(s string) (string, string, error) { return s, "", nil }},
 	ir.KindFile: {show: "engine.ShowBytes(%s)", goType: "[]byte", flagType: "file", parse: "ParseBytes", quote: true, isSet: "len(%s) != 0", zero: "",
 		file: true, maxFile: fileMax,
 		canon: func(s string) (string, string, error) { return s, "", nil }},
-	ir.KindURL: {show: "engine.ShowURL(%s)", goType: "*url.URL", flagType: "url", parse: "ParseURL", imports: []string{"net/url"}, quote: true, isSet: "%s != nil", zero: "",
+	ir.KindURL: {format: `engine.FormatURL(%s), nil`, show: "engine.ShowURL(%s)", goType: "*url.URL", flagType: "url", parse: "ParseURL", imports: []string{"net/url"}, quote: true, isSet: "%s != nil", zero: "",
 		canon: func(s string) (string, string, error) {
 			var u *url.URL
 			if err := engine.ParseURL(s, &u); err != nil {
@@ -84,7 +88,7 @@ var kinds = map[ir.Kind]kindSpec{
 			}
 			return s, "", nil
 		}},
-	ir.KindLocation: {show: "engine.ShowLocation(%s)", goType: "*time.Location", flagType: "location", parse: "ParseLocation", imports: []string{"time"}, isSet: "%s != nil", zero: "",
+	ir.KindLocation: {format: `engine.FormatLocation(%s), nil`, show: "engine.ShowLocation(%s)", goType: "*time.Location", flagType: "location", parse: "ParseLocation", imports: []string{"time"}, isSet: "%s != nil", zero: "",
 		// Loaded when the app loads the key, so a zone missing there is a
 		// problem rather than a panic.
 		canon: func(s string) (string, string, error) {
@@ -94,13 +98,13 @@ var kinds = map[ir.Kind]kindSpec{
 			}
 			return s, "", nil
 		}},
-	ir.KindStrings: {goType: "[]string", flagType: "strings", parse: "ParseStrings", isSet: "len(%s) != 0", zero: "", items: true,
+	ir.KindStrings: {format: `engine.FormatStrings(%s), nil`, goType: "[]string", flagType: "strings", parse: "ParseStrings", isSet: "len(%s) != 0", zero: "", items: true,
 		canon: listCanon(engine.ParseStrings, itemText, strconv.Quote, "[]string")},
-	ir.KindInts: {goType: "[]int", flagType: "ints", parse: "ParseInts", isSet: "len(%s) != 0", zero: "", items: true,
+	ir.KindInts: {format: `engine.FormatInts(%s), nil`, goType: "[]int", flagType: "ints", parse: "ParseInts", isSet: "len(%s) != 0", zero: "", items: true,
 		canon: listCanon(engine.ParseInts, strconv.Itoa, strconv.Itoa, "[]int")},
-	ir.KindDurations: {show: "engine.ShowDurations(%s)", goType: "[]time.Duration", flagType: "durations", parse: "ParseDurations", imports: []string{"time"}, isSet: "len(%s) != 0", zero: "", items: true,
+	ir.KindDurations: {format: `engine.FormatDurations(%s), nil`, show: "engine.ShowDurations(%s)", goType: "[]time.Duration", flagType: "durations", parse: "ParseDurations", imports: []string{"time"}, isSet: "len(%s) != 0", zero: "", items: true,
 		canon: listCanon(engine.ParseDurations, time.Duration.String, durationLit, "[]time.Duration")},
-	ir.KindStringMap: {goType: "map[string]string", flagType: "key=value", parse: "ParseStringMap", isSet: "len(%s) != 0", zero: "", items: true, isMap: true,
+	ir.KindStringMap: {format: `engine.FormatStringMap(%s)`, goType: "map[string]string", flagType: "key=value", parse: "ParseStringMap", isSet: "len(%s) != 0", zero: "", items: true, isMap: true,
 		canon: func(s string) (string, string, error) {
 			var m map[string]string
 			items, err := engine.SplitCSV(s)
@@ -121,7 +125,7 @@ var kinds = map[ir.Kind]kindSpec{
 			}
 			return "[" + strings.Join(text, ",") + "]", "map[string]string{" + strings.Join(lit, ", ") + "}", nil
 		}},
-	ir.KindByteSize: {show: "engine.FormatByteSize(%s)", goType: "int64", flagType: "bytesize", parse: "ParseByteSize", isSet: "%s != 0", zero: "0",
+	ir.KindByteSize: {format: `engine.FormatByteSize(%s), nil`, show: "engine.FormatByteSize(%s)", goType: "int64", flagType: "bytesize", parse: "ParseByteSize", isSet: "%s != 0", zero: "0",
 		canon: viaParser(engine.ParseByteSize, engine.FormatByteSize, i64)},
 }
 
@@ -217,6 +221,9 @@ func kindInfo(km *KeyModel, k ir.Key, imp *importer) error {
 	km.Quote, km.Bool = spec.quote, spec.isBool
 	km.FileEnv, km.File, km.MaxFileSize, km.Resolve = spec.fileEnv, spec.file, spec.maxFile, spec.resolve
 	km.Items, km.Map = spec.items, spec.isMap
+	if spec.format != "" {
+		km.Format = fmt.Sprintf(spec.format, "v."+km.Field)
+	}
 	km.Show = "v." + km.Field
 	if spec.show != "" {
 		km.Show = fmt.Sprintf(spec.show, "v."+km.Field)
@@ -263,6 +270,7 @@ func enumInfo(km *KeyModel, k ir.Key, imp *importer) error {
 	}
 	km.IsSet = fmt.Sprintf("v.%s != %s", km.Field, zeroLit)
 	km.Show = fmt.Sprintf("engine.ShowEnum(v.%s, %s, %s)", km.Field, km.EnumTexts, km.EnumValues)
+	km.Format = fmt.Sprintf("engine.FormatEnum(v.%s, %s, %s)", km.Field, km.EnumTexts, km.EnumValues)
 	for _, v := range k.Enum {
 		// The tables hold bare literals, which their element type converts.
 		km.Enum = append(km.Enum, EnumModel{Text: v.Text, Lit: v.Lit})
@@ -302,6 +310,7 @@ func textInfo(km *KeyModel, k ir.Key, imp *importer) error {
 	km.FlagType, km.Parse, km.Quote = strings.ToLower(t.Name), "ParseText", true
 	km.IsSet = fmt.Sprintf("engine.NonZero(v.%s)", km.Field)
 	km.Show = fmt.Sprintf("engine.ShowText(v.%s)", km.Field)
+	km.Format = fmt.Sprintf("engine.FormatText(v.%s)", km.Field)
 	km.HasDefault = k.Default != nil
 	if km.HasDefault {
 		km.DefaultText = *k.Default

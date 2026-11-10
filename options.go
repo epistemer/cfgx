@@ -43,3 +43,18 @@ func WithEnv(env map[string]string) Option {
 func WithFile(path string) Option {
 	return func(r *opts.Root) { r.File = path }
 }
+
+// WriteOption adjusts a write to mutable settings: a generated Update, or
+// the store's Update and Reset.
+type WriteOption func(*opts.Write)
+
+// By records who made a change, such as "admin@zp", in the store's history.
+func By(who string) WriteOption {
+	return func(w *opts.Write) { w.By = who }
+}
+
+// Reason records why a change was made, such as "Black Friday traffic", in
+// the store's history.
+func Reason(why string) WriteOption {
+	return func(w *opts.Write) { w.Reason = why }
+}

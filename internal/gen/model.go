@@ -23,6 +23,7 @@ type Model struct {
 	Formats     []string
 	GlobalIdx   []int // indexes of the keys in Global groups
 	Keys        []*KeyModel
+	Mutable     []*KeyModel // the keys a generated Update writes
 	Groups      []*GroupModel
 	Tags        []*TagModel
 	Rules       []*RuleModel
@@ -71,6 +72,7 @@ type KeyModel struct {
 	GoType, FlagType, Parse  string
 	IsSet                    string // Go expression on v: is the value non-zero?
 	Show                     string // Go expression on v: the value for config print
+	Format                   string // Go expression on v of (string, error): its canonical text
 	HasDefault               bool
 	DefaultText, DefaultLit  string
 	Quote, Bool              bool
@@ -527,10 +529,16 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			m.keyExtras(km, k, imp, bad)
 			km.Required = k.Required
 			km.Mutable, km.Epoch = k.Mutable, k.Epoch
-			if k.Mutable && (k.Kind == ir.KindSecret || k.Kind == ir.KindSecretFile) {
+			switch {
+			case !k.Mutable:
+			case k.Kind == ir.KindSecret || k.Kind == ir.KindSecretFile:
 				bad(k.Pos, "%s is a secret, which can't be Mutable in v0.1.0: the store isn't encrypted (A10)", km.Path)
-			} else if k.Mutable && app.Store == "" {
+			case km.Format == "":
+				bad(k.Pos, "%s is a %s key, which can't be Mutable: its value is a file's contents, which a write can't store; use a Path key and read the file", km.Path, k.Kind)
+			case app.Store == "":
 				bad(k.Pos, "%s is Mutable, but the app has no store; add App.Store(pathKey)", km.Path)
+			default:
+				m.Mutable = append(m.Mutable, km)
 			}
 			for _, t := range k.Tags {
 				if _, ok := tagSet[t]; !ok {
@@ -742,6 +750,9 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		default:
 			m.StoreAlias = imp.name("github.com/epistemer/cfgx/store", "store")
 		}
+	}
+	if len(m.Mutable) > 0 {
+		claim("Update", app.StorePos, "type for writes to mutable keys")
 	}
 	for _, c := range app.Commands {
 		if !token.IsIdentifier(c.Name) || !token.IsExported(c.Name) {

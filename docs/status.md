@@ -4,6 +4,29 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M7.4 write pipeline
+
+- **Landed:** writes to mutable keys, all or nothing.
+  - The engine's `Writer` loads the command's keys again from the sources
+    they loaded from at startup, with the stored records as they will be.
+    So a write is validated exactly as startup is: checks, `Required` and
+    rules, across static and mutable keys. A reset brings the flag, env,
+    file or default value back.
+  - One mutex covers building, validating, the bbolt transaction (history
+    for every change, resets included, stamped with the key's epoch) and
+    the snapshot swap. A test shows a missing lock loses updates.
+  - The generator emits an `Update` type with `SetX`/`ResetX` per mutable
+    key, and `cfgx.By`/`cfgx.Reason` go into history. Commands get their
+    `Update` method in M7.7.
+- **Decided for you:** a `File` key can't be `Mutable` (its value is a
+  file's contents, which a write can't store), and a `Mutable` Text key's
+  type needs `MarshalText`. Both are generate-time errors.
+- **Reviewed:** Gemini 3.8 Flash (High), about 548k tokens
+  ([review 0028](reviews/0028-gemini-m7.4-review.md)). 3 of 9 findings
+  fixed.
+- **Next:** M7.5, the admin API on `store.Store`.
+- **Waiting on you:** nothing.
+
 ## 2026-11-10: M7.3 epochs
 
 - **Landed:** raising a key's `.Epoch(n)` makes values stored under an

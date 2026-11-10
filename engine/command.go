@@ -103,7 +103,10 @@ func Command[V, C any](cmd *cobra.Command, a *App[V], profile string, idx []int,
 			o.Store = StoreReadWrite
 		}
 		res, err := Load(a, cmd.Flags(), idx, o)
-		if res != nil && res.Store != nil {
+		switch {
+		case res != nil && res.Writer != nil:
+			defer res.Writer.Close()
+		case res != nil && res.Store != nil:
 			defer res.Store.Close()
 		}
 		logger := loggerFor(ro, cmd.ErrOrStderr())

@@ -91,6 +91,10 @@ type Key[V any] struct {
 	// is the key's schema epoch.
 	Mutable bool
 	Epoch   int
+	// Format is the key's value in v as canonical text, which Set parses
+	// back to the same value: what a typed write stores. Mutable keys
+	// have it.
+	Format func(v *V) (string, error)
 	// Complete is how the flag's value completes in the shell; nil means an
 	// enum's values, or else the shell's default, file names.
 	Complete *Completion

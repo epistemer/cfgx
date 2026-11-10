@@ -61,6 +61,12 @@ func relative(p string) bool {
 // bytes. Errors name the path, never the contents.
 func (l *loader[V]) readFile(k *Key[V], c *candidate) (string, error) {
 	path := l.resolve(c)
+	// A write loads the keys again: a file read at startup gives what it
+	// gave then, so a write never changes a key that isn't written.
+	memo := fmt.Sprintf("%t\x00%d\x00%s", c.trim, k.MaxFileSize, path)
+	if s, ok := l.reads[memo]; ok {
+		return s, nil
+	}
 	b, err := readRegular(path, k.MaxFileSize)
 	if err != nil {
 		return "", err
@@ -72,6 +78,9 @@ func (l *loader[V]) readFile(k *Key[V], c *candidate) (string, error) {
 		} else {
 			s = strings.TrimSuffix(s, "\n")
 		}
+	}
+	if l.reads != nil {
+		l.reads[memo] = s
 	}
 	return s, nil
 }
