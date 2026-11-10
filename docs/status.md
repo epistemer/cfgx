@@ -4,6 +4,29 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M9.1 benchmarks against viper; M10 dropped
+
+- **Landed:** `examples/zp/bench`, a module of its own so viper never
+  becomes a dependency, compares cfgx with viper on the same inputs. The
+  README has the numbers, measured on a 2015 laptop:
+  - zp's `serve` (39 keys) loads in 0.31 ms with cfgx, 0.56 ms with viper.
+  - 100 keys load in 0.46 ms with cfgx, 1.85 ms with viper.
+  - `cfgx gen` on zp takes 1.4 s with a warm build cache and 20 s with a
+    cold one, about what a cold `go build` of the app takes.
+  - CI runs each benchmark once (the cold one excepted) and checks the
+    generated code is current.
+- **Found on the way:** a schema that builds its keys in `init` generates
+  an app with no keys, since `init` runs after `App`'s initializer. The
+  bench README says so; M9.4's docs will too.
+- **Roadmap:** M10 (the zp port) is gone, at your request. The ownership
+  terms now say v1.0.0 is your call.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 255k tokens
+  ([review 0036](reviews/0036-gemini-m9.1-review.md)). 6 of 10 findings
+  fixed, most of them making the viper side fairer.
+- **Next:** M9.3 (API review), M9.4 (docs and the README, which drops
+  "pre-alpha"), M9.5 (v0.1.0).
+- **Waiting on you:** nothing.
+
 ## 2026-11-10: M9.2 fuzzing in CI
 
 - **Landed:** CI fuzzes seven targets for 30s each: the parsers, the

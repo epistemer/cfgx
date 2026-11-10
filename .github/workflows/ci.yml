@@ -73,3 +73,15 @@ jobs:
             echo "fuzzing $name in ./$pkg"
             go test -run '^$' -fuzz "^${name}\$" -fuzztime 30s "./$pkg"
           done
+
+      # The viper comparison (examples/zp/bench, M9.1) is a module of its
+      # own. Run each benchmark once, except the cold generate one, which
+      # takes 20s, so they keep building and passing; and check that the
+      # generated code is current.
+      - name: Benchmarks build and pass
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.27.x'
+        working-directory: examples/zp/bench
+        run: |
+          go vet ./...
+          (cd keys100 && go tool cfgx gen -check -artifacts - ./schema)
+          go test -run '^$' -bench 'ZpServe|Keys100|Generate/warm' -benchtime 1x .
