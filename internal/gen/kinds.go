@@ -98,7 +98,7 @@ var kinds = map[ir.Kind]kindSpec{
 			}
 			return s, "", nil
 		}},
-	ir.KindStrings: {format: `engine.FormatStrings(%s), nil`, goType: "[]string", flagType: "strings", parse: "ParseStrings", isSet: "len(%s) != 0", zero: "", items: true,
+	ir.KindStrings: {format: `engine.FormatStrings(%s)`, goType: "[]string", flagType: "strings", parse: "ParseStrings", isSet: "len(%s) != 0", zero: "", items: true,
 		canon: listCanon(engine.ParseStrings, itemText, strconv.Quote, "[]string")},
 	ir.KindInts: {format: `engine.FormatInts(%s), nil`, goType: "[]int", flagType: "ints", parse: "ParseInts", isSet: "len(%s) != 0", zero: "", items: true,
 		canon: listCanon(engine.ParseInts, strconv.Itoa, strconv.Itoa, "[]int")},

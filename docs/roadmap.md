@@ -318,7 +318,7 @@ hand (problem 3).
 | ✓ | ID | Item | Size | Done when |
 |---|----|------|------|-----------|
 | ☐ | M9.1 | Benchmarks: `examples/zp` startup compared with an equivalent viper setup; load time for 100 keys; cold and warm generate time | M | The numbers are in the README as measured, whatever they show |
-| ☐ | M9.2 | Short fuzzing runs in CI; the leak suite is required | S | CI job green |
+| ☑ | M9.2 | Short fuzzing runs in CI; the leak suite is required | S | CI job green |
 | ☐ | M9.3 | API review of every exported identifier in `cfgx`, `dsl` and `store`. `engine` is documented as "for generated code; no compatibility promise". | M | Review checklist merged |
 | ☐ | M9.4 | Docs: README quickstart (`cfgx init` → add a key → `go generate`), godoc examples, `examples/zp/docs/CONFIG.md` as the showcase | M | A newcomer can follow the quickstart with no other help |
 | ☐ | M9.5 | Release: CHANGELOG, then tag `v0.1.0` | S | Tag pushed; `go install github.com/epistemer/cfgx/cmd/cfgx@v0.1.0` works |

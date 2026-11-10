@@ -4,6 +4,23 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M9.2 fuzzing in CI
+
+- **Landed:** CI fuzzes seven targets for 30s each: the parsers, the
+  canonical text of lists and maps, and the config file parser on any
+  input. The Secret leak suite is its own step, which fails if it finds
+  no tests. Both run inside the required job.
+- **Found by fuzzing:** an item holding `\r\n`, or a map key that is
+  empty, holds `=` or has outer spaces, doesn't survive its text form. A
+  write with such a value now fails with a clear error instead of storing
+  something else.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 207k tokens
+  ([review 0035](reviews/0035-gemini-m9.2-review.md)). 3 of 9 findings
+  fixed.
+- **Next:** M9.1 (benchmarks), M9.3 (API review), M9.4 (docs and the
+  README, which drops "pre-alpha"), M9.5 (v0.1.0).
+- **Waiting on you:** nothing.
+
 ## 2026-11-10: M8 `cfgx init`; M8 complete
 
 - **Landed:** `cfgx init <module path>` creates a cobra application with

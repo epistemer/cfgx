@@ -813,3 +813,22 @@ func TestJSONSurrogates(t *testing.T) {
 		t.Errorf("expected YAML format to reject UTF-16 surrogate escapes")
 	}
 }
+
+// Parse never panics on any input, in either format, and a parsed root is
+// a Map.
+func FuzzParse(f *testing.F) {
+	for _, s := range []string{"", "a: 1\nb:\n  c: [1, 2]\n", `{"a": {"b": "\ud800"}}`, "- x\n", "a: &x 1\nb: *x\n", "a: !!binary aGk=\n", "{", "a:\n\t- 1"} {
+		f.Add([]byte(s), false)
+		f.Add([]byte(s), true)
+	}
+	f.Fuzz(func(t *testing.T, data []byte, json bool) {
+		format := YAML
+		if json {
+			format = JSON
+		}
+		n, err := Parse("f", data, format)
+		if err == nil && (n == nil || n.Kind != Map) {
+			t.Fatalf("root %+v", n)
+		}
+	})
+}

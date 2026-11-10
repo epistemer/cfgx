@@ -53,3 +53,23 @@ jobs:
 
       - name: Run tests with race detector
         run: go test -race ./...
+
+      # The Secret leak suite runs in the step above too; this step names it,
+      # so a failure is plain in the job's summary.
+      - name: Secret leak suite
+        run: |
+          go test -count=1 -v -run 'TestLeak|TestSecret' . | tee leak.log
+          # A filter that matched nothing would pass; make sure it ran.
+          grep -q -- '--- PASS: TestLeak_' leak.log
+
+      - name: Fuzz (30s per target)
+        if: matrix.os == 'ubuntu-latest' && matrix.go == '1.27.x'
+        run: |
+          set -e
+          for target in engine:FuzzParseByteSize engine:FuzzParseDuration engine:FuzzSplitCSV \
+              engine:FuzzParseStringMap engine:FuzzFormatStrings engine:FuzzFormatStringMap internal/node:FuzzParse; do
+            pkg=${target%%:*}
+            name=${target#*:}
+            echo "fuzzing $name in ./$pkg"
+            go test -run '^$' -fuzz "^${name}\$" -fuzztime 30s "./$pkg"
+          done
