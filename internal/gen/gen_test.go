@@ -274,6 +274,50 @@ func mutableKinds() *ir.App {
 	return a
 }
 
+// storeCommands is a store app with three commands: Run has a mutable key,
+// Admin asks for the store, and Plain has neither.
+func storeCommands() *ir.App {
+	return &ir.App{Version: ir.Version, Name: "app", Desc: "App", EnvPrefix: "APP", Store: "s.bolt",
+		Groups: []ir.Group{
+			{Name: "s", Desc: "Storage", Keys: []ir.Key{{Name: "bolt", Desc: "file", Kind: ir.KindPath, Default: str("app.db")}}},
+			{Name: "rate", Desc: "Rate", Keys: []ir.Key{{Name: "limit", Desc: "limit", Kind: ir.KindInt, Mutable: true}}},
+			{Name: "db", Desc: "DB", Keys: []ir.Key{{Name: "host", Desc: "host", Kind: ir.KindString}}},
+		},
+		Commands: []ir.Command{
+			{Name: "Run", Uses: []string{"rate"}},
+			{Name: "Admin", Uses: []string{"db"}, WithStore: true},
+			{Name: "Plain", Uses: []string{"db"}},
+		}}
+}
+
+// A command without the store has none of its methods: using one doesn't
+// compile.
+func TestNoStoreMethods(t *testing.T) {
+	m, err := Build(storeCommands(), "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := Render(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, err := os.MkdirTemp(".", "zzcompile")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	use := "package settings\n\nvar _ = (*Plain)(nil).Store\n"
+	for f, b := range map[string][]byte{"zz_settings.go": src, "use.go": []byte(use)} {
+		if err := os.WriteFile(filepath.Join(dir, f), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := exec.Command("go", "vet", "./"+filepath.Base(dir)).CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "(*Plain)(nil).Store undefined") {
+		t.Errorf("Plain.Store compiled, or failed otherwise: %v\n%s", err, out)
+	}
+}
+
 // A store's app gets an Update type with a setter and a reset per mutable
 // key, and each mutable key a Format.
 func TestMutableGolden(t *testing.T) {
@@ -636,6 +680,7 @@ func TestGeneratedCodeCompiles(t *testing.T) {
 		"nested":         func(a *ir.App) { *a = *nested() },
 		"kinds":          func(a *ir.App) { *a = *allKinds() },
 		"mutable":        func(a *ir.App) { *a = *mutableKinds() },
+		"store commands": func(a *ir.App) { *a = *storeCommands() },
 		"no commands":    func(a *ir.App) { a.Commands = nil },
 		"no groups": func(a *ir.App) {
 			a.Groups = nil
@@ -670,6 +715,30 @@ func TestGeneratedCodeCompiles(t *testing.T) {
 			t.Cleanup(func() { os.RemoveAll(dir) })
 			if err := os.WriteFile(filepath.Join(dir, "zz_settings.go"), src, 0o644); err != nil {
 				t.Fatal(err)
+			}
+			if name == "store commands" {
+				// Run has the store and its methods; Plain has neither.
+				assert := `package settings
+
+import (
+	"context"
+
+	"github.com/epistemer/cfgx/store"
+)
+
+var (
+	_ func() *store.Store                                                         = (*Run)(nil).Store
+	_ func(context.Context, func(*Update) error, ...cfgx.WriteOption) error       = (*Run)(nil).Update
+	_ func(func(Change))                                                          = (*Run)(nil).OnChange
+	_ func() *Run                                                                 = (*Run)(nil).Snapshot
+	_ func() error                                                                = (*Run)(nil).Close
+	_ func() *Admin                                                               = (*Admin)(nil).Snapshot
+)
+`
+				assert = strings.Replace(assert, `"context"`, `"context"`+"\n\n\t\"github.com/epistemer/cfgx\"", 1)
+				if err := os.WriteFile(filepath.Join(dir, "assert.go"), []byte(assert), 0o644); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if name == "nested" {
 				// The interfaces each command type must implement (A5).

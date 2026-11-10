@@ -306,7 +306,7 @@ var app = engine.App[values]{
 }
 
 // root holds the current values; every getter reads through it.
-type root struct{ cur engine.Snapshot[values] }
+type root struct{ cur *engine.Snapshot[values] }
 
 // K is the k group: Every kind
 type K interface {
@@ -546,8 +546,7 @@ func Test(edit func(v *Values)) *All {
 		edit(&tv)
 	}
 	tv.store(v)
-	r := &root{}
-	r.cur.Store(v)
+	r := &root{cur: engine.NewSnapshot(v)}
 	return &All{
 		kGroup: &kGroup{r: r},
 	}
@@ -574,9 +573,8 @@ func (c *Run) Args() []string { return slices.Clone(c.args) }
 
 var keysRun = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27}
 
-func newRun(v *values, args []string) *Run {
-	r := &root{}
-	r.cur.Store(v)
+func newRun(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *Run {
+	r := &root{cur: s}
 	return &Run{
 		kGroup: &kGroup{r: r},
 		args:   slices.Clone(args),
@@ -593,5 +591,5 @@ func RunCommand(cmd *cobra.Command, run func(context.Context, *Run) error) *cobr
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
 func LoadRun(ctx context.Context, opts ...cfgx.Option) (*Run, error) {
-	return engine.LoadCommand(ctx, &app, keysRun, newRun, opts...)
+	return engine.LoadCommand(ctx, &app, "Run", keysRun, newRun, opts...)
 }

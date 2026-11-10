@@ -172,7 +172,7 @@ var app = engine.App[values]{
 }
 
 // root holds the current values; every getter reads through it.
-type root struct{ cur engine.Snapshot[values] }
+type root struct{ cur *engine.Snapshot[values] }
 
 // DB is the database group: Database connection
 type DB interface {
@@ -378,8 +378,7 @@ func Test(edit func(v *Values)) *All {
 		edit(&tv)
 	}
 	tv.store(v)
-	r := &root{}
-	r.cur.Store(v)
+	r := &root{cur: engine.NewSnapshot(v)}
 	return &All{
 		dbGroup:        &dbGroup{r: r},
 		serverGroup:    &serverGroup{r: r},
@@ -414,9 +413,8 @@ func (c *Serve) Args() []string { return slices.Clone(c.args) }
 
 var keysServe = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}
 
-func newServe(v *values, args []string) *Serve {
-	r := &root{}
-	r.cur.Store(v)
+func newServe(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *Serve {
+	r := &root{cur: s}
 	return &Serve{
 		dbGroup:        &dbGroup{r: r},
 		serverGroup:    &serverGroup{r: r},
@@ -437,7 +435,7 @@ func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
 func LoadServe(ctx context.Context, opts ...cfgx.Option) (*Serve, error) {
-	return engine.LoadCommand(ctx, &app, keysServe, newServe, opts...)
+	return engine.LoadCommand(ctx, &app, "Serve", keysServe, newServe, opts...)
 }
 
 // Retry is the configuration of the Retry command.
@@ -452,9 +450,8 @@ func (c *Retry) Args() []string { return slices.Clone(c.args) }
 
 var keysRetry = []int{5}
 
-func newRetry(v *values, args []string) *Retry {
-	r := &root{}
-	r.cur.Store(v)
+func newRetry(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *Retry {
+	r := &root{cur: s}
 	return &Retry{
 		schedulerRetryGroup: &schedulerRetryGroup{r: r},
 		args:                slices.Clone(args),
@@ -471,7 +468,7 @@ func RetryCommand(cmd *cobra.Command, run func(context.Context, *Retry) error) *
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
 func LoadRetry(ctx context.Context, opts ...cfgx.Option) (*Retry, error) {
-	return engine.LoadCommand(ctx, &app, keysRetry, newRetry, opts...)
+	return engine.LoadCommand(ctx, &app, "Retry", keysRetry, newRetry, opts...)
 }
 
 // TestEmail is the configuration of the TestEmail command.
@@ -501,9 +498,8 @@ func (c *TestEmail) ToAddress() string { return c.r.cur.Load().TestEmailToAddres
 
 var keysTestEmail = []int{7, 10, 11, 12, 13}
 
-func newTestEmail(v *values, args []string) *TestEmail {
-	r := &root{}
-	r.cur.Store(v)
+func newTestEmail(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *TestEmail {
+	r := &root{cur: s}
 	return &TestEmail{
 		r:    r,
 		args: slices.Clone(args),
@@ -520,7 +516,7 @@ func TestEmailCommand(cmd *cobra.Command, run func(context.Context, *TestEmail) 
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
 func LoadTestEmail(ctx context.Context, opts ...cfgx.Option) (*TestEmail, error) {
-	return engine.LoadCommand(ctx, &app, keysTestEmail, newTestEmail, opts...)
+	return engine.LoadCommand(ctx, &app, "TestEmail", keysTestEmail, newTestEmail, opts...)
 }
 
 // Notify is the configuration of the Notify command.
@@ -539,9 +535,8 @@ func (c *Notify) AuthEmailfrom() string { return c.r.cur.Load().AuthEmailfrom }
 
 var keysNotify = []int{7, 10, 11, 12}
 
-func newNotify(v *values, args []string) *Notify {
-	r := &root{}
-	r.cur.Store(v)
+func newNotify(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *Notify {
+	r := &root{cur: s}
 	return &Notify{
 		smtpGroup: &smtpGroup{r: r},
 		r:         r,
@@ -559,7 +554,7 @@ func NotifyCommand(cmd *cobra.Command, run func(context.Context, *Notify) error)
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
 func LoadNotify(ctx context.Context, opts ...cfgx.Option) (*Notify, error) {
-	return engine.LoadCommand(ctx, &app, keysNotify, newNotify, opts...)
+	return engine.LoadCommand(ctx, &app, "Notify", keysNotify, newNotify, opts...)
 }
 
 // Migrate is the configuration of the Migrate command.
@@ -580,9 +575,8 @@ func (c *Migrate) Steps() int { return c.r.cur.Load().MigrateSteps }
 
 var keysMigrate = []int{14, 15}
 
-func newMigrate(v *values, args []string) *Migrate {
-	r := &root{}
-	r.cur.Store(v)
+func newMigrate(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *Migrate {
+	r := &root{cur: s}
 	return &Migrate{
 		r:    r,
 		args: slices.Clone(args),
@@ -599,5 +593,5 @@ func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) erro
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
 func LoadMigrate(ctx context.Context, opts ...cfgx.Option) (*Migrate, error) {
-	return engine.LoadCommand(ctx, &app, keysMigrate, newMigrate, opts...)
+	return engine.LoadCommand(ctx, &app, "Migrate", keysMigrate, newMigrate, opts...)
 }

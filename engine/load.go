@@ -191,6 +191,8 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 				return res, err
 			}
 			l.records, l.badRecords = recs, bad
+		} else if l.state[a.StoreKey] == irrelevant {
+			return res, fmt.Errorf("%s names the store, but isn't relevant", a.Keys[a.StoreKey].Path)
 		}
 	}
 	l.loadAll(v, pending)

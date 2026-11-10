@@ -71,11 +71,25 @@ func orList(s []string) string {
 // the config subcommand can find a command's keys by its command line.
 const profileAnnotation = "cfgx.profile"
 
+// Build makes a command's configuration: its getters read s, w is the
+// store's writer (nil for a command without the store), and args are the
+// positional arguments.
+type Build[V, C any] func(s *Snapshot[V], w *Writer[V], args []string) *C
+
+// built builds res's configuration.
+func built[V, C any](build Build[V, C], res *Result[V], args []string) *C {
+	if res.Writer != nil {
+		return build(res.Writer.Snapshot(), res.Writer, args)
+	}
+	return build(NewSnapshot(res.Values), nil, args)
+}
+
 // Command binds the keys at idx, the profile's, to cmd and sets its RunE: load, build the
 // command's configuration with the positional arguments, run with
 // cmd.Context(). A configuration problem prints the problems, without the
-// usage text, and RunE returns the error, so Execute does too.
-func Command[V, C any](cmd *cobra.Command, a *App[V], profile string, idx []int, build func(*V, []string) *C, run func(context.Context, *C) error) *cobra.Command {
+// usage text, and RunE returns the error, so Execute does too. A command
+// that has the store closes it when run returns.
+func Command[V, C any](cmd *cobra.Command, a *App[V], profile string, idx []int, build Build[V, C], run func(context.Context, *C) error) *cobra.Command {
 	if cmd.Annotations == nil {
 		cmd.Annotations = map[string]string{}
 	}
@@ -118,7 +132,7 @@ func Command[V, C any](cmd *cobra.Command, a *App[V], profile string, idx []int,
 			return err
 		}
 		logWarnings(cmd.Context(), logger, res.Warnings)
-		return run(cmd.Context(), build(res.Values, args))
+		return run(cmd.Context(), built(build, res, args))
 	}
 	return cmd
 }
@@ -183,8 +197,9 @@ func (h *warnHandler) WithGroup(string) slog.Handler      { return h }
 // LoadCommand loads the configuration of the command whose keys are at
 // idx without cobra, for a generated LoadX: flags come from WithArgs, env
 // vars from WithEnv or the process, and the config file from WithFile or
-// the usual search. Warnings go to WithLogger's logger, or to stderr.
-func LoadCommand[V, C any](ctx context.Context, a *App[V], idx []int, build func(*V, []string) *C, options ...cfgx.Option) (*C, error) {
+// the usual search. Warnings go to WithLogger's logger, or to stderr. A
+// command that has the store opens it; the caller closes it.
+func LoadCommand[V, C any](ctx context.Context, a *App[V], profile string, idx []int, build Build[V, C], options ...cfgx.Option) (*C, error) {
 	ro := &opts.Root{}
 	for _, o := range options {
 		if o != nil {
@@ -215,10 +230,16 @@ func LoadCommand[V, C any](ctx context.Context, a *App[V], idx []int, build func
 			return out
 		}
 	}
+	if a.OpenStore != nil && a.StoreProfiles[profile] {
+		o.Store = StoreReadWrite
+	}
 	res, err := Load(a, fs, idx, o)
 	logWarnings(ctx, loggerFor(ro, os.Stderr), res.Warnings)
 	if err != nil {
+		if res.Store != nil {
+			res.Store.Close()
+		}
 		return nil, err
 	}
-	return build(res.Values, fs.Args()), nil
+	return built(build, res, fs.Args()), nil
 }

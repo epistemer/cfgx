@@ -203,7 +203,13 @@ type CommandModel struct {
 
 // HasRoot reports whether the command type needs the values at all.
 func (c *CommandModel) HasRoot() bool {
-	return len(c.Groups) > 0 || len(c.Forward) > 0 || len(c.Args) > 0
+	return len(c.Groups) > 0 || len(c.Forward) > 0 || len(c.Args) > 0 || c.HasStore
+}
+
+// KeepsRoot reports whether the command type keeps the root itself, for
+// forwarded getters, arguments or the store's methods.
+func (c *CommandModel) KeepsRoot() bool {
+	return len(c.Forward) > 0 || len(c.Args) > 0 || c.HasStore
 }
 
 // Problem is a schema error found at generate time.
