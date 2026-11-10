@@ -759,6 +759,59 @@ func (u *Update) SetKDay(v time.Weekday) {
 // ResetKDay removes k.day's stored value.
 func (u *Update) ResetKDay() { u.e.Reset(28) }
 
+// Key names a mutable setting, for Change.Has.
+type Key string
+
+// The mutable settings.
+const (
+	KeyKS       Key = "k.s"
+	KeyKB       Key = "k.b"
+	KeyKI       Key = "k.i"
+	KeyKI64     Key = "k.i64"
+	KeyKU       Key = "k.u"
+	KeyKF       Key = "k.f"
+	KeyKD       Key = "k.d"
+	KeyKD2      Key = "k.d2"
+	KeyKSize    Key = "k.size"
+	KeyKNone    Key = "k.none"
+	KeyKURL     Key = "k.url"
+	KeyKLoc     Key = "k.loc"
+	KeyKUrl2    Key = "k.url2"
+	KeyKTags    Key = "k.tags"
+	KeyKPorts   Key = "k.ports"
+	KeyKBackoff Key = "k.backoff"
+	KeyKLabels  Key = "k.labels"
+	KeyKNone2   Key = "k.none2"
+	KeyKCidr    Key = "k.cidr"
+	KeyKPort    Key = "k.port"
+	KeyKName    Key = "k.name"
+	KeyKCpus    Key = "k.cpus"
+	KeyKWait    Key = "k.wait"
+	KeyKRenamed Key = "k.nm"
+	KeyKDir     Key = "k.dir"
+	KeyKFk      Key = "k.file_key"
+	KeyKDay     Key = "k.day"
+)
+
+// Change lists the settings whose values a write changed, for OnChange.
+type Change struct{ keys []Key }
+
+// Has reports whether any of keys changed.
+func (c Change) Has(keys ...Key) bool {
+	for _, k := range keys {
+		for _, ck := range c.keys {
+			if k == ck {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Keys returns the settings that changed, in the order the schema declares
+// them.
+func (c Change) Keys() []Key { return append([]Key(nil), c.keys...) }
+
 // Values holds every setting of the app as plain fields, nested like the
 // groups, for Test.
 type Values struct {

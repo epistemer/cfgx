@@ -823,3 +823,14 @@ func TestArtifactsEdgeCases(t *testing.T) {
 		t.Errorf(".env.example:\n%s", files[".env.example"])
 	}
 }
+
+// A store's generated names are claimed: a command can't take them.
+func TestMutableNamesClaimed(t *testing.T) {
+	for _, name := range []string{"Update", "Change", "Key"} {
+		a := mutableKinds()
+		a.Commands = append(a.Commands, ir.Command{Name: name, Uses: []string{"k"}})
+		if _, err := Build(a, "settings"); err == nil || !strings.Contains(err.Error(), "command type "+name+" collides") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+}

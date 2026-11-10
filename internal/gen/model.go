@@ -755,6 +755,11 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 	}
 	if len(m.Mutable) > 0 {
 		claim("Update", app.StorePos, "type for writes to mutable keys")
+		claim("Key", app.StorePos, "type naming mutable keys")
+		claim("Change", app.StorePos, "type for OnChange")
+		for _, k := range m.Mutable {
+			claim("Key"+k.Getter, k.Pos, "constant naming "+k.Path)
+		}
 	}
 	for _, c := range app.Commands {
 		if !token.IsIdentifier(c.Name) || !token.IsExported(c.Name) {
