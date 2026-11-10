@@ -4,6 +4,20 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M7.3 epochs
+
+- **Landed:** raising a key's `.Epoch(n)` makes values stored under an
+  older epoch move to history at the next start, with a log line. A value
+  from a newer epoch, written by a newer release, is ignored but kept, so a
+  rollback doesn't lose it.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 65k tokens
+  ([review 0027](reviews/0027-gemini-m7.3-review.md)). Both findings
+  rejected.
+- **Note:** the end-to-end epoch test comes with M7.9, once M7.4 can write
+  values.
+- **Next:** M7.4, the write pipeline and the typed `Update`.
+- **Waiting on you:** nothing.
+
 ## 2026-11-10: M7.2 store layer
 
 - **Landed:** a mutable key's stored value now wins over flags, env, the
