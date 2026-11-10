@@ -56,6 +56,12 @@ func Text[T any](name, desc string, zero T) *TextKey[T] {
 	case !reflect.PointerTo(t).Implements(textUnmarshaler):
 		problem("text type %s doesn't implement encoding.TextUnmarshaler (on *%s), so cfgx can't parse it", t, t.Name())
 	}
+	k.finish = append(k.finish, func() string {
+		if k.mutable && !reflect.PointerTo(t).Implements(textMarshaler) {
+			return fmt.Sprintf("is Mutable, which needs %s to implement encoding.TextMarshaler: a write stores the value as text", t)
+		}
+		return ""
+	})
 	if !reflect.ValueOf(&zero).Elem().IsZero() {
 		problem("Text's third argument only names the type; pass %s's zero value, and set a default with Default", t)
 	}

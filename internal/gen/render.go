@@ -113,6 +113,9 @@ var keys = [...]engine.Key[values]{
 		{{- end}}
 		IsSet: func(v *values) bool { return {{.IsSet}} },
 		Show: func(v *values) any { return {{.Show}} },
+		{{- if .Mutable}}
+		Format: func(v *values) (string, error) { return {{.Format}} },
+		{{- end}}
 		{{- if or .Checks .Validate}}
 		Check: func(v *values) error {
 		{{- range .Checks}}
@@ -227,6 +230,22 @@ type {{.Name}} interface {
 {{- end}}
 }
 {{end}}
+{{- if .Mutable}}
+// Update collects changes to mutable settings for a command's Update, which
+// applies them together or not at all. A setter's value is stored as text
+// and parsed back like any other source's; a reset removes the stored
+// value, so the flag, env var, config file or default applies again.
+type Update struct{ e *engine.Edits[values] }
+{{range .Mutable}}
+// Set{{.Getter}} sets {{.Path}}: {{.Desc}}
+func (u *Update) Set{{.Getter}}(v {{.GoType}}) {
+	u.e.Set({{.Index}}, func(c *values) { c.{{.Field}} = v })
+}
+
+// Reset{{.Getter}} removes {{.Path}}'s stored value.
+func (u *Update) Reset{{.Getter}}() { u.e.Reset({{.Index}}) }
+{{end}}
+{{end -}}
 // Values holds every setting of the app as plain fields, nested like the
 // groups, for Test.
 type Values struct {

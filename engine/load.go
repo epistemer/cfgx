@@ -103,6 +103,9 @@ type Result[V any] struct {
 	Store   storage.Backend
 	Records map[int]storage.Record
 	Invalid map[int]string
+	// Writer changes the mutable keys, when the store is open; closing it
+	// closes the store.
+	Writer *Writer[V]
 }
 
 // envCaseInsensitive is true where env var names are case-insensitive, so
@@ -127,7 +130,14 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 		environ = os.Environ
 	}
 	res := &Result[V]{Origins: make([][]Origin, len(a.Keys))}
-	l := &loader[V]{a: a, res: res, partial: o.Partial}
+	l := &loader[V]{a: a, res: res, partial: o.Partial, fs: fs, reads: map[string]string{}}
+	seen := map[string]envSeen{}
+	l.lookup = func(name string) (string, bool) {
+		v, ok := lookup(name)
+		seen[name] = envSeen{v, ok}
+		return v, ok
+	}
+	l.seen = seen
 
 	if a.ConfigFile != "" {
 		// A --config that was passed decides, even if empty: the env var is
@@ -162,26 +172,11 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 	l.unknownEnv(environ())
 
 	v := new(V)
-	l.loaded = map[int]bool{}
-	for _, i := range idx {
-		l.loaded[i] = true
-	}
-	l.state = map[int]keyState{}
-	// RelevantIf conditions the command doesn't load itself are loaded too,
-	// but only to decide relevance: they aren't checked for Required and
-	// take no part in rules.
-	conds := conditions(l.a, idx)
-	l.condOnly = map[int]bool{}
-	for _, c := range conds {
-		l.condOnly[c] = true
-	}
-	// Keys load after the keys their RelevantIf conditions name. The
-	// generator rejects cycles, so every pass makes progress.
-	pending := append(append([]int(nil), idx...), conds...)
+	pending := l.start(idx)
 	if o.Store != NoStore && a.OpenStore != nil {
 		// The store's file is a key's value: load it first, then open
 		// the store, so its records can be layered over the rest.
-		l.loadKey(v, a.StoreKey, fs, lookup)
+		l.loadKey(v, a.StoreKey)
 		pending = slices.DeleteFunc(pending, func(i int) bool { return i == a.StoreKey })
 		if l.state[a.StoreKey] == loadedOK {
 			b, err := a.openStore(v, false)
@@ -198,6 +193,48 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 			l.records, l.badRecords = recs, bad
 		}
 	}
+	l.loadAll(v, pending)
+	if len(l.retire) > 0 && res.Store != nil {
+		if err := res.Store.Apply(l.retire); err != nil {
+			l.warn(fmt.Sprintf("can't move values from older epochs to history: %v", err))
+		} else {
+			for _, c := range l.retire {
+				delete(l.records, c.Key)
+			}
+		}
+	}
+	if err := l.finish(v); err != nil {
+		return res, err
+	}
+	if res.Store != nil {
+		res.Writer = newWriter(l, idx)
+	}
+	return res, nil
+}
+
+// start sets up loading the keys at idx, and returns every key to load:
+// those, and the RelevantIf conditions they depend on.
+func (l *loader[V]) start(idx []int) []int {
+	l.loaded = map[int]bool{}
+	for _, i := range idx {
+		l.loaded[i] = true
+	}
+	l.state = map[int]keyState{}
+	// RelevantIf conditions the command doesn't load itself are loaded too,
+	// but only to decide relevance: they aren't checked for Required and
+	// take no part in rules.
+	conds := conditions(l.a, idx)
+	l.condOnly = map[int]bool{}
+	for _, c := range conds {
+		l.condOnly[c] = true
+	}
+	return append(append([]int(nil), idx...), conds...)
+}
+
+// loadAll loads the pending keys, each after the keys its RelevantIf
+// conditions name. The generator rejects cycles, so every pass makes
+// progress.
+func (l *loader[V]) loadAll(v *V, pending []int) {
 	for len(pending) > 0 {
 		var later []int
 		for _, i := range pending {
@@ -205,7 +242,7 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 				later = append(later, i)
 				continue
 			}
-			l.loadKey(v, i, fs, lookup)
+			l.loadKey(v, i)
 		}
 		if len(later) == len(pending) {
 			for _, i := range later {
@@ -215,26 +252,26 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 		}
 		pending = later
 	}
-	if len(l.retire) > 0 && res.Store != nil {
-		if err := res.Store.Apply(l.retire); err != nil {
-			l.warn(fmt.Sprintf("can't move values from older epochs to history: %v", err))
-		}
-	}
-	res.Irrelevant = map[int]bool{}
+}
+
+// finish checks the rules, unless loading is partial, and returns every
+// problem found, or sets Result.Values.
+func (l *loader[V]) finish(v *V) error {
+	l.res.Irrelevant = map[int]bool{}
 	for i, st := range l.state {
 		if st == irrelevant {
-			res.Irrelevant[i] = true
+			l.res.Irrelevant[i] = true
 		}
 	}
-	if !o.Partial {
+	if !l.partial {
 		l.checkRules(v)
 	}
 	if len(l.errs) > 0 {
 		sort.SliceStable(l.errs, func(i, j int) bool { return l.errs[i].Key < l.errs[j].Key })
-		return res, l.errs
+		return l.errs
 	}
-	res.Values = v
-	return res, nil
+	l.res.Values = v
+	return nil
 }
 
 type loader[V any] struct {
@@ -252,6 +289,22 @@ type loader[V any] struct {
 	badRecords map[string]error
 	// retire removes records from older epochs once keys have loaded.
 	retire []storage.Change
+	// The flags and env vars keys load from. Lookups are recorded, and
+	// files read are kept by path, so a write can load the keys again
+	// from the same sources (Writer).
+	fs     *pflag.FlagSet
+	lookup func(string) (string, bool)
+	reads  map[string]string
+	// strict makes a stored value that doesn't pass the key's checks a
+	// problem, instead of a warning: it is a write's new value.
+	strict map[int]bool
+	seen   map[string]envSeen
+}
+
+// envSeen is what looking up an env var found.
+type envSeen struct {
+	value string
+	ok    bool
 }
 
 // conditions returns the RelevantIf conditions of the keys at idx, directly
@@ -382,8 +435,9 @@ func sets[V any](k *Key[V], c *candidate) bool {
 	return setsValue(k, c)
 }
 
-func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) (string, bool)) {
+func (l *loader[V]) loadKey(v *V, i int) {
 	k := &l.a.Keys[i]
+	fs, lookup := l.fs, l.lookup
 	var origins []Origin
 	var win *candidate
 	if k.Default != nil {
@@ -477,7 +531,12 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 		}
 	}
 	if k.Mutable && (l.records != nil || l.badRecords != nil) {
-		win, origins = l.storeLayer(k, i, win, origins)
+		var ok bool
+		if win, origins, ok = l.storeLayer(k, i, win, origins); !ok {
+			l.res.Origins[i] = origins
+			l.state[i] = failed
+			return
+		}
 	}
 	l.res.Origins[i] = origins
 	if win != nil && k.File {
@@ -924,8 +983,9 @@ func (l *loader[V]) unknownEnv(environ []string) {
 // storeLayer puts a mutable key's stored value over win, the winner of the
 // other layers. A stored value that doesn't parse, or fails the key's
 // checks, is ignored with a warning, and kept in the store. One that hides
-// a flag or env var says so.
-func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origin) (*candidate, []Origin) {
+// a flag or env var says so. For a write's new value (strict), a value
+// that fails is a problem instead, and ok is false.
+func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origin) (_ *candidate, _ []Origin, ok bool) {
 	next := "using the default"
 	switch {
 	case win == nil && k.Default == nil:
@@ -937,11 +997,11 @@ func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origi
 		l.warn(fmt.Sprintf("%s: the stored value is ignored (%v); %s", k.Path, err, next),
 			slog.String("key", k.Path), slog.String("source", "store"))
 		l.invalid(i, err.Error())
-		return win, origins
+		return win, origins, true
 	}
 	rec, ok := l.records[k.Path]
 	if !ok {
-		return win, origins
+		return win, origins, true
 	}
 	// A record from an older epoch was for what the key used to mean: it
 	// moves to history. One from a newer epoch is for a newer program.
@@ -953,12 +1013,12 @@ func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origi
 		}})
 		l.warn(fmt.Sprintf("%s: the stored value %s is from epoch %d, and the key is at epoch %d now; it moves to history, %s",
 			k.Path, rec.Raw, rec.Epoch, k.Epoch, next), slog.String("key", k.Path), slog.String("source", "store"))
-		return win, origins
+		return win, origins, true
 	case rec.Epoch > k.Epoch:
 		l.warn(fmt.Sprintf("%s: the stored value is ignored (it is from epoch %d, newer than this program's %d); %s",
 			k.Path, rec.Epoch, k.Epoch, next), slog.String("key", k.Path), slog.String("source", "store"))
 		l.invalid(i, fmt.Sprintf("from epoch %d, newer than %d", rec.Epoch, k.Epoch))
-		return win, origins
+		return win, origins, true
 	}
 	if l.res.Records == nil {
 		l.res.Records = map[int]storage.Record{}
@@ -975,11 +1035,15 @@ func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origi
 	case k.Check != nil && k.IsSet(scratch):
 		err = k.Check(scratch)
 	}
+	if err != nil && l.strict[i] {
+		l.errs = append(l.errs, cfgx.Problem{Key: k.Path, Message: err.Error(), Source: "store"})
+		return win, origins, false
+	}
 	if err != nil {
 		l.warn(fmt.Sprintf("%s: the stored value is ignored (%v); %s", k.Path, err, next),
 			slog.String("key", k.Path), slog.String("source", "store"))
 		l.invalid(i, err.Error())
-		return win, origins
+		return win, origins, true
 	}
 	if win != nil && (win.origin.Layer == LayerEnv || win.origin.Layer == LayerFlag) {
 		who := rec.UpdatedAt.Format("2006-01-02")
@@ -989,7 +1053,7 @@ func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origi
 		l.warn(fmt.Sprintf("%s: stored value %s (%s) overrides %s=%s", k.Path, rec.Raw, who, win.origin, win.raw),
 			slog.String("key", k.Path), slog.String("source", "store"))
 	}
-	return c, append(origins, c.origin)
+	return c, append(origins, c.origin), true
 }
 
 func (l *loader[V]) invalid(i int, msg string) {

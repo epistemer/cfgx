@@ -43,3 +43,19 @@ func TestTextDefault(t *testing.T) {
 		}
 	}
 }
+
+// ReadOnly parses text but can't write it.
+type ReadOnly int
+
+func (r *ReadOnly) UnmarshalText([]byte) error { return nil }
+
+// A Mutable Text key needs MarshalText: a write stores the value as text.
+func TestTextMutable(t *testing.T) {
+	ir := Text("r", "R", ReadOnly(0)).Mutable().export(nil)
+	if len(ir.Problems) != 1 || !strings.Contains(ir.Problems[0], "is Mutable, which needs dsl.ReadOnly to implement encoding.TextMarshaler") {
+		t.Errorf("problems %q", ir.Problems)
+	}
+	if ir := Text("c", "C", netip.Prefix{}).Mutable().export(nil); len(ir.Problems) != 0 {
+		t.Errorf("netip.Prefix: problems %q", ir.Problems)
+	}
+}
