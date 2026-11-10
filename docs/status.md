@@ -4,6 +4,27 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M7.9 end-to-end admin script; M7 complete
+
+- **Landed:** `admin.txtar`, in which a server exposes a small HTTP admin
+  endpoint over `Store()`. It shows that:
+  - an update fires `OnChange`, is validated (a bad value is rejected) and
+    survives a server restart
+  - the app's own bucket lives in the same file across restarts
+  - an invalid stored record falls back to the default
+  - an epoch bump moves the value stored through the endpoint to history,
+    once
+  - a stored value that hides an env var warns at startup
+- **Milestone:** M7, runtime-mutable settings with the built-in bbolt
+  store, is complete.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 181k tokens
+  ([review 0033](reviews/0033-gemini-m7.9-review.md)). 5 of 11 findings
+  accepted.
+- **Pending:** the M7 milestone review on Argon (High) once its quota
+  resets (about 2026-11-14), with the earlier M3 and M4 ones.
+- **Next:** M8, `cfgx init`.
+- **Waiting on you:** nothing.
+
 ## 2026-11-10: M7.8 explain and read-only opens
 
 - **Landed:** `config explain` shows a stored value as

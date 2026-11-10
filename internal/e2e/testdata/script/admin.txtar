@@ -5,6 +5,8 @@
 go generate ./...
 go build -o app$exe .
 
+# An update through the endpoint is validated, stored and reported to
+# OnChange; the app keeps its own bucket in the same file.
 exec ./app$exe serve &
 exec ./app$exe client GET /settings/rate.limit
 stdout '^100 default\r?$'
@@ -21,35 +23,52 @@ wait
 stdout 'changed \[rate.limit\] to 250'
 ! stdout 'to -1'
 
-# The value survives a restart.
-exec ./app$exe show
-stdout '^limit 250\r?$'
+# The value survives a restart of the server, and so does the app's bucket.
+rm addr.txt
+exec ./app$exe serve &
+exec ./app$exe client GET /settings/rate.limit
+stdout '^250 store\r?$'
+exec ./app$exe client GET /own
+stdout '^world\r?$'
+exec ./app$exe client POST /quit
+wait
 
-# A stored value that hides an env var says so at startup.
-env APP_RATE_LIMIT=120
-exec ./app$exe show
-stdout '^limit 250\r?$'
-stderr 'rate.limit: stored value 250 \(admin, \d{4}-\d\d-\d\d\) overrides env APP_RATE_LIMIT=120'
-
-# A stored value that no longer parses is ignored, and the env var applies.
+# A stored value that no longer parses is ignored, and the default applies.
 exec ./app$exe inject rate.limit abc
 exec ./app$exe show
-stdout '^limit 120\r?$'
-stderr 'rate.limit: the stored value is ignored \("abc" is not an integer\); using env APP_RATE_LIMIT'
+stdout '^limit 100\r?$'
+stderr 'rate.limit: the stored value is ignored \("abc" is not an integer\); using the default'
 
-# A release that bumps the key's epoch moves the old value to history, once.
-exec ./app$exe inject rate.limit 300
+# A release that bumps the key's epoch moves the value stored through the
+# endpoint to history, once, and the default applies.
+rm addr.txt
+exec ./app$exe serve &
+exec ./app$exe client PUT /settings/rate.limit 300
+exec ./app$exe client POST /quit
+wait
 exec ./app$exe show
 stdout '^limit 300\r?$'
 cp files/schema_epoch.go internal/settings/schema/schema.go
 go generate ./...
 go build -o app$exe .
+exec ./app$exe show --history
+stdout '^limit 100\r?$'
+stdout '^history: reset by cfgx \(epoch 1 discards values from epoch 0\), 300 by admin\r?$'
+stderr 'rate.limit: the stored value 300 is from epoch 0, and the key is at epoch 1 now; it moves to history, using the default'
 exec ./app$exe show
-stdout '^limit 120\r?$'
-stderr 'rate.limit: the stored value 300 is from epoch 0, and the key is at epoch 1 now; it moves to history, using env APP_RATE_LIMIT'
-exec ./app$exe show
-stdout '^limit 120\r?$'
+stdout '^limit 100\r?$'
 ! stderr epoch
+
+# A stored value that hides an env var says so at startup.
+rm addr.txt
+exec ./app$exe serve &
+exec ./app$exe client PUT /settings/rate.limit 250
+exec ./app$exe client POST /quit
+wait
+env APP_RATE_LIMIT=120
+exec ./app$exe show
+stdout '^limit 250\r?$'
+stderr 'rate.limit: stored value 250 \(admin, \d{4}-\d\d-\d\d\) overrides env APP_RATE_LIMIT=120'
 
 -- files/schema_epoch.go --
 package schema
@@ -118,13 +137,32 @@ import (
 
 func main() {
 	root := &cobra.Command{Use: "app", SilenceUsage: true}
+	var history bool
+	show := settings.ShowCommand(&cobra.Command{Use: "show"}, func(_ context.Context, s *settings.Show) error {
+		fmt.Println("limit", s.RateLimit())
+		if !history {
+			return nil
+		}
+		h, err := s.Store().History("rate.limit", 2)
+		if err != nil {
+			return err
+		}
+		var es []string
+		for _, r := range h {
+			if r.Reset {
+				es = append(es, fmt.Sprintf("reset by %s (%s)", r.UpdatedBy, r.Reason))
+			} else {
+				es = append(es, r.Value+" by "+r.UpdatedBy)
+			}
+		}
+		fmt.Println("history:", strings.Join(es, ", "))
+		return nil
+	})
+	show.Flags().BoolVar(&history, "history", false, "print the last two history entries")
 	settings.BindRoot(root)
 	root.AddCommand(
 		settings.ServeCommand(&cobra.Command{Use: "serve"}, serve),
-		settings.ShowCommand(&cobra.Command{Use: "show"}, func(_ context.Context, s *settings.Show) error {
-			fmt.Println("limit", s.RateLimit())
-			return nil
-		}),
+		show,
 		&cobra.Command{Use: "client", Args: cobra.RangeArgs(2, 3), RunE: client},
 		&cobra.Command{Use: "inject", Args: cobra.ExactArgs(2), RunE: inject},
 	)
