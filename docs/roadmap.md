@@ -269,7 +269,7 @@ binary can explain its own configuration.
 | ☑ | M6.4 | The `config` subcommand: `init`, `print`, `explain`, `validate`, `schema`, `env`. Scope as decided in A3 and A9: the whole app by default, or one command's keys by its command-line name (found through `cmd.Annotations`); default, file, env and store values only; command-only `Args` never checked. | L | testscript for each subcommand, with and without a command argument, including a nested command; secrets masked everywhere |
 | ☑ | M6.5 | Test helpers: `Values`, `All`, `Test(edit)`, with no I/O (A6) | S | A library test from interface.md §5.4 compiles and passes with no key files on disk |
 | ☑ | M6.6 | Loading without cobra: `LoadX(ctx, opts...)` with `cfgx.WithArgs`, `WithEnv(map)`, `WithFile(path)`; `Args()` then returns the non-flag arguments from `WithArgs` (A12) | M | Unit tests in `examples/zp` use it without cobra |
-| ☐ | M6.7 | Manual check that yaml-language-server in VS Code autocompletes and validates `config.yaml` from the generated schema | S | Noted in the PR, with a screenshot |
+| ☑ | M6.7 | Manual check that yaml-language-server in VS Code autocompletes and validates `config.yaml` from the generated schema | S | Noted in the PR, with a screenshot |
 
 **Exit:** `examples/zp` ships every generated file, and `gen --check` runs in
 CI for the examples.

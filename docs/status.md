@@ -4,6 +4,20 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M6.7 checked in VS Code; M6 done
+
+- **Checked by you:** VS Code's YAML extension (yaml-language-server) reads
+  `examples/zp/config.schema.json` through a `$schema` modeline. It shows
+  the schema's title and each key's description, and flags
+  `database.port: 70000` with "Value is above the maximum of 65535"
+  ([screenshot](images/m6.7-vscode-schema.png)).
+- **M6 is done.** `examples/zp` ships every generated file, and the
+  examples test, run in CI, fails on any stale one: the milestone's exit
+  criterion.
+- **Next:** M7, settings that change at runtime, kept in the built-in
+  bbolt store.
+- **Waiting on you:** nothing.
+
 ## 2026-11-09: M6.4 config subcommand
 
 - **Landed:** `settings.ConfigCommand()` adds `config init`, `print`,
