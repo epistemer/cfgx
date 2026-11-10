@@ -300,21 +300,27 @@ func TestOnChange(t *testing.T) {
 	}
 }
 
-// A callback that panics doesn't stop later ones.
+// A callback that panics doesn't stop the others, or later changes; the
+// writer running it panics once they have run.
 func TestOnChangePanic(t *testing.T) {
 	w := loadWriter(t, writeApp(t.TempDir()), nil)
-	calls := 0
-	w.OnChange(func([]string) {
-		calls++
-		if calls == 1 {
+	var calls []string
+	w.OnChange(func(p []string) {
+		calls = append(calls, "a")
+		if len(calls) == 1 {
 			panic("boom")
 		}
 	})
+	w.OnChange(func([]string) { calls = append(calls, "b") })
 	func() {
-		defer func() { _ = recover() }()
+		defer func() {
+			if r := recover(); r != "boom" {
+				t.Errorf("recovered %v", r)
+			}
+		}()
 		_ = w.Write(context.Background(), setRate(10))
 	}()
-	if err := w.Write(context.Background(), setRate(20)); err != nil || calls != 2 {
-		t.Errorf("%v, %d calls", err, calls)
+	if err := w.Write(context.Background(), setRate(20)); err != nil || fmt.Sprint(calls) != "[a b a b]" {
+		t.Errorf("%v, calls %v", err, calls)
 	}
 }

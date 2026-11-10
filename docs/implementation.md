@@ -945,6 +945,13 @@ whose tests import `cfgx/store`). Generated code makes it with
 key's JSON Schema without the config file's `null`) in their key table.
 `store.Record` adds `Reset`, so history shows resets.
 
+**[decided, M7.6]** A write compares each mutable key's canonical text
+before and after the swap and queues the paths that changed. Callbacks
+run from that queue, one at a time and in commit order, on the goroutine
+of whichever writer finds the queue idle; the others return at once. Each
+callback runs under `recover`, so one that panics doesn't stop the rest,
+and the draining writer raises the first panic again at the end.
+
 **Write pipeline**, shared by typed writes (`SetX`/`ResetX`) and dynamic ones
 (`Store.Update`/`Store.Reset` with text values). One mutex per process is held
 from step 1 to step 4, so concurrent writers can't lose each other's changes:

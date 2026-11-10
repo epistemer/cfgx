@@ -4,6 +4,30 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M7.6 OnChange
+
+- **Landed:** the engine reports which settings a write changed. Callbacks
+  run one at a time, in the order writes committed, after the new values
+  are in place and outside the write lock, so a callback may write too.
+  A write that changes no value (say, a reset to the value the env var
+  gives) calls nothing. A callback that panics doesn't stop the others;
+  the panic is raised again once they have run. The generator emits
+  `Key`, a `KeyX` constant per mutable key, and `Change` with `Has` and
+  `Keys`.
+- **Decided for you:**
+  - `KeyX` constants exist for mutable keys only, as `Key` strings holding
+    the key's path.
+  - `Change` also has `Keys()`.
+  - A write can return before its callbacks run, when another writer is
+    running callbacks at the time.
+  - The command methods `OnChange()` and `Snapshot()` move to M7.7, with
+    the rest of the wiring.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 112k tokens
+  ([review 0030](reviews/0030-gemini-m7.6-review.md)). 3 of 10 findings
+  fixed.
+- **Next:** M7.7, the generated wiring on command types.
+- **Waiting on you:** nothing.
+
 ## 2026-11-10: M7.5 admin API
 
 - **Landed:** `store.Store`, the admin API for a settings dashboard: `Keys`

@@ -262,6 +262,8 @@ func valueText[V any](k *Key[V], v *V) string {
 // values are in place and the write's lock is released, so fn may write
 // too. They run on the goroutine of a writer, not always the one whose
 // write changed the values: a write can return before its callbacks run.
+// fn should not panic; if it does, the other callbacks still run, and the
+// writer running them panics afterwards.
 func (w *Writer[V]) OnChange(fn func(paths []string)) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -269,7 +271,9 @@ func (w *Writer[V]) OnChange(fn func(paths []string)) {
 }
 
 // drain runs the queued callbacks, unless another writer is running them
-// already, in which case it runs these too.
+// already, in which case it runs these too. A callback that panics doesn't
+// stop the others: every queued callback runs, and then the first panic is
+// raised again here, on the goroutine of the writer that ran it.
 func (w *Writer[V]) drain() {
 	w.mu.Lock()
 	if w.draining {
@@ -277,27 +281,38 @@ func (w *Writer[V]) drain() {
 		return
 	}
 	w.draining = true
-	done := false
-	defer func() {
-		if !done { // a callback panicked: let the next write carry on
-			w.mu.Lock()
-			w.draining = false
-			w.mu.Unlock()
-		}
-	}()
+	var first any
+	panicked := false
 	for len(w.queue) > 0 {
 		paths := w.queue[0]
+		w.queue[0] = nil
 		w.queue = w.queue[1:]
 		subs := w.subs[:len(w.subs):len(w.subs)]
 		w.mu.Unlock()
 		for _, fn := range subs {
-			fn(paths)
+			if p, ok := call(fn, paths); ok && !panicked {
+				first, panicked = p, true
+			}
 		}
 		w.mu.Lock()
 	}
 	w.draining = false
-	done = true
 	w.mu.Unlock()
+	if panicked {
+		panic(first)
+	}
+}
+
+// call runs fn, and returns what it panicked with, if it did.
+func call(fn func([]string), paths []string) (p any, panicked bool) {
+	defer func() {
+		if panicked {
+			p = recover()
+		}
+	}()
+	panicked = true
+	fn(paths)
+	return nil, false
 }
 
 // replay loads the command's keys again from the bootstrap sources, with
