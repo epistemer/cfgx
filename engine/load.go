@@ -1,15 +1,18 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/epistemer/cfgx"
 	"github.com/epistemer/cfgx/internal/node"
+	"github.com/epistemer/cfgx/internal/storage"
 	"github.com/epistemer/cfgx/internal/suggest"
 	"github.com/spf13/pflag"
 )
@@ -23,6 +26,9 @@ const (
 	LayerFile
 	LayerEnv
 	LayerFlag
+	// LayerStore is a mutable key's stored value, which wins over the
+	// rest (interface §4).
+	LayerStore
 )
 
 // Origin is one layer that provided a key's value, and where: a file
@@ -40,6 +46,8 @@ func (o Origin) String() string {
 		return "env " + o.Where
 	case LayerFlag:
 		return "flag " + o.Where
+	case LayerStore:
+		return "store"
 	}
 	return o.Where
 }
@@ -61,7 +69,22 @@ type Options struct {
 	// can show a configuration that isn't complete yet. Values that don't
 	// parse are still problems.
 	Partial bool
+	// Store opens the app's store and layers its records over the
+	// mutable keys; Result.Store is then the open store, for the caller to
+	// close.
+	Store StoreMode
 }
+
+// StoreMode is how loading uses the store.
+type StoreMode int
+
+const (
+	// NoStore leaves the store alone.
+	NoStore StoreMode = iota
+	// StoreReadWrite opens the store, creating its file if need be, and
+	// fails if it can't.
+	StoreReadWrite
+)
 
 // Result is what Load found.
 type Result[V any] struct {
@@ -73,6 +96,12 @@ type Result[V any] struct {
 	Warnings []Warning
 	// Irrelevant marks the keys a RelevantIf condition left out.
 	Irrelevant map[int]bool
+	// Store is the open store, if Options.Store asked for it; the caller
+	// closes it. Records are the stored records of the loaded keys, by
+	// key index, and Invalid says why a stored value was ignored.
+	Store   storage.Backend
+	Records map[int]storage.Record
+	Invalid map[int]string
 }
 
 // envCaseInsensitive is true where env var names are case-insensitive, so
@@ -148,6 +177,26 @@ func Load[V any](a *App[V], fs *pflag.FlagSet, idx []int, o Options) (*Result[V]
 	// Keys load after the keys their RelevantIf conditions name. The
 	// generator rejects cycles, so every pass makes progress.
 	pending := append(append([]int(nil), idx...), conds...)
+	if o.Store != NoStore && a.OpenStore != nil {
+		// The store's file is a key's value: load it first, then open
+		// the store, so its records can be layered over the rest.
+		l.loadKey(v, a.StoreKey, fs, lookup)
+		pending = slices.DeleteFunc(pending, func(i int) bool { return i == a.StoreKey })
+		if l.state[a.StoreKey] == loadedOK {
+			b, err := a.openStore(v, false)
+			if err != nil {
+				return res, err
+			}
+			res.Store = b
+			recs, bad, err := b.Records()
+			if err != nil {
+				b.Close()
+				res.Store = nil
+				return res, err
+			}
+			l.records, l.badRecords = recs, bad
+		}
+	}
 	for len(pending) > 0 {
 		var later []int
 		for _, i := range pending {
@@ -192,6 +241,9 @@ type loader[V any] struct {
 	condOnly map[int]bool    // RelevantIf conditions loaded only for relevance
 	state    map[int]keyState
 	partial  bool // Options.Partial
+	// The store's records and the ones that failed to decode, by path.
+	records    map[string]storage.Record
+	badRecords map[string]error
 }
 
 // conditions returns the RelevantIf conditions of the keys at idx, directly
@@ -415,6 +467,9 @@ func (l *loader[V]) loadKey(v *V, i int, fs *pflag.FlagSet, lookup func(string) 
 				}
 			}
 		}
+	}
+	if k.Mutable && (l.records != nil || l.badRecords != nil) {
+		win, origins = l.storeLayer(k, i, win, origins)
 	}
 	l.res.Origins[i] = origins
 	if win != nil && k.File {
@@ -856,4 +911,65 @@ func (l *loader[V]) unknownEnv(environ []string) {
 		}
 		l.warn(msg, slog.String("env", name))
 	}
+}
+
+// storeLayer puts a mutable key's stored value over win, the winner of the
+// other layers. A stored value that doesn't parse, or fails the key's
+// checks, is ignored with a warning, and kept in the store. One that hides
+// a flag or env var says so.
+func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origin) (*candidate, []Origin) {
+	next := "using the default"
+	switch {
+	case win == nil:
+		next = "leaving it unset"
+	case win.origin.Layer != LayerDefault:
+		next = "using " + win.origin.String()
+	}
+	if err, bad := l.badRecords[k.Path]; bad {
+		l.warn(fmt.Sprintf("%s: the stored value is ignored (%v); %s", k.Path, err, next),
+			slog.String("key", k.Path), slog.String("source", "store"))
+		l.invalid(i, err.Error())
+		return win, origins
+	}
+	rec, ok := l.records[k.Path]
+	if !ok {
+		return win, origins
+	}
+	if l.res.Records == nil {
+		l.res.Records = map[int]storage.Record{}
+	}
+	l.res.Records[i] = rec
+	c := &candidate{raw: rec.Raw, origin: Origin{Layer: LayerStore}}
+	scratch := new(V)
+	err := apply(k, scratch, c, c.raw)
+	switch {
+	case err != nil:
+	case k.Required && !k.IsSet(scratch):
+		// Empty stays empty: a required key can't take it from the store.
+		err = errors.New("is required, but the stored value is empty")
+	case k.Check != nil && k.IsSet(scratch):
+		err = k.Check(scratch)
+	}
+	if err != nil {
+		l.warn(fmt.Sprintf("%s: the stored value is ignored (%v); %s", k.Path, err, next),
+			slog.String("key", k.Path), slog.String("source", "store"))
+		l.invalid(i, err.Error())
+		return win, origins
+	}
+	if win != nil && (win.origin.Layer == LayerEnv || win.origin.Layer == LayerFlag) {
+		who := rec.UpdatedAt.Format("2006-01-02")
+		if rec.UpdatedBy != "" {
+			who = rec.UpdatedBy + ", " + who
+		}
+		l.warn(fmt.Sprintf("%s: stored value %s (%s) overrides %s=%s", k.Path, rec.Raw, who, win.origin, win.raw),
+			slog.String("key", k.Path), slog.String("source", "store"))
+	}
+	return c, append(origins, c.origin)
+}
+
+func (l *loader[V]) invalid(i int, msg string) {
+	if l.res.Invalid == nil {
+		l.res.Invalid = map[int]string{}
+	}
+	l.res.Invalid[i] = msg
 }

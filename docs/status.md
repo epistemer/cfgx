@@ -4,6 +4,21 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M7.2 store layer
+
+- **Landed:** a mutable key's stored value now wins over flags, env, the
+  file and the default.
+  - A stored value that no longer passes the schema is ignored with a
+    warning. That covers bad text, a failed check, and an empty value for a
+    required key. The next layer applies, and the record stays in the
+    store.
+  - A stored value that hides a flag or env var says so at startup.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 83k tokens
+  ([review 0026](reviews/0026-gemini-m7.2-review.md)). 3 of 6 findings
+  fixed.
+- **Next:** M7.3 (epochs), then M7.4, the write pipeline.
+- **Waiting on you:** nothing.
+
 ## 2026-11-10: M7.1 store lifecycle
 
 - **Landed:**
