@@ -63,7 +63,7 @@ func TestFormatRoundTrips(t *testing.T) {
 	for _, l := range []*time.Location{nil, time.UTC, berlin} {
 		roundTrip(t, l, FormatLocation, ParseLocation)
 	}
-	for _, s := range [][]string{nil, {""}, {"a", "b,c", ` d `, `say "hi"`, "two\nlines"}, {"", ""}} {
+	for _, s := range [][]string{nil, {""}, {"a", "b,c", ` d `, `say "hi"`, "two\nlines", "cr\r", "\r"}, {"", ""}} {
 		roundTrip(t, s, func(s []string) string {
 			text, err := FormatStrings(s)
 			if err != nil {
@@ -84,7 +84,7 @@ func TestFormatRoundTrips(t *testing.T) {
 	for _, m := range []map[string]string{nil, {"a": "1", "b": "x=y", "c": "", "d,e": " f"}} {
 		roundTrip(t, m, stringMap, items(ParseStringMap))
 	}
-	for _, m := range []map[string]string{{"a=b": "1"}, {"": "1"}, {" a": "1"}, {"a": "x\ry"}} {
+	for _, m := range []map[string]string{{"a=b": "1"}, {"": "1"}, {" a": "1"}, {"a": "x\r\ny"}} {
 		if _, err := FormatStringMap(m); err == nil {
 			t.Errorf("%q formatted", m)
 		}
