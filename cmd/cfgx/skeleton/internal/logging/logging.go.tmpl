@@ -1,0 +1,90 @@
+// Package logging sets up the logrus logger, and the log/slog bridge that
+// routes cfgx's warnings into it.
+package logging
+
+import (
+	"context"
+	"log/slog"
+	"os"
+
+	"github.com/sirupsen/logrus"
+
+	"{{.Module}}/internal/settings"
+)
+
+// New is the logger, before the configuration is loaded: info and up, as
+// text, on stderr.
+func New() *logrus.Logger {
+	l := logrus.New()
+	l.SetOutput(os.Stderr)
+	return l
+}
+
+// Configure applies the log settings to l.
+func Configure(l *logrus.Logger, cfg settings.Log) error {
+	level, err := logrus.ParseLevel(cfg.LogLevel())
+	if err != nil {
+		return err
+	}
+	l.SetLevel(level)
+	if cfg.LogFormat() == "json" {
+		l.SetFormatter(&logrus.JSONFormatter{})
+	}
+	return nil
+}
+
+// Slog is a *slog.Logger that writes to l, for libraries that log with
+// log/slog, such as cfgx.
+func Slog(l *logrus.Logger) *slog.Logger { return slog.New(&handler{l: l}) }
+
+type handler struct {
+	l     *logrus.Logger
+	attrs []slog.Attr
+	group string
+}
+
+func (h *handler) Enabled(_ context.Context, lv slog.Level) bool {
+	return h.l.IsLevelEnabled(level(lv))
+}
+
+func (h *handler) Handle(_ context.Context, r slog.Record) error {
+	fields := logrus.Fields{}
+	add := func(a slog.Attr) bool {
+		key := a.Key
+		if h.group != "" {
+			key = h.group + "." + key
+		}
+		fields[key] = a.Value.Resolve().Any()
+		return true
+	}
+	for _, a := range h.attrs {
+		add(a)
+	}
+	r.Attrs(add)
+	h.l.WithFields(fields).WithTime(r.Time).Log(level(r.Level), r.Message)
+	return nil
+}
+
+func (h *handler) WithAttrs(as []slog.Attr) slog.Handler {
+	return &handler{l: h.l, attrs: append(append([]slog.Attr(nil), h.attrs...), as...), group: h.group}
+}
+
+func (h *handler) WithGroup(name string) slog.Handler {
+	g := name
+	if h.group != "" {
+		g = h.group + "." + name
+	}
+	return &handler{l: h.l, attrs: h.attrs, group: g}
+}
+
+func level(l slog.Level) logrus.Level {
+	switch {
+	case l >= slog.LevelError:
+		return logrus.ErrorLevel
+	case l >= slog.LevelWarn:
+		return logrus.WarnLevel
+	case l >= slog.LevelInfo:
+		return logrus.InfoLevel
+	}
+	return logrus.DebugLevel
+}

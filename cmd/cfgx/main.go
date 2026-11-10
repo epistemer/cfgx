@@ -33,6 +33,7 @@ func main() {
 
 const usage = `usage: cfgx gen [-check] [-timeout d] [-artifacts dir] <schema package>
        cfgx diff [-fail-breaking] <old cfgx.lock.json> [<new cfgx.lock.json>]
+       cfgx init [-cfgx dir] <module path>
 
 Runs the schema package and writes zz_<package>.go in the current directory,
 and the example config, its JSON Schema, .env.example, docs/CONFIG.md and
@@ -42,11 +43,17 @@ With -check, it writes nothing and fails if any of them is stale.
 diff lists what changed between two lock files, breaking changes first; the
 new one defaults to the module's cfgx.lock.json. With -fail-breaking, it
 exits 1 when a change is breaking.
+
+init creates a new cobra application with a cfgx settings package in the
+current directory.
 `
 
 func run(ctx context.Context, args []string, stderr io.Writer) int {
 	if len(args) > 0 && args[0] == "diff" {
 		return diff(ctx, args[1:], os.Stdout, stderr)
+	}
+	if len(args) > 0 && args[0] == "init" {
+		return initCmd(ctx, args[1:], os.Stdout, stderr)
 	}
 	if len(args) == 0 || args[0] != "gen" {
 		fmt.Fprint(stderr, usage)

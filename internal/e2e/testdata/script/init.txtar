@@ -1,0 +1,34 @@
+# M8.3: cfgx init in an empty directory gives a program that builds and
+# runs with no edits.
+go build -o cfgx$exe github.com/epistemer/cfgx/cmd/cfgx
+mkdir hello
+cd hello
+exec ../cfgx$exe init -cfgx $CFGX_ROOT example.com/hello
+stdout '^Created example.com/hello\. Next: go build \. && \./hello serve\r?$'
+exists go.mod go.sum .gitignore README.md main.go serve.go internal/settings/zz_settings.go internal/logging/logging.go
+exists hello.example.yaml hello.schema.json docs/CONFIG.md cfgx.lock.json
+grep '^tool github.com/epistemer/cfgx/cmd/cfgx$' go.mod
+
+go build -o hello$exe .
+exec ./hello$exe serve --help
+stdout '--server-addr string'
+stdout '--log-level string'
+stdout '--config path'
+exec ./hello$exe config explain
+stdout '^server.addr\s+localhost:8080\s+default\s+localhost:8080\r?$'
+stdout '^log.level\s+info\s+default'
+exec ./hello$exe version
+stdout .
+
+# cfgx's warnings go through the logrus logger.
+cp ../files/hello.yaml hello.yaml
+exec ./hello$exe config explain
+stderr 'level=warning msg="unknown key \\"servr\\" in hello.yaml:1:1; did you mean \\"server\\"\?"'
+
+# A second init refuses, and changes nothing.
+! exec ../cfgx$exe init example.com/hello
+stderr 'refusing to overwrite go.mod, .gitignore, README.md'
+
+-- files/hello.yaml --
+servr:
+  addr: ":9090"

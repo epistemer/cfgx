@@ -1,0 +1,38 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+
+	"github.com/sirupsen/logrus"
+
+	"example.com/hello/internal/settings"
+)
+
+// serve runs the HTTP server until ctx is canceled, then shuts it down.
+// It depends on the settings it reads, settings.Server, not on the
+// command's whole configuration.
+func serve(ctx context.Context, s settings.Server, log *logrus.Logger) error {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprintln(w, "hello from hello")
+	})
+	srv := &http.Server{Addr: s.ServerAddr(), Handler: mux}
+	errc := make(chan error, 1)
+	go func() { errc <- srv.ListenAndServe() }()
+	log.WithField("addr", s.ServerAddr()).Info("listening")
+	select {
+	case err := <-errc:
+		return err
+	case <-ctx.Done():
+	}
+	log.Info("shutting down")
+	sctx, cancel := context.WithTimeout(context.Background(), s.ServerShutdownTimeout())
+	defer cancel()
+	if err := srv.Shutdown(sctx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
