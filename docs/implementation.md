@@ -900,6 +900,19 @@ file stays inspectable with ordinary bbolt tools.
   `WithStore` in an app without a store, a `Mutable` argument, and an
   `App.Store` key that isn't a `Path` key or is itself `Mutable`.
 
+**[decided, M7.2]** The store layer is part of loading: with
+`Options.Store`, `Load` loads the `App.Store` key first, opens the store
+(the caller closes `Result.Store`), and reads its records. A mutable key's
+record, keyed by the key's path, is its top candidate: it is parsed into a
+scratch value and checked (constraints and `Validate`); if either fails,
+the record is ignored with "`<key>`: the stored value is ignored (`<why>`);
+using `<source>`", `Result.Invalid` says why, and the record stays in the
+store. A record that fails to decode is ignored the same way. A stored
+value that wins over a flag or env var warns as specified, with who and the
+date. Records of keys that aren't mutable, or that the command doesn't load,
+are ignored. `Result.Records` keeps each loaded key's record for `explain`
+and `Store.List` (M7.8).
+
 **Write pipeline**, shared by typed writes (`SetX`/`ResetX`) and dynamic ones
 (`Store.Update`/`Store.Reset` with text values). One mutex per process is held
 from step 1 to step 4, so concurrent writers can't lose each other's changes:

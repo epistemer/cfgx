@@ -98,7 +98,14 @@ func Command[V, C any](cmd *cobra.Command, a *App[V], profile string, idx []int,
 		if bound {
 			ro = r.(*opts.Root)
 		}
-		res, err := Load(a, cmd.Flags(), idx, Options{})
+		o := Options{}
+		if a.OpenStore != nil && a.StoreProfiles[profile] {
+			o.Store = StoreReadWrite
+		}
+		res, err := Load(a, cmd.Flags(), idx, o)
+		if res != nil && res.Store != nil {
+			defer res.Store.Close()
+		}
 		logger := loggerFor(ro, cmd.ErrOrStderr())
 		if err != nil {
 			cmd.SilenceUsage = true
@@ -108,16 +115,6 @@ func Command[V, C any](cmd *cobra.Command, a *App[V], profile string, idx []int,
 			return err
 		}
 		logWarnings(cmd.Context(), logger, res.Warnings)
-		if a.OpenStore != nil && a.StoreProfiles[profile] {
-			st, err := a.openStore(res.Values, false)
-			if err != nil {
-				cmd.SilenceUsage = true
-				cmd.SilenceErrors = true
-				fmt.Fprintf(cmd.ErrOrStderr(), "%s: %v\n", cmd.Root().Name(), err)
-				return err
-			}
-			defer st.Close()
-		}
 		return run(cmd.Context(), build(res.Values, args))
 	}
 	return cmd
