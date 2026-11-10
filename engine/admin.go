@@ -15,7 +15,11 @@ var _ storage.Admin = (*Writer[struct{}])(nil)
 
 func (w *Writer[V]) adminKey(i int) storage.KeyInfo {
 	k := &w.a.Keys[i]
-	return storage.KeyInfo{Path: k.Path, Desc: k.Desc, Kind: k.Kind, Mutable: k.Mutable, Default: k.DefaultText,
+	def := k.DefaultText
+	if k.Kind == "secret" && def != "" {
+		def = "******" // generated tables mask it already
+	}
+	return storage.KeyInfo{Path: k.Path, Desc: k.Desc, Kind: k.Kind, Mutable: k.Mutable, Default: def,
 		Enum: slices.Clone(k.Enum), Schema: k.Schema, Tags: slices.Clone(k.Tags)}
 }
 
@@ -38,12 +42,11 @@ func (w *Writer[V]) AdminSettings() []storage.Setting {
 	for j, i := range w.idx {
 		k := &w.a.Keys[i]
 		s := storage.Setting{KeyInfo: w.adminKey(i), Source: "unset", Invalid: res.Invalid[i]}
+		s.Value = plainText(k.Show(v))
 		if k.Mutable && k.Format != nil {
 			if text, err := k.Format(v); err == nil {
 				s.Value = text
 			}
-		} else {
-			s.Value = plainText(k.Show(v))
 		}
 		if og := res.Origins[i]; len(og) > 0 {
 			top := og[len(og)-1]
