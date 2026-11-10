@@ -161,6 +161,13 @@ func (a *App[V]) configEnv() string { return a.EnvPrefix + "_CONFIG" }
 // Snapshot holds the current values. Every getter reads through it.
 type Snapshot[V any] struct{ p atomic.Pointer[V] }
 
+// NewSnapshot returns a snapshot holding v.
+func NewSnapshot[V any](v *V) *Snapshot[V] {
+	s := &Snapshot[V]{}
+	s.Store(v)
+	return s
+}
+
 // Load returns the current values.
 func (s *Snapshot[V]) Load() *V { return s.p.Load() }
 

@@ -413,7 +413,13 @@ var app = engine.App[values]{
 }
 
 // root holds the current values; every getter reads through it.
-type root struct{ cur engine.Snapshot[values] }
+type root struct {
+	cur *engine.Snapshot[values]
+	w   *engine.Writer[values] // nil for commands without the store
+	st  *store.Store
+	// pinned marks a Snapshot's root, whose Close does nothing.
+	pinned bool
+}
 
 // K is the k group: Every kind
 type K interface {
@@ -935,8 +941,7 @@ func Test(edit func(v *Values)) *All {
 		edit(&tv)
 	}
 	tv.store(v)
-	r := &root{}
-	r.cur.Store(v)
+	r := &root{cur: engine.NewSnapshot(v)}
 	return &All{
 		kGroup: &kGroup{r: r},
 	}
@@ -954,6 +959,7 @@ func BindRoot(root *cobra.Command, opts ...cfgx.Option) { engine.BindRoot(root, 
 // Run is the configuration of the Run command.
 type Run struct {
 	*kGroup
+	r    *root
 	args []string
 }
 
@@ -963,13 +969,60 @@ func (c *Run) Args() []string { return slices.Clone(c.args) }
 
 var keysRun = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28}
 
-func newRun(v *values, args []string) *Run {
-	r := &root{}
-	r.cur.Store(v)
+func newRun(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *Run {
+	r := &root{cur: s, w: w}
+	if w != nil {
+		r.st = store.New(w)
+	}
 	return &Run{
 		kGroup: &kGroup{r: r},
+		r:      r,
 		args:   slices.Clone(args),
 	}
+}
+
+// Store is the admin API over the Run command's settings, for a
+// settings dashboard or other generic code.
+func (c *Run) Store() *store.Store { return c.r.st }
+
+// Update applies the changes fn makes to mutable settings, all together or
+// none: the whole configuration is validated, the changes are stored with
+// their history, and then the getters return the new values. Options such
+// as cfgx.By and cfgx.Reason are kept in the history.
+func (c *Run) Update(ctx context.Context, fn func(u *Update) error, opts ...cfgx.WriteOption) error {
+	return c.r.w.Write(ctx, func(e *engine.Edits[values]) error { return fn(&Update{e: e}) }, opts...)
+}
+
+// OnChange calls fn after an update changes settings, with the keys whose
+// values changed. Calls run one at a time, in the order the updates were
+// made, after the getters return the new values.
+func (c *Run) OnChange(fn func(Change)) {
+	c.r.w.OnChange(func(paths []string) {
+		keys := make([]Key, len(paths))
+		for i, p := range paths {
+			keys[i] = Key(p)
+		}
+		fn(Change{keys: keys})
+	})
+}
+
+// Snapshot returns the Run configuration as it is now, for a
+// consistent read of several settings: its getters never change. It shares
+// the store: its Store and Update work on the live settings, and its Close
+// does nothing.
+func (c *Run) Snapshot() *Run {
+	s := newRun(engine.NewSnapshot(c.r.cur.Load()), c.r.w, c.args)
+	s.r.pinned = true
+	return s
+}
+
+// Close closes the store. RunCommand calls it after run returns;
+// LoadRun callers must call it. A Snapshot's Close does nothing.
+func (c *Run) Close() error {
+	if c.r.pinned || c.r.w == nil {
+		return nil
+	}
+	return c.r.w.Close()
 }
 
 // RunCommand binds the Run configuration to cmd: it registers the
@@ -981,6 +1034,7 @@ func RunCommand(cmd *cobra.Command, run func(context.Context, *Run) error) *cobr
 // LoadRun loads the Run configuration without cobra, from the
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+// It opens the store, which the caller must close with Close.
 func LoadRun(ctx context.Context, opts ...cfgx.Option) (*Run, error) {
-	return engine.LoadCommand(ctx, &app, keysRun, newRun, opts...)
+	return engine.LoadCommand(ctx, &app, "Run", keysRun, newRun, opts...)
 }

@@ -198,7 +198,17 @@ var app = engine.App[values]{
 }
 
 // root holds the current values; every getter reads through it.
-type root struct{ cur engine.Snapshot[values] }
+{{- if .StoreAlias}}
+type root struct {
+	cur *engine.Snapshot[values]
+	w   *engine.Writer[values] // nil for commands without the store
+	st  *{{.StoreAlias}}.Store
+	// pinned marks a Snapshot's root, whose Close does nothing.
+	pinned bool
+}
+{{- else}}
+type root struct{ cur *engine.Snapshot[values] }
+{{- end}}
 {{range .Groups}}
 // {{.Iface}} is the {{.Path}} group: {{.Desc}}
 type {{.Iface}} interface {
@@ -333,8 +343,10 @@ func Test(edit func(v *Values)) *All {
 		edit(&tv)
 	}
 	tv.store(v)
-	r := &root{}
-	r.cur.Store(v)
+	r := &root{cur: engine.NewSnapshot(v)}
+	{{- if not .TopGroups}}
+	_ = r
+	{{- end}}
 	return &All{
 	{{- range .TopGroups}}
 		{{.Type}}: {{template "group" .}},
@@ -356,7 +368,7 @@ type {{.Name}} struct {
 {{- range .Groups}}
 	*{{.Type}}
 {{- end}}
-{{- if or .Forward .Args}}
+{{- if .KeepsRoot}}
 	r    *root
 {{- end}}
 	args []string
@@ -377,24 +389,77 @@ func (c *{{$c.Name}}) {{.Getter}}() {{.GoType}} { return c.r.cur.Load().{{.Field
 
 var {{.KeysVar}} = []int{ {{- range $i, $k := .KeyIdx}}{{if $i}}, {{end}}{{$k}}{{end -}} }
 
-func new{{.Name}}(v *values, args []string) *{{.Name}} {
+func new{{.Name}}(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *{{.Name}} {
 	{{- if .HasRoot}}
-	r := &root{}
-	r.cur.Store(v)
+	{{- if .HasStore}}
+	r := &root{cur: s, w: w}
+	if w != nil {
+		r.st = {{$.StoreAlias}}.New(w)
+	}
+	{{- else}}
+	r := &root{cur: s}
+	{{- end}}
 	return &{{.Name}}{
 	{{- range .Groups}}
 		{{.Type}}: {{template "group" .}},
 	{{- end}}
-	{{- if or .Forward .Args}}
+	{{- if .KeepsRoot}}
 		r: r,
 	{{- end}}
 		args: slices.Clone(args),
 	}
 	{{- else}}
-	_ = v
 	return &{{.Name}}{args: slices.Clone(args)}
 	{{- end}}
 }
+{{- if .HasStore}}
+
+// Store is the admin API over the {{.Name}} command's settings, for a
+// settings dashboard or other generic code.
+func (c *{{.Name}}) Store() *{{$.StoreAlias}}.Store { return c.r.st }
+{{- if .HasMutable}}
+
+// Update applies the changes fn makes to mutable settings, all together or
+// none: the whole configuration is validated, the changes are stored with
+// their history, and then the getters return the new values. Options such
+// as cfgx.By and cfgx.Reason are kept in the history.
+func (c *{{.Name}}) Update(ctx context.Context, fn func(u *Update) error, opts ...cfgx.WriteOption) error {
+	return c.r.w.Write(ctx, func(e *engine.Edits[values]) error { return fn(&Update{e: e}) }, opts...)
+}
+
+// OnChange calls fn after an update changes settings, with the keys whose
+// values changed. Calls run one at a time, in the order the updates were
+// made, after the getters return the new values.
+func (c *{{.Name}}) OnChange(fn func(Change)) {
+	c.r.w.OnChange(func(paths []string) {
+		keys := make([]Key, len(paths))
+		for i, p := range paths {
+			keys[i] = Key(p)
+		}
+		fn(Change{keys: keys})
+	})
+}
+{{- end}}
+
+// Snapshot returns the {{.Name}} configuration as it is now, for a
+// consistent read of several settings: its getters never change. It shares
+// the store: its Store and Update work on the live settings, and its Close
+// does nothing.
+func (c *{{.Name}}) Snapshot() *{{.Name}} {
+	s := new{{.Name}}(engine.NewSnapshot(c.r.cur.Load()), c.r.w, c.args)
+	s.r.pinned = true
+	return s
+}
+
+// Close closes the store. {{.Name}}Command calls it after run returns;
+// Load{{.Name}} callers must call it. A Snapshot's Close does nothing.
+func (c *{{.Name}}) Close() error {
+	if c.r.pinned || c.r.w == nil {
+		return nil
+	}
+	return c.r.w.Close()
+}
+{{- end}}
 
 // {{.Name}}Command binds the {{.Name}} configuration to cmd: it registers the
 // command's flags and sets its RunE, which loads the configuration and calls run.
@@ -405,7 +470,10 @@ func {{.Name}}Command(cmd *cobra.Command, run func(context.Context, *{{.Name}}) 
 // Load{{.Name}} loads the {{.Name}} configuration without cobra, from the
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
+{{- if .HasStore}}
+// It opens the store, which the caller must close with Close.
+{{- end}}
 func Load{{.Name}}(ctx context.Context, opts ...cfgx.Option) (*{{.Name}}, error) {
-	return engine.LoadCommand(ctx, &app, {{.KeysVar}}, new{{.Name}}, opts...)
+	return engine.LoadCommand(ctx, &app, {{printf "%q" .Name}}, {{.KeysVar}}, new{{.Name}}, opts...)
 }
 {{end}}`))

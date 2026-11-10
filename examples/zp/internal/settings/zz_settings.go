@@ -1186,7 +1186,7 @@ storage:
 }
 
 // root holds the current values; every getter reads through it.
-type root struct{ cur engine.Snapshot[values] }
+type root struct{ cur *engine.Snapshot[values] }
 
 // Log is the log group: Logging
 type Log interface {
@@ -1621,8 +1621,7 @@ func Test(edit func(v *Values)) *All {
 		edit(&tv)
 	}
 	tv.store(v)
-	r := &root{}
-	r.cur.Store(v)
+	r := &root{cur: engine.NewSnapshot(v)}
 	return &All{
 		logGroup:       &logGroup{r: r},
 		dbGroup:        &dbGroup{r: r},
@@ -1660,9 +1659,8 @@ func (c *Serve) Args() []string { return slices.Clone(c.args) }
 
 var keysServe = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38}
 
-func newServe(v *values, args []string) *Serve {
-	r := &root{}
-	r.cur.Store(v)
+func newServe(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *Serve {
+	r := &root{cur: s}
 	return &Serve{
 		logGroup:       &logGroup{r: r},
 		dbGroup:        &dbGroup{r: r},
@@ -1684,7 +1682,7 @@ func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
 func LoadServe(ctx context.Context, opts ...cfgx.Option) (*Serve, error) {
-	return engine.LoadCommand(ctx, &app, keysServe, newServe, opts...)
+	return engine.LoadCommand(ctx, &app, "Serve", keysServe, newServe, opts...)
 }
 
 // Migrate is the configuration of the Migrate command.
@@ -1707,9 +1705,8 @@ func (c *Migrate) Steps() int { return c.r.cur.Load().MigrateSteps }
 
 var keysMigrate = []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 40, 41}
 
-func newMigrate(v *values, args []string) *Migrate {
-	r := &root{}
-	r.cur.Store(v)
+func newMigrate(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *Migrate {
+	r := &root{cur: s}
 	return &Migrate{
 		logGroup: &logGroup{r: r},
 		dbGroup:  &dbGroup{r: r},
@@ -1728,7 +1725,7 @@ func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) erro
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
 func LoadMigrate(ctx context.Context, opts ...cfgx.Option) (*Migrate, error) {
-	return engine.LoadCommand(ctx, &app, keysMigrate, newMigrate, opts...)
+	return engine.LoadCommand(ctx, &app, "Migrate", keysMigrate, newMigrate, opts...)
 }
 
 // TestEmail is the configuration of the TestEmail command.
@@ -1774,9 +1771,8 @@ func (c *TestEmail) Template() string { return c.r.cur.Load().TestEmailTemplate 
 
 var keysTestEmail = []int{0, 1, 2, 9, 10, 11, 12, 13, 14, 15, 42, 43, 44}
 
-func newTestEmail(v *values, args []string) *TestEmail {
-	r := &root{}
-	r.cur.Store(v)
+func newTestEmail(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *TestEmail {
+	r := &root{cur: s}
 	return &TestEmail{
 		logGroup: &logGroup{r: r},
 		r:        r,
@@ -1794,5 +1790,5 @@ func TestEmailCommand(cmd *cobra.Command, run func(context.Context, *TestEmail) 
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
 func LoadTestEmail(ctx context.Context, opts ...cfgx.Option) (*TestEmail, error) {
-	return engine.LoadCommand(ctx, &app, keysTestEmail, newTestEmail, opts...)
+	return engine.LoadCommand(ctx, &app, "TestEmail", keysTestEmail, newTestEmail, opts...)
 }

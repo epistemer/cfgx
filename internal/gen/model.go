@@ -199,11 +199,20 @@ type CommandModel struct {
 	// HasStore is true when a key is mutable or the command asked for the
 	// store; it then loads the App.Store key too (A7).
 	HasStore bool
+	// HasMutable is true when the command loads a mutable key: it then
+	// has Update and OnChange.
+	HasMutable bool
 }
 
 // HasRoot reports whether the command type needs the values at all.
 func (c *CommandModel) HasRoot() bool {
-	return len(c.Groups) > 0 || len(c.Forward) > 0 || len(c.Args) > 0
+	return len(c.Groups) > 0 || len(c.Forward) > 0 || len(c.Args) > 0 || c.HasStore
+}
+
+// KeepsRoot reports whether the command type keeps the root itself, for
+// forwarded getters, arguments or the store's methods.
+func (c *CommandModel) KeepsRoot() bool {
+	return len(c.Forward) > 0 || len(c.Args) > 0 || c.HasStore
 }
 
 // Problem is a schema error found at generate time.
@@ -955,6 +964,7 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		cm.HasStore = c.WithStore
 		for _, i := range cm.KeyIdx {
 			cm.HasStore = cm.HasStore || m.Keys[i].Mutable
+			cm.HasMutable = cm.HasMutable || m.Keys[i].Mutable
 		}
 		if c.WithStore && app.Store == "" {
 			bad(c.Pos, "command %s uses WithStore, but the app has no store; add App.Store(pathKey)", c.Name)

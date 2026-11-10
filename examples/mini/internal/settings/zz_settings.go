@@ -215,7 +215,7 @@ log:
 }
 
 // root holds the current values; every getter reads through it.
-type root struct{ cur engine.Snapshot[values] }
+type root struct{ cur *engine.Snapshot[values] }
 
 // Server is the server group: HTTP server
 type Server interface {
@@ -332,8 +332,7 @@ func Test(edit func(v *Values)) *All {
 		edit(&tv)
 	}
 	tv.store(v)
-	r := &root{}
-	r.cur.Store(v)
+	r := &root{cur: engine.NewSnapshot(v)}
 	return &All{
 		serverGroup:   &serverGroup{r: r},
 		databaseGroup: &databaseGroup{r: r},
@@ -364,9 +363,8 @@ func (c *Serve) Args() []string { return slices.Clone(c.args) }
 
 var keysServe = []int{0, 1, 2, 3, 4, 5, 6}
 
-func newServe(v *values, args []string) *Serve {
-	r := &root{}
-	r.cur.Store(v)
+func newServe(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *Serve {
+	r := &root{cur: s}
 	return &Serve{
 		logGroup:      &logGroup{r: r},
 		serverGroup:   &serverGroup{r: r},
@@ -385,7 +383,7 @@ func ServeCommand(cmd *cobra.Command, run func(context.Context, *Serve) error) *
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
 func LoadServe(ctx context.Context, opts ...cfgx.Option) (*Serve, error) {
-	return engine.LoadCommand(ctx, &app, keysServe, newServe, opts...)
+	return engine.LoadCommand(ctx, &app, "Serve", keysServe, newServe, opts...)
 }
 
 // Migrate is the configuration of the Migrate command.
@@ -401,9 +399,8 @@ func (c *Migrate) Args() []string { return slices.Clone(c.args) }
 
 var keysMigrate = []int{3, 4, 5, 6}
 
-func newMigrate(v *values, args []string) *Migrate {
-	r := &root{}
-	r.cur.Store(v)
+func newMigrate(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *Migrate {
+	r := &root{cur: s}
 	return &Migrate{
 		logGroup:      &logGroup{r: r},
 		databaseGroup: &databaseGroup{r: r},
@@ -421,5 +418,5 @@ func MigrateCommand(cmd *cobra.Command, run func(context.Context, *Migrate) erro
 // config file, the environment and the arguments that options such as
 // cfgx.WithArgs, cfgx.WithEnv and cfgx.WithFile give.
 func LoadMigrate(ctx context.Context, opts ...cfgx.Option) (*Migrate, error) {
-	return engine.LoadCommand(ctx, &app, keysMigrate, newMigrate, opts...)
+	return engine.LoadCommand(ctx, &app, "Migrate", keysMigrate, newMigrate, opts...)
 }

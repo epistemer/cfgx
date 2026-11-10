@@ -32,6 +32,24 @@ sleep 1s
 stderr 'data[/\\]app.db: store is held by a running process; change settings through the application'
 wait
 
+# serve writes through the generated Update: the value is stored with its
+# history, the getter and OnChange see it, and the next run loads it.
+exec ./app$exe serve --set 250
+stdout '^changed \[rate.limit\] to 250\r?$'
+stdout '^limit 250\r?$'
+exec ./app$exe serve
+stdout '^limit 250\r?$'
+! exec ./app$exe serve --set -1
+stderr 'rate.limit: must be at least 1'
+exec ./app$exe serve --reset
+stdout '^limit 100\r?$'
+
+# The admin API lists the command's keys, and LoadServe opens the store.
+exec ./app$exe admin --list
+stdout '^db.host=localhost \(default\)\r?$'
+exec ./app$exe load
+stdout '^loaded limit 100, history 2\r?$'
+
 # An empty store key means there's no file to open.
 env APP_STORAGE_BOLT=
 ! exec ./app$exe serve
@@ -51,6 +69,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/epistemer/cfgx"
+
 	"example.com/e2e/internal/settings"
 )
 
@@ -58,16 +78,65 @@ func main() {
 	root := &cobra.Command{Use: "app"}
 	settings.BindRoot(root)
 	var hold time.Duration
+	var set int
+	var reset, list bool
 	serve := settings.ServeCommand(&cobra.Command{Use: "serve"},
-		func(context.Context, *settings.Serve) error {
+		func(ctx context.Context, s *settings.Serve) error {
 			time.Sleep(hold)
+			s.OnChange(func(c settings.Change) {
+				if c.Has(settings.KeyRateLimit) {
+					fmt.Println("changed", c.Keys(), "to", s.RateLimit())
+				}
+			})
+			switch {
+			case set != 0:
+				if err := s.Update(ctx, func(u *settings.Update) error {
+					u.SetRateLimit(set)
+					return nil
+				}, cfgx.By("e2e")); err != nil {
+					return err
+				}
+			case reset:
+				if err := s.Update(ctx, func(u *settings.Update) error {
+					u.ResetRateLimit()
+					return nil
+				}); err != nil {
+					return err
+				}
+			}
+			if hold == 0 {
+				fmt.Println("limit", s.RateLimit())
+			}
 			fmt.Println("served")
 			return nil
 		})
 	serve.Flags().DurationVar(&hold, "hold", 0, "hold the store this long")
-	root.AddCommand(serve,
+	serve.Flags().IntVar(&set, "set", 0, "set rate.limit")
+	serve.Flags().BoolVar(&reset, "reset", false, "reset rate.limit")
+	admin := settings.AdminCommand(&cobra.Command{Use: "admin"}, func(_ context.Context, a *settings.Admin) error {
+		if list {
+			for _, st := range a.Store().List() {
+				fmt.Printf("%s=%s (%s)\n", st.Key, st.Value, st.Source)
+			}
+		}
+		return nil
+	})
+	admin.Flags().BoolVar(&list, "list", false, "list the settings")
+	load := &cobra.Command{Use: "load", RunE: func(cmd *cobra.Command, _ []string) error {
+		s, err := settings.LoadServe(cmd.Context())
+		if err != nil {
+			return err
+		}
+		defer s.Close()
+		h, err := s.Store().History("rate.limit", 0)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("loaded limit %d, history %d\n", s.RateLimit(), len(h))
+		return nil
+	}}
+	root.AddCommand(serve, load, admin,
 		settings.MigrateCommand(&cobra.Command{Use: "migrate"}, func(context.Context, *settings.Migrate) error { return nil }),
-		settings.AdminCommand(&cobra.Command{Use: "admin"}, func(context.Context, *settings.Admin) error { return nil }),
 	)
 	if err := root.Execute(); err != nil {
 		os.Exit(1)
@@ -87,7 +156,7 @@ var bolt = dsl.Path("bolt", "Store file").Default("data/app.db")
 var Storage = dsl.Group("storage", "Storage", bolt)
 
 var Rate = dsl.Group("rate", "Rate limits",
-	dsl.Int("limit", "Requests per second").Default(100).Mutable(),
+	dsl.Int("limit", "Requests per second").Default(100).Min(1).Mutable(),
 )
 
 var DB = dsl.Group("db", "Database", dsl.String("host", "Host").Default("localhost"))
