@@ -203,6 +203,8 @@ type root struct {
 	cur *engine.Snapshot[values]
 	w   *engine.Writer[values] // nil for commands without the store
 	st  *{{.StoreAlias}}.Store
+	// pinned marks a Snapshot's root, whose Close does nothing.
+	pinned bool
 }
 {{- else}}
 type root struct{ cur *engine.Snapshot[values] }
@@ -390,7 +392,10 @@ var {{.KeysVar}} = []int{ {{- range $i, $k := .KeyIdx}}{{if $i}}, {{end}}{{$k}}{
 func new{{.Name}}(s *engine.Snapshot[values], w *engine.Writer[values], args []string) *{{.Name}} {
 	{{- if .HasRoot}}
 	{{- if .HasStore}}
-	r := &root{cur: s, w: w, st: {{$.StoreAlias}}.New(w)}
+	r := &root{cur: s, w: w}
+	if w != nil {
+		r.st = {{$.StoreAlias}}.New(w)
+	}
 	{{- else}}
 	r := &root{cur: s}
 	{{- end}}
@@ -412,7 +417,7 @@ func new{{.Name}}(s *engine.Snapshot[values], w *engine.Writer[values], args []s
 // Store is the admin API over the {{.Name}} command's settings, for a
 // settings dashboard or other generic code.
 func (c *{{.Name}}) Store() *{{$.StoreAlias}}.Store { return c.r.st }
-{{- if $.Mutable}}
+{{- if .HasMutable}}
 
 // Update applies the changes fn makes to mutable settings, all together or
 // none: the whole configuration is validated, the changes are stored with
@@ -438,14 +443,22 @@ func (c *{{.Name}}) OnChange(fn func(Change)) {
 
 // Snapshot returns the {{.Name}} configuration as it is now, for a
 // consistent read of several settings: its getters never change. It shares
-// the store.
+// the store: its Store and Update work on the live settings, and its Close
+// does nothing.
 func (c *{{.Name}}) Snapshot() *{{.Name}} {
-	return new{{.Name}}(engine.NewSnapshot(c.r.cur.Load()), c.r.w, c.args)
+	s := new{{.Name}}(engine.NewSnapshot(c.r.cur.Load()), c.r.w, c.args)
+	s.r.pinned = true
+	return s
 }
 
 // Close closes the store. {{.Name}}Command calls it after run returns;
-// Load{{.Name}} callers must call it.
-func (c *{{.Name}}) Close() error { return c.r.w.Close() }
+// Load{{.Name}} callers must call it. A Snapshot's Close does nothing.
+func (c *{{.Name}}) Close() error {
+	if c.r.pinned || c.r.w == nil {
+		return nil
+	}
+	return c.r.w.Close()
+}
 {{- end}}
 
 // {{.Name}}Command binds the {{.Name}} configuration to cmd: it registers the

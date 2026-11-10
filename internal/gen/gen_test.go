@@ -290,8 +290,8 @@ func storeCommands() *ir.App {
 		}}
 }
 
-// A command without the store has none of its methods: using one doesn't
-// compile.
+// A command without the store has none of its methods, and one that loads
+// no mutable key has no Update or OnChange: using them doesn't compile.
 func TestNoStoreMethods(t *testing.T) {
 	m, err := Build(storeCommands(), "settings")
 	if err != nil {
@@ -301,20 +301,21 @@ func TestNoStoreMethods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.MkdirTemp(".", "zzcompile")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
-	use := "package settings\n\nvar _ = (*Plain)(nil).Store\n"
-	for f, b := range map[string][]byte{"zz_settings.go": src, "use.go": []byte(use)} {
-		if err := os.WriteFile(filepath.Join(dir, f), b, 0o644); err != nil {
+	for _, use := range []string{"(*Plain)(nil).Store", "(*Plain)(nil).Close", "(*Admin)(nil).Update", "(*Admin)(nil).OnChange"} {
+		dir, err := os.MkdirTemp(".", "zzcompile")
+		if err != nil {
 			t.Fatal(err)
 		}
-	}
-	out, err := exec.Command("go", "vet", "./"+filepath.Base(dir)).CombinedOutput()
-	if err == nil || !strings.Contains(string(out), "(*Plain)(nil).Store undefined") {
-		t.Errorf("Plain.Store compiled, or failed otherwise: %v\n%s", err, out)
+		t.Cleanup(func() { os.RemoveAll(dir) })
+		for f, b := range map[string][]byte{"zz_settings.go": src, "use.go": []byte("package settings\n\nvar _ = " + use + "\n")} {
+			if err := os.WriteFile(filepath.Join(dir, f), b, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		out, err := exec.Command("go", "vet", "./"+filepath.Base(dir)).CombinedOutput()
+		if err == nil || !strings.Contains(string(out), use+" undefined") {
+			t.Errorf("%s compiled, or failed otherwise: %v\n%s", use, err, out)
+		}
 	}
 }
 
@@ -734,6 +735,7 @@ var (
 	_ func() error                                                                = (*Run)(nil).Close
 	_ func() *Admin                                                               = (*Admin)(nil).Snapshot
 )
+
 `
 				assert = strings.Replace(assert, `"context"`, `"context"`+"\n\n\t\"github.com/epistemer/cfgx\"", 1)
 				if err := os.WriteFile(filepath.Join(dir, "assert.go"), []byte(assert), 0o644); err != nil {

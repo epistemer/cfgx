@@ -4,6 +4,31 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M7.7 generated wiring
+
+- **Landed:** commands that have the store get `Store()`, `Snapshot()`
+  and `Close()`. Those that load a mutable key also get `Update()` and
+  `OnChange()`. Getters read the store's live snapshot, so an update shows
+  at once. Binders close the store after `run`. `LoadX` opens it, and the
+  caller closes it.
+  - The store e2e script writes through the generated `Update`, sees
+    `OnChange`, reads the value back after a restart, lists settings
+    through `Store().List()` and loads with `LoadServe`.
+  - A command without the store has none of these methods; compile-failure
+    tests check that.
+- **Decided for you:**
+  - `Snapshot()` returns the command type with pinned getters. It shares
+    the store: `Store` and `Update` act on the live settings, and its
+    `Close` does nothing.
+  - A command that asks for the store (`WithStore`) but loads no mutable
+    key has no `Update` or `OnChange`.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 351k tokens
+  ([review 0031](reviews/0031-gemini-m7.7-review.md)). 3 of 5 findings
+  fixed.
+- **Next:** M7.8, `config explain` and the admin `List` with store details,
+  and read-only opens for the `config` subcommands.
+- **Waiting on you:** nothing.
+
 ## 2026-11-10: M7.6 OnChange
 
 - **Landed:** the engine reports which settings a write changed. Callbacks
