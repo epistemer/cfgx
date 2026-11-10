@@ -34,7 +34,8 @@ type Backend interface {
 	// Apply writes the changes in one transaction: every history entry
 	// and every record, or none.
 	Apply(changes []Change) error
-	// History returns up to limit of a key's past records, newest first.
+	// History returns up to limit of a key's past records, newest first;
+	// a limit of 0 or less means all of them.
 	History(key string, limit int) ([]Record, error)
 	// Close releases the store.
 	Close() error

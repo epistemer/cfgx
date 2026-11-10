@@ -1,6 +1,7 @@
 package store
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -87,8 +88,11 @@ func (b *boltBackend) checkFormat(tx *bolt.Tx) error {
 	}
 	if v := meta.Get(formatKey); v != nil {
 		n, err := strconv.Atoi(string(v))
-		if err != nil || n > formatVersion {
-			return fmt.Errorf("the store's format %q is newer than this cfgx reads (%d); upgrade the program", v, formatVersion)
+		switch {
+		case err != nil || n < 1:
+			return fmt.Errorf("the store's format %q isn't one cfgx wrote", v)
+		case n > formatVersion:
+			return fmt.Errorf("the store's format %d is newer than this cfgx reads (%d); upgrade the program", n, formatVersion)
 		}
 	}
 	return nil
@@ -126,7 +130,7 @@ func (b *boltBackend) Apply(changes []storage.Change) error {
 		}
 		settings, history := root.Bucket(settingsBucket), root.Bucket(historyBucket)
 		for _, c := range changes {
-			if c.Record != nil && len(c.Record.Raw) > storage.MaxValue {
+			if c.Record != nil && len(c.Record.Raw) > storage.MaxValue || len(c.History.Raw) > storage.MaxValue {
 				return fmt.Errorf("%s: the value is larger than 64KiB", c.Key)
 			}
 			h, err := history.CreateBucketIfNotExists([]byte(c.Key))
@@ -144,7 +148,7 @@ func (b *boltBackend) Apply(changes []storage.Change) error {
 			if err := h.Put(seqKey(seq), entry); err != nil {
 				return err
 			}
-			if err := trim(h, storage.MaxHistory); err != nil {
+			if err := trim(h, seq, storage.MaxHistory); err != nil {
 				return err
 			}
 			if c.Record == nil {
@@ -173,22 +177,21 @@ func seqKey(n uint64) []byte {
 	return k
 }
 
-// trim deletes the oldest entries of h beyond max. It counts with a cursor:
-// Bucket.Stats doesn't see writes in the open transaction.
-func trim(h *bolt.Bucket, max int) error {
-	c := h.Cursor()
-	n := 0
-	for k, _ := c.First(); k != nil; k, _ = c.Next() {
-		n++
-	}
-	if n <= max {
+// trim deletes the entries of h older than the max newest, last being the
+// newest sequence. Entries are only ever removed oldest first, so the
+// sequences kept are contiguous, and the oldest to keep is last-max+1.
+// It deletes by seeking to First again after each delete: after a cursor
+// Delete, Next would skip an entry.
+func trim(h *bolt.Bucket, last uint64, max int) error {
+	if last <= uint64(max) {
 		return nil
 	}
-	for k, _ := c.First(); k != nil && n > max; k, _ = c.Next() {
+	keep := seqKey(last - uint64(max) + 1)
+	c := h.Cursor()
+	for k, _ := c.First(); k != nil && bytes.Compare(k, keep) < 0; k, _ = c.First() {
 		if err := c.Delete(); err != nil {
 			return err
 		}
-		n--
 	}
 	return nil
 }

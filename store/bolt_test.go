@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,6 +84,39 @@ func TestHistoryIsCapped(t *testing.T) {
 	}
 	if h, _ := b.History("k", 0); len(h) != storage.MaxHistory {
 		t.Errorf("history has %d entries, want %d", len(h), storage.MaxHistory)
+	}
+}
+
+// Trimming several entries at once removes exactly the oldest ones.
+func TestTrimSeveral(t *testing.T) {
+	b := open(t, filepath.Join(t.TempDir(), "zp.db"), storage.Options{Timeout: time.Second})
+	db := b.(*boltBackend).DB()
+	err := db.Update(func(tx *bolt.Tx) error {
+		h, err := tx.Bucket(rootBucket).Bucket(historyBucket).CreateBucketIfNotExists([]byte("k"))
+		if err != nil {
+			return err
+		}
+		var last uint64
+		for i := 0; i < 10; i++ {
+			if last, err = h.NextSequence(); err != nil {
+				return err
+			}
+			if err := h.Put(seqKey(last), []byte(`{"value":"`+strconv.Itoa(int(last))+`"}`)); err != nil {
+				return err
+			}
+		}
+		return trim(h, last, 3)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h, _ := b.History("k", 0)
+	var got []string
+	for _, r := range h {
+		got = append(got, r.Raw)
+	}
+	if strings.Join(got, ",") != "10,9,8" {
+		t.Errorf("kept %v, want the newest three: 10,9,8", got)
 	}
 }
 

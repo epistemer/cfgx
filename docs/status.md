@@ -4,6 +4,29 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-10: M7.1 store lifecycle
+
+- **Landed:**
+  - `cfgx/store`, the built-in bbolt store: mode 0600, a `cfgx` bucket
+    with `settings`, per-key `history` capped at 1000 entries, and `meta`
+    with a format version.
+  - `App.Store(pathKey)`, `.Mutable()`, `.Epoch(n)` and
+    `Command.WithStore()` in the DSL, with generate-time checks. Mutable
+    secrets are rejected (A10).
+  - Commands that have the store open it after loading, with a one-second
+    wait for another process, and close it after `run`.
+  - The engine reaches bbolt only through the opener the generated code
+    passes. `examples/mini`, which has no store, gained no bbolt
+    dependency.
+- **Reviewed:** Gemini 3.8 Flash (High), about 162k tokens
+  ([review 0025](reviews/0025-gemini-m7.1-review.md)). 4 of 8 findings
+  fixed. The important one: trimming more than one history entry at once
+  skipped every other entry, a bbolt cursor gotcha.
+- **Also:** bbolt v1.5.0 raises pflag to v1.0.10, the latest v1.0.x, which
+  ADR 0003 allows. Both examples are tidied for it.
+- **Next:** M7.2, layering stored values over the other sources.
+- **Waiting on you:** nothing.
+
 ## 2026-11-10: M6.7 checked in VS Code; M6 done
 
 - **Checked by you:** VS Code's YAML extension (yaml-language-server) reads
