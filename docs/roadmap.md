@@ -25,7 +25,7 @@
   in `docs/adr/NNNN-title.md`.
 - **Versions.** In the other documents, "v1" means *the first usable release*.
   Tag it **`v0.1.0`**. Keep `v1.0.0`, which carries Go's compatibility promise,
-  for after the zp port (M10) has proven the API.
+  until a real application has proven the API; you decide when.
 - **Sizes.** S is up to 1 day, M is 2–3 days, L is about 1 week, for one
   developer working without AI help. They're for sequencing work, not for
   promising dates.
@@ -46,7 +46,6 @@
 | [M7](#m7--mutable-settings--bbolt) | Runtime-mutable settings, built-in bbolt store, admin API | ~25 | M3, M4, M5 (M7.5 also M6.1; M7.8 also M6.4) |
 | [M8](#m8--cfgx-init) | `cfgx init` scaffolding | ~5 | M6 |
 | [M9](#m9--hardening-and-v010) | Hardening, benchmarks, **v0.1.0** | ~10 | M6, M7, M8 |
-| [M10](#m10--dogfood-port-zp) | Port zp to cfgx; decide on v1.0.0 | ~10 | M9 |
 
 The total to v0.1.0 is about 140 developer-days, roughly 28 weeks for one
 person working alone. With two people in parallel lanes (see
@@ -79,7 +78,6 @@ graph LR
   M6 --> M9
   M7 --> M9
   M8 --> M9
-  M9 --> M10
 ```
 
 ---
@@ -327,19 +325,6 @@ hand (problem 3).
 
 ---
 
-## M10 — Dogfood: port zp
-
-**Goal:** prove the design on a real application before promising API stability.
-
-| ✓ | ID | Item | Size | Done when |
-|---|----|------|------|-----------|
-| ☐ | M10.1 | Write the full zp schema (about 85 keys from the old `settings.go`); delete viper, the `CfgKey` constants and the hand-written getters | L | zp builds; its tests pass |
-| ☐ | M10.2 | Keep deployed names working: add `Alias` wherever existing config files or env vars use old names | S | Existing staging config loads unchanged, or every change is a deprecation warning |
-| ☐ | M10.3 | Move the runtime-adjustable settings (rate limits, OTP length, branding: your call) to `Mutable`, on the bbolt database zp already opens | M | Changes through zp's admin path survive restarts |
-| ☐ | M10.4 | Keep a friction log, turn each entry into an amendment or a backlog item, and decide whether to call it `v1.0.0` | S | Decision recorded in an ADR |
-
----
-
 ## After v0.1.0 (ordered backlog)
 
 1. **Reloadable keys** ([implementation.md §3.7](implementation.md)). The DSL
@@ -484,4 +469,3 @@ you can review a few PRs a day.
 | Default agent model | **Gemini 4 Argon (High)** via agy; Claude picks a model and effort per task (below) |
 | Project owner until `v1.0.0` | **Claude**, acting for you ([ownership.md](ownership.md)) |
 | `cfgx init` skeleton contents | Claude decides at M8.1 (the proposal there uses logrus) |
-| Which zp settings become mutable | Open, needed by M10.3 |

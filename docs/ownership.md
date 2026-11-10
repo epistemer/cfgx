@@ -39,9 +39,8 @@ Since 2026-11-08, only two things:
    gets back, beyond a clarification of the locked interface: a new or changed
    DSL construct, generated API or behaviour an application can see, and any
    change to decisions D1–D11. Claude brings a recommendation.
-2. **Anything Claude lacks permission for.** Work outside this repository (zp,
-   including which of its settings become mutable in M10.3, and its staging and
-   production), your accounts, GitHub settings, tokens and paid services,
+2. **Anything Claude lacks permission for.** Work outside this repository (such as zp
+   and its staging and production), your accounts, GitHub settings, tokens and paid services,
    speaking for you to other people, and operations the safety checks block,
    such as deleting branches or rewriting history.
 
@@ -61,8 +60,8 @@ where the last one stopped.
 
 ## Limits
 
-- **v1.0.0 needs you at M10.** Porting zp touches your production code and your
-  staging environment, so that milestone runs with you, not just for you.
+- **v1.0.0 is your call.** Tagging it promises the API won't break, so Claude
+  doesn't tag it on its own.
 - **Quotas.** agy uses your Gemini quota, and Claude's sessions have context
   limits. Large fan-outs check `agy_status` first.
 - **Safety checks still apply.** The auto-mode safety classifier blocks some git
