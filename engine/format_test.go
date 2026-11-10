@@ -67,8 +67,18 @@ func TestFormatRoundTrips(t *testing.T) {
 	}
 	roundTrip(t, []int{1, -2}, FormatInts, items(ParseInts))
 	roundTrip(t, []time.Duration{time.Second, 5 * time.Minute}, FormatDurations, items(ParseDurations))
+	stringMap := func(m map[string]string) string {
+		s, err := FormatStringMap(m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
 	for _, m := range []map[string]string{nil, {"a": "1", "b": "x=y", "c": "", "d,e": " f"}} {
-		roundTrip(t, m, FormatStringMap, items(ParseStringMap))
+		roundTrip(t, m, stringMap, items(ParseStringMap))
+	}
+	if _, err := FormatStringMap(map[string]string{"a=b": "1"}); err == nil {
+		t.Error("a map key holding = formatted")
 	}
 
 	type level int

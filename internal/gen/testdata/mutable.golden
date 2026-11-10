@@ -223,7 +223,7 @@ var keys = [...]engine.Key[values]{
 		SetItems: func(v *values, items []string) error { return engine.ParseStringMap(items, &v.KLabels) },
 		IsSet:    func(v *values) bool { return len(v.KLabels) != 0 },
 		Show:     func(v *values) any { return v.KLabels },
-		Format:   func(v *values) (string, error) { return engine.FormatStringMap(v.KLabels), nil },
+		Format:   func(v *values) (string, error) { return engine.FormatStringMap(v.KLabels) },
 		Default:  func(v *values) { v.KLabels = map[string]string{"a": "x=y", "b": "2"} },
 	},
 	{

@@ -57,10 +57,16 @@ func FormatInts(n []int) string { return csvRecord(n, strconv.Itoa) }
 // FormatDurations is one CSV record.
 func FormatDurations(d []time.Duration) string { return csvRecord(d, time.Duration.String) }
 
-// FormatStringMap is one CSV record of key=value items, sorted by key.
-func FormatStringMap(m map[string]string) string {
+// FormatStringMap is one CSV record of key=value items, sorted by key. A
+// key holding "=" has no text form: the parser splits at the first "=".
+func FormatStringMap(m map[string]string) (string, error) {
 	keys := slices.Sorted(maps.Keys(m))
-	return csvRecord(keys, func(k string) string { return k + "=" + m[k] })
+	for _, k := range keys {
+		if strings.Contains(k, "=") {
+			return "", fmt.Errorf("map key %q holds =, which its text form can't", k)
+		}
+	}
+	return csvRecord(keys, func(k string) string { return k + "=" + m[k] }), nil
 }
 
 // FormatEnum is the value's text; a value that isn't one of the enum's is

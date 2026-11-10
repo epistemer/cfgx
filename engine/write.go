@@ -84,6 +84,10 @@ type edit struct {
 }
 
 func (e *Edits[V]) add(ed edit) {
+	if ed.i < 0 || ed.i >= len(e.a.Keys) {
+		e.fail(fmt.Errorf("cfgx: no key %d", ed.i))
+		return
+	}
 	if j, ok := e.at[ed.i]; ok {
 		e.list[j] = ed
 		return
@@ -96,6 +100,10 @@ func (e *Edits[V]) add(ed edit) {
 // written as the key's canonical text (Key.Format) and parsed back like
 // any other source.
 func (e *Edits[V]) Set(i int, assign func(*V)) {
+	if i < 0 || i >= len(e.a.Keys) {
+		e.fail(fmt.Errorf("cfgx: no key %d", i))
+		return
+	}
 	k := &e.a.Keys[i]
 	if k.Format == nil {
 		e.fail(fmt.Errorf("%s isn't mutable", k.Path))
@@ -190,7 +198,8 @@ func (w *Writer[V]) Write(ctx context.Context, fill func(*Edits[V]) error, optio
 		r := h
 		changes = append(changes, storage.Change{Key: k.Path, Record: &r, History: h})
 	}
-	res, err := w.replay(recs, bad, strict)
+	reads := maps.Clone(w.reads)
+	res, err := w.replay(recs, bad, strict, reads)
 	if err != nil {
 		return err
 	}
@@ -203,16 +212,18 @@ func (w *Writer[V]) Write(ctx context.Context, fill func(*Edits[V]) error, optio
 	if err := w.backend.Apply(changes); err != nil {
 		return err
 	}
-	w.records, w.bad, w.res = recs, bad, res
+	w.records, w.bad, w.res, w.reads = recs, bad, res, reads
 	w.snap.Store(res.Values)
 	return nil
 }
 
 // replay loads the command's keys again from the bootstrap sources, with
 // recs as the stored records. Keys in strict must take their stored value.
-func (w *Writer[V]) replay(recs map[string]storage.Record, bad map[string]error, strict map[int]bool) (*Result[V], error) {
+// Files read for the first time go into reads, which the write keeps only
+// if it commits.
+func (w *Writer[V]) replay(recs map[string]storage.Record, bad map[string]error, strict map[int]bool, reads map[string]string) (*Result[V], error) {
 	res := &Result[V]{Origins: make([][]Origin, len(w.a.Keys)), File: w.res.File, Store: w.backend, Writer: w}
-	l := &loader[V]{a: w.a, res: res, file: w.file, fs: w.fs, reads: w.reads,
+	l := &loader[V]{a: w.a, res: res, file: w.file, fs: w.fs, reads: reads,
 		records: recs, badRecords: bad, strict: strict,
 		lookup: func(name string) (string, bool) { s := w.seen[name]; return s.value, s.ok }}
 	v := new(V)

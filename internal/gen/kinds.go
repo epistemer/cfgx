@@ -104,7 +104,7 @@ var kinds = map[ir.Kind]kindSpec{
 		canon: listCanon(engine.ParseInts, strconv.Itoa, strconv.Itoa, "[]int")},
 	ir.KindDurations: {format: `engine.FormatDurations(%s), nil`, show: "engine.ShowDurations(%s)", goType: "[]time.Duration", flagType: "durations", parse: "ParseDurations", imports: []string{"time"}, isSet: "len(%s) != 0", zero: "", items: true,
 		canon: listCanon(engine.ParseDurations, time.Duration.String, durationLit, "[]time.Duration")},
-	ir.KindStringMap: {format: `engine.FormatStringMap(%s), nil`, goType: "map[string]string", flagType: "key=value", parse: "ParseStringMap", isSet: "len(%s) != 0", zero: "", items: true, isMap: true,
+	ir.KindStringMap: {format: `engine.FormatStringMap(%s)`, goType: "map[string]string", flagType: "key=value", parse: "ParseStringMap", isSet: "len(%s) != 0", zero: "", items: true, isMap: true,
 		canon: func(s string) (string, string, error) {
 			var m map[string]string
 			items, err := engine.SplitCSV(s)

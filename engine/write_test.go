@@ -143,6 +143,8 @@ func TestWriteInvalid(t *testing.T) {
 		{"static", func(e *Edits[wrVals]) error { e.SetText(3, "1"); return nil }, "fixed isn't mutable"},
 		{"not the command's", func(e *Edits[wrVals]) error { e.SetText(5, "1"); return nil }, "other isn't a key of this command"},
 		{"too large", func(e *Edits[wrVals]) error { e.SetText(1, strings.Repeat("1", storage.MaxValue+1)); return nil }, "larger than 64KiB"},
+		{"no such key", func(e *Edits[wrVals]) error { e.SetText(99, "1"); return nil }, "no key 99"},
+		{"no such key to set", func(e *Edits[wrVals]) error { e.Set(-1, func(*wrVals) {}); return nil }, "no key -1"},
 		{"fill fails", func(e *Edits[wrVals]) error { e.Set(1, func(v *wrVals) { v.Rate = 10 }); return errors.New("no") }, "no"},
 	} {
 		err := w.Write(ctx, tc.fill)
