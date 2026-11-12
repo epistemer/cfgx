@@ -21,11 +21,14 @@ taken for you, what's next, and what's waiting on you. The terms are in
 - **Asked by you:** generated locales, following zp's `gen` conventions with
   epistemer/i18n. A global note in `~/.claude/CLAUDE.md` now says every
   neozp code generator emits its locales.
-- **Decided for you (overturnable):** it's opt-in, because cfgx also serves
-  apps that don't use i18n, and generating it always would make every one of
-  them require i18n. The key names (`settings.` prefix, enum values under
-  their key), the `L10n` names, and no labels for command Args are also my
-  choices.
+- **Decided by you:** merge A13 as designed. I proposed it opt-in, because
+  cfgx also serves apps that don't use i18n, and generating it always would
+  make every one of them require i18n. The key names (`settings.` prefix,
+  enum values under their key), the `L10n` names, and no labels for command
+  Args stand as proposed.
+- **Fixed after the PR opened:** the benchmark module, `examples/zp/bench`,
+  imports the zp example's settings, so it needs i18n in its go.mod too. CI's
+  benchmark step caught it.
 - **Reviewed:** Gemini 3.8 Flash (High), about 80k tokens, plus about
   55k for a first run that headless mode denied its tools
   ([review 0039](reviews/0039-gemini-a13-review.md)). Argon was out of
@@ -34,8 +37,8 @@ taken for you, what's next, and what's waiting on you. The terms are in
   biggest, a path collision, is a schema cfgx already refuses.
 - **Next:** nothing on the roadmap; Argon's milestone reviews wait for its
   quota.
-- **Waiting on you:** whether A13 stands as designed (opt-in, names), plus
-  the earlier open items: the API proposals and v1.0.0.
+- **Waiting on you:** the earlier open items: the API proposals and
+  v1.0.0.
 
 ## 2026-11-11: v0.1.0 released; M9 complete
 
