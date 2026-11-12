@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 17
+const Version = 18
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -77,12 +77,15 @@ type App struct {
 	Store    string `json:"store,omitempty"`
 	StorePos Pos    `json:"storePos,omitempty"`
 	// Initialisms are extra words written in capitals in Go names.
-	Initialisms []string  `json:"initialisms,omitempty"`
-	Groups      []Group   `json:"groups"`
-	Tags        []Tag     `json:"tags,omitempty"`
-	Rules       []Rule    `json:"rules,omitempty"`
-	Commands    []Command `json:"commands"`
-	Pos         Pos       `json:"pos"`
+	Initialisms []string `json:"initialisms,omitempty"`
+	// I18n makes the generator write translation keys for the labels of
+	// groups, keys and enum values (App.I18n).
+	I18n     bool      `json:"i18n,omitempty"`
+	Groups   []Group   `json:"groups"`
+	Tags     []Tag     `json:"tags,omitempty"`
+	Rules    []Rule    `json:"rules,omitempty"`
+	Commands []Command `json:"commands"`
+	Pos      Pos       `json:"pos"`
 	// Schema is the schema package's import path. The loader sets it; it
 	// isn't part of the encoded IR.
 	Schema string `json:"-"`

@@ -37,6 +37,10 @@ type Model struct {
 	// store.
 	StoreIdx   int
 	StoreAlias string // cfgx/store's name in the generated file
+	// I18n is set by App.I18n: RenderI18n then writes L10n, the labels of
+	// the groups, keys and enum values, in that order.
+	I18n bool
+	L10n []L10nModel
 	// ExampleConfig and JSONSchema are embedded in the generated file for
 	// the config subcommand (M6.4); Artifacts fills them in.
 	ExampleConfig, JSONSchema string
@@ -122,6 +126,13 @@ type KeyModel struct {
 	CompleteDirs bool
 	CompleteFunc *FuncModel
 	Pos          ir.Pos
+}
+
+// L10nModel is the label of a group, key or enum value (App.I18n). Var is
+// its generated variable; an enum value's label has none and lives only in
+// the lookup table.
+type L10nModel struct {
+	Var, Path, Key, Text string
 }
 
 // EnumModel is one value of an enum key.
@@ -1001,6 +1012,29 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			}
 		}
 		m.Commands = append(m.Commands, cm)
+	}
+
+	if app.I18n {
+		m.I18n = true
+		claim("L10n", app.Pos, "label lookup (App.I18n)")
+		claim("l10n", app.Pos, "label table (App.I18n)")
+		// Paths are unique: a key is a leaf, so no group, key or other
+		// enum value lives under an enum value's path.
+		label := func(v, path, text string, pos ir.Pos, what string) {
+			if v != "" {
+				claim(v, pos, what)
+			}
+			m.L10n = append(m.L10n, L10nModel{Var: v, Path: path, Key: "settings." + path, Text: text})
+		}
+		for _, g := range m.Groups {
+			label("L10n"+g.Iface, g.Path, g.Desc, g.pos, "label of group "+g.Path)
+			for _, k := range g.Keys {
+				label("L10n"+k.Getter, k.Path, k.Desc, k.Pos, "label of "+k.Path)
+				for _, e := range k.Enum {
+					label("", k.Path+"."+e.Text, e.Text, k.Pos, "")
+				}
+			}
+		}
 	}
 
 	// The packages the getters' types need, such as time.

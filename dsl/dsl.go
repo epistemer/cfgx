@@ -39,6 +39,7 @@ type AppDef struct {
 	formats               []Format
 	global                []*GroupDef
 	initialisms           []string
+	i18n                  bool
 	store                 *PathKey
 	storePos              ir.Pos
 	pos                   ir.Pos
@@ -90,6 +91,17 @@ func (a *AppDef) Formats(formats ...Format) *AppDef {
 // store loads pathKey and gets its flag.
 func (a *AppDef) Store(pathKey *PathKey) *AppDef {
 	a.store, a.storePos = pathKey, caller(1)
+	return a
+}
+
+// I18n makes cfgx gen also write zz_<package>_i18n.go: a translation key
+// of github.com/epistemer/i18n for the label of every group, key and enum
+// value, for a settings dashboard. A label's key is "settings." plus the
+// path, and its text is the description; an enum value's adds a dot and the
+// value's text, which is also its label. The app's module must require
+// github.com/epistemer/i18n.
+func (a *AppDef) I18n() *AppDef {
+	a.i18n = true
 	return a
 }
 
@@ -571,6 +583,7 @@ func Export(w io.Writer) error {
 		out.Formats = append(out.Formats, string(f))
 	}
 	out.Initialisms = a.initialisms
+	out.I18n = a.i18n
 	// paths maps every group reachable from the App to its dotted path.
 	paths := map[*GroupDef]string{}
 	keyPaths := map[*keyBase]string{}

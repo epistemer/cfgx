@@ -196,6 +196,13 @@ when. `s.Store()` is an admin API over every setting, for a settings page
 or an HTTP endpoint: see
 [package store](https://pkg.go.dev/github.com/epistemer/cfgx/store).
 
+For a dashboard in more than one language, add `.I18n()` to the App.
+`cfgx gen` then also writes translation keys of
+[epistemer/i18n](https://github.com/epistemer/i18n) for the label of every
+group, key and enum value: `settings.L10nRateLimit`, or
+`settings.L10n(k.Key).T(ctx)` for each key `Store().Keys()` lists. The
+labels' English text is the schema's descriptions.
+
 ## Testing
 
 The generated `Test` returns every getter and interface with defaults,

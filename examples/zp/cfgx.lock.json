@@ -532,6 +532,7 @@
       "name": "storage"
     }
   ],
+  "i18n": true,
   "initialisms": [
     "OTP",
     "JWT",
@@ -580,5 +581,5 @@
       "name": "Tokens"
     }
   ],
-  "version": 17
+  "version": 18
 }

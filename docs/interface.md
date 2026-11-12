@@ -342,6 +342,7 @@ both declarations.
 | `.Formats(dsl.YAML, dsl.JSON)` | accepted file formats (default: both) |
 | `.Initialisms(...)` | extra initialisms |
 | `.Global(groups...)` | settings every command gets, bound as persistent flags on the root |
+| `.I18n()` | also generate `zz_<package>_i18n.go`: translation keys of [epistemer/i18n](https://github.com/epistemer/i18n) for the labels of groups, keys and enum values (§5.5, A13). The app's module must require `github.com/epistemer/i18n` |
 | `.Store(pathKey)` | keep mutable keys in the built-in bbolt store, in the file named by `pathKey`, which must be a static `Path` key (§7.3). Every command that has the store, and the `config` subcommands, load `pathKey` and bind its flag automatically (A7) |
 
 ### 3.8 Commands
@@ -512,6 +513,41 @@ have the getter types (`cfgx.Secret`, `[]byte`, `*time.Location`), and fields of
 `SecretFile` and `File` keys stay empty unless the test sets them: their default
 paths are never read (A6). The one read it makes is a `Location` default's zone,
 which loads like `time.LoadLocation`.
+
+### 5.5 Labels (`App.I18n`)
+
+With `App.I18n()`, `cfgx gen` also writes `zz_<package>_i18n.go`, the labels a
+settings dashboard shows, as keys of `github.com/epistemer/i18n` (A13):
+
+```go
+var (
+	L10nServer     = i18n.Key("settings.server", "HTTP server")
+	L10nServerPort = i18n.Key("settings.server.port", "Listen port")
+	// ... one per group and key
+)
+
+// L10n finds a label by path, as store.KeyInfo names it; an enum value's
+// path is its key's path, a dot and the value's text.
+func L10n(path string) i18n.TKer
+
+// in a dashboard template, for every k in s.Store().Keys():
+{ settings.L10n(k.Key).T(ctx) }
+{ settings.L10n(k.Key + "." + v).T(ctx) } // each enum value v in k.Enum
+```
+
+- A group's or key's label is `settings.<path>`, and its source text is the
+  description. An enum value's is `settings.<key path>.<value>`, and its source
+  text is the value. Every key the app loads gets one, mutable or not;
+  command arguments don't, since they are flags of one run.
+- The variables are `L10n` plus the group's interface name or the key's getter
+  name, and they claim those names like any generated identifier.
+- `L10n` returns nil for a path that isn't a group, key or enum value.
+- Translations live in the i18n store and are edited in the running app. A
+  renamed key gets a new label, and the old one's translations become i18n
+  orphans until `Prune`.
+- Dropping `App.I18n()` turns the file into a stub without the i18n import and
+  prints a warning to delete it; `go generate` would fail if cfgx removed a
+  file it had already listed.
 
 ---
 
@@ -767,7 +803,7 @@ warning: database.ssl_mode is deprecated, use database.sslmode (config.yaml:9:3)
 | Command | Purpose |
 |---------|---------|
 | `cfgx init` | scaffold a project: cobra root, settings package, schema, go:generate, `go tool` entry |
-| `cfgx gen ./schema` | generate code and artifacts |
+| `cfgx gen ./schema` | generate code (plus `zz_<package>_i18n.go` with `App.I18n`, §5.5) and artifacts |
 | `cfgx gen --check` | CI: fail if generated files are stale |
 | `cfgx diff <old cfgx.lock.json>` | config changelog: added, removed, retyped and re-defaulted keys, flagged as breaking or not |
 
@@ -817,3 +853,4 @@ warning: database.ssl_mode is deprecated, use database.sslmode (config.yaml:9:3)
 | 2026-11-07 | **A10.** Secret hardening: no secret values in messages; `X` with `X_FILE` is an error; regular files with size limits; no mutable secrets; accurate wording for unexported fields (§3.2, §7.1). Review 0001, F12. | Amendment |
 | 2026-11-07 | **A11.** Paths and discovery: `SecretFile` and `File` resolve like `Path`; an explicit config path must exist; unset variables skip a search path; `.yaml`, `.yml`, `.json` order, and two matches is an error (§3.2, §3.7). Review 0001, F13. | Amendment |
 | 2026-11-08 | **A12.** Every generated command type has `Args() []string`, returning the positional arguments cobra parsed, so run functions keep the signature `func(ctx, *Serve) error` (§3.8, §5.2). Chosen by epistemer over adding an `args` parameter to every run function. | Amendment |
+| 2026-11-12 | **A13.** `App.I18n()` generates `zz_<package>_i18n.go`: an `epistemer/i18n` key per group, key and enum value (`settings.<path>`, text from the description or the value), an `L10n<Name>` variable per group and key, and `L10n(path)` (§3.7, §5.5, §9). Requested by epistemer: every neozp package that generates code generates its locales too, following zp's `gen` conventions. Opt-in, the key names and `L10n` decided by Claude; overturnable. | Amendment |
