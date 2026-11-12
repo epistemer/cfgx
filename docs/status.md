@@ -4,6 +4,42 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-12: locales for the generated settings (A13)
+
+- **Landed:** `App.I18n()`. With it, `cfgx gen` also writes
+  `zz_<package>_i18n.go`: an epistemer/i18n key for the label of every
+  group, key and enum value, named `settings.<path>`, with the description
+  as its English text. Each group and key gets an `L10n<Name>` variable, and
+  `L10n(path)` finds any label by the path `Store().Keys()` gives.
+  `examples/zp` uses it, and a new test loads a real translator over the
+  labels and renders an Arabic translation. Interface §3.7, §5.5, §9 and
+  amendment A13; README; CHANGELOG under Unreleased.
+  - The IR version is now 18, so every `cfgx.lock.json` changes one line.
+  - Dropping `.I18n()` turns the file into a stub and prints a warning:
+    deleting it would fail `go generate`, which had already listed it. Found
+    by trying it on the zp example.
+- **Asked by you:** generated locales, following zp's `gen` conventions with
+  epistemer/i18n. A global note in `~/.claude/CLAUDE.md` now says every
+  neozp code generator emits its locales.
+- **Decided by you:** merge A13 as designed. I proposed it opt-in, because
+  cfgx also serves apps that don't use i18n, and generating it always would
+  make every one of them require i18n. The key names (`settings.` prefix,
+  enum values under their key), the `L10n` names, and no labels for command
+  Args stand as proposed.
+- **Fixed after the PR opened:** the benchmark module, `examples/zp/bench`,
+  imports the zp example's settings, so it needs i18n in its go.mod too. CI's
+  benchmark step caught it.
+- **Reviewed:** Gemini 3.8 Flash (High), about 80k tokens, plus about
+  55k for a first run that headless mode denied its tools
+  ([review 0039](reviews/0039-gemini-a13-review.md)). Argon was out of
+  quota (it resets around 2026-11-15), and agy's MCP bridge was down, so it
+  ran through the agy CLI. 4 findings, all rejected with reasons; the
+  biggest, a path collision, is a schema cfgx already refuses.
+- **Next:** nothing on the roadmap; Argon's milestone reviews wait for its
+  quota.
+- **Waiting on you:** the earlier open items: the API proposals and
+  v1.0.0.
+
 ## 2026-11-11: v0.1.0 released; M9 complete
 
 - **Landed:** [CHANGELOG.md](../CHANGELOG.md), then the `v0.1.0` tag.

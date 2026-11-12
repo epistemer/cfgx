@@ -4,6 +4,22 @@ All notable changes to cfgx are listed here. Versions follow
 [semantic versioning](https://semver.org). Until v1.0.0, a minor release
 may change the API; the changes will be listed here.
 
+## Unreleased
+
+### Added
+
+- `App.I18n()`: `cfgx gen` also writes `zz_<package>_i18n.go`, with a
+  translation key of [epistemer/i18n](https://github.com/epistemer/i18n) for
+  the label of every group, key and enum value (`settings.<path>`), an
+  `L10n<Name>` variable per group and key, and `L10n(path)` to find any of
+  them, for a settings dashboard (interface §5.5, A13). The app's module must
+  require `github.com/epistemer/i18n`.
+
+### Changed
+
+- The IR version is 18, so `cfgx.lock.json` files say `"version": 18`.
+  `cfgx diff` still compares them with older lock files.
+
 ## v0.1.0 (2026-11-11)
 
 The first release. The design is in [docs/interface.md](docs/interface.md),

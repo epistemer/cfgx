@@ -905,3 +905,51 @@ func TestMutableNamesClaimed(t *testing.T) {
 		}
 	}
 }
+
+// i18nApp is nested with App.I18n and a string enum whose description
+// needs quoting.
+func i18nApp() *ir.App {
+	a := nested()
+	a.I18n = true
+	g := &a.Groups[0]
+	g.Keys = append(g.Keys, ir.Key{Name: "sslmode", Desc: `SSL mode, as in "sslmode=require"`, Kind: ir.KindEnum,
+		Type: &ir.Type{Name: "string", Kind: "string"},
+		Enum: []ir.EnumValue{{Text: "disable", Lit: `"disable"`}, {Text: "verify-full", Lit: `"verify-full"`}}})
+	return a
+}
+
+func TestI18nGolden(t *testing.T) {
+	m, err := Build(i18nApp(), "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := RenderI18n(m)
+	if err != nil {
+		t.Fatalf("%v\n%s", err, src)
+	}
+	golden.Assert(t, filepath.Join("testdata", "i18n.golden"), src)
+	if strings.Contains(string(src), "to.address") || strings.Contains(string(src), "migrate") {
+		t.Error("arguments are flags of one run and get no labels")
+	}
+
+	m, err = Build(nested(), "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.I18n || len(m.L10n) > 0 {
+		t.Error("labels without App.I18n")
+	}
+}
+
+func TestI18nNamesClaimed(t *testing.T) {
+	a := i18nApp()
+	a.Tags = append(a.Tags, ir.Tag{Name: "L10nDB", Desc: "x"})
+	if _, err := Build(a, "settings"); err == nil || !strings.Contains(err.Error(), "L10nDB collides") {
+		t.Errorf("tag L10nDB: %v", err)
+	}
+	a = i18nApp()
+	a.Tags = append(a.Tags, ir.Tag{Name: "L10n", Desc: "x"})
+	if _, err := Build(a, "settings"); err == nil || !strings.Contains(err.Error(), "L10n collides") {
+		t.Errorf("tag L10n: %v", err)
+	}
+}
