@@ -4,6 +4,24 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-13: M11.3, v0.2.0
+
+- **Landed:**
+  - **M11.3** ([PR #44](https://github.com/epistemer/cfgx/pull/44)): the
+    CHANGELOG for `v0.2.0` lists `App.Labels()` and says `App.I18n()` was
+    never released. `examples/zp` and its bench module require the released
+    i18n `v0.2.0` and genx `v0.1.0`.
+  - **`v0.2.0`** is tagged, and `@latest` resolves to it through the module
+    proxy.
+- **Found:** in a fresh `cfgx init` app, adding genx takes four manual edits
+  (genx's README quickstart). The edits: `.Labels()`, a `genx.yaml`, and
+  moving the `go:generate` line, plus `go get` for genx and i18n.
+  `cfgx init` could make the app that way from the start; that's a cfgx
+  backlog item, not done here.
+- **Decided for you:** nothing new.
+- **Next:** the backlog, as neozp needs it.
+- **Waiting on you:** nothing.
+
 ## 2026-11-13: M11.1, M11.2, labels as data in effect
 
 - **Landed:**
