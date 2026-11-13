@@ -341,7 +341,7 @@ This milestone comes after v0.1.0. (M10 was the zp port, dropped on
 | ☐ | M11.3 | Release `v0.2.0` | S | Tag pushed; the CHANGELOG lists `App.Labels()` and says `App.I18n()` was never released |
 
 **Needs:** the item numbers of the driver are in its
-[roadmap](neozp/genx-roadmap.md). M11.1 needs the `labels/v1` shape frozen
+[roadmap](https://github.com/epistemer/genx/blob/main/docs/roadmap.md). M11.1 needs the `labels/v1` shape frozen
 (driver M1.6). M11.2 needs the driver's release candidate (driver M8.1) and
 i18n's generator (i18n roadmap M6.1), at pseudo-versions if need be. M11.3
 follows the driver's `v0.1.0` and i18n's `v0.2.0`. No release is tagged

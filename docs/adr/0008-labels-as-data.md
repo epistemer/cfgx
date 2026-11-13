@@ -26,7 +26,7 @@ costs:
 - cfgx has to manage a file it may not be writing: dropping `App.I18n()`
   leaves a stub, because `go generate` fails when a file it listed disappears.
 
-**[neozp ADR 0001](../neozp/0001-generation-pipeline.md)** (2026-11-13)
+**[neozp ADR 0001](https://github.com/epistemer/genx/blob/main/docs/adr/0001-generation-pipeline.md)** (2026-11-13)
 replaces the convention for the whole framework. In short:
 
 - A generator publishes data files in named, versioned shapes, called
@@ -35,11 +35,10 @@ replaces the convention for the whole framework. In short:
   declaration of which domains it reads, queries over them, and templates. It
   contains no code.
 - A *driver* runs generators in order, checks for stale output and removes
-  leftovers. Its working name is `genx`.
+  leftovers: [genx](https://github.com/epistemer/genx).
 
-That record and the [driver's roadmap](../neozp/genx-roadmap.md) are parked
-in this repository, under `docs/neozp/`, until the driver has one. Where this
-ADR repeats part of the record, the record is the reference.
+That record and the [driver's roadmap](https://github.com/epistemer/genx/blob/main/docs/roadmap.md) live in genx's repository.
+Where this ADR repeats part of the record, the record is the reference.
 
 This ADR settles what cfgx publishes.
 

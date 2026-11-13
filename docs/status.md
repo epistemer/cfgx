@@ -9,9 +9,7 @@ taken for you, what's next, and what's waiting on you. The terms are in
 - **Landed:** design records, no code:
   [ADR 0008](adr/0008-labels-as-data.md), amendment A14 in interface §12
   with notes in §3.7 and §5.5, roadmap milestone M11, and a note in
-  implementation §2.5. Two records about neozp as a whole are parked under
-  [docs/neozp/](neozp/README.md) until the driver has a repository:
-  neozp ADR 0001 and the driver's roadmap. All of it is in
+  implementation §2.5. They are in
   [PR #41](https://github.com/epistemer/cfgx/pull/41), which is open and not
   merged: an API change is yours to approve.
 - **Asked by you:** a second, critical look at the generation pipeline you
@@ -41,7 +39,6 @@ taken for you, what's next, and what's waiting on you. The terms are in
   (driver M1.6); then M11.1.
 - **Waiting on you:**
   - the PR;
-  - a name and a repository for the driver (working name `genx`);
   - the note in your global `CLAUDE.md` that every neozp generator emits its
     locales, which A14 makes out of date;
   - the earlier open items: the API proposals and v1.0.0.
