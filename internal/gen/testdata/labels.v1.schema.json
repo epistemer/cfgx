@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/epistemer/genx/schema/labels.v1.json",
+  "title": "labels/v1",
+  "description": "Texts an app shows for things its code names: settings, enum values, columns. One file per producer and package. Unknown fields are allowed: within a major version the domain only gains optional fields. genx checks identifiers and paths beyond this schema; see genx's docs/interface.md \u00a711.",
+  "type": "object",
+  "required": [
+    "domain",
+    "producer",
+    "package",
+    "labels"
+  ],
+  "properties": {
+    "domain": {
+      "const": "labels/v1"
+    },
+    "producer": {
+      "type": "string",
+      "minLength": 1
+    },
+    "package": {
+      "type": "object",
+      "required": [
+        "name",
+        "dir"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A Go identifier; genx checks it"
+        },
+        "dir": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Slash-separated, relative to the module root; \".\" for the root package"
+        }
+      }
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "key",
+          "text"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "minLength": 1
+          },
+          "text": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "var": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A Go identifier, unique in the package; genx checks it"
+          }
+        }
+      }
+    }
+  }
+}

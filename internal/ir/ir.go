@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 18
+const Version = 19
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -79,8 +79,12 @@ type App struct {
 	// Initialisms are extra words written in capitals in Go names.
 	Initialisms []string `json:"initialisms,omitempty"`
 	// I18n makes the generator write translation keys for the labels of
-	// groups, keys and enum values (App.I18n).
-	I18n     bool      `json:"i18n,omitempty"`
+	// groups, keys and enum values (App.I18n). Unreleased; roadmap M11.2
+	// removes it in favour of Labels.
+	I18n bool `json:"i18n,omitempty"`
+	// Labels makes the generator write the same labels as data, a
+	// labels/v1 file for genx (App.Labels).
+	Labels   bool      `json:"labels,omitempty"`
 	Groups   []Group   `json:"groups"`
 	Tags     []Tag     `json:"tags,omitempty"`
 	Rules    []Rule    `json:"rules,omitempty"`

@@ -128,6 +128,22 @@ func generate(ctx context.Context, pattern string, timeout time.Duration, artifa
 		all[labels] = []byte(generatedHeader + "\n// The schema no longer uses App.I18n: delete this file.\n\npackage " + pkg + "\n")
 		fmt.Fprintf(stderr, "cfgx: warning: the schema no longer uses App.I18n; delete %s\n", filepath.Base(labels))
 	}
+	// App.Labels: the same labels as a labels/v1 file, which genx turns
+	// into Go. One cfgx wrote that the schema no longer asks for is
+	// deleted; go generate lists only Go files, so that's safe here.
+	labelsFile := filepath.Join(wd, "zz_"+pkg+".labels.json")
+	var dropped string
+	if model.Labels {
+		dir, err := packageDir(ctx, wd)
+		if err != nil {
+			return err
+		}
+		if all[labelsFile], err = gen.RenderLabels(model, dir); err != nil {
+			return err
+		}
+	} else if old, err := os.ReadFile(labelsFile); err == nil && bytes.Contains(old, []byte(`"producer": "cfgx"`)) {
+		dropped = labelsFile
+	}
 	if artifactDir != "-" {
 		if artifactDir == "" {
 			if artifactDir, err = moduleRoot(ctx, wd); err != nil {
@@ -153,6 +169,9 @@ func generate(ctx context.Context, pattern string, timeout time.Duration, artifa
 				stale = append(stale, p)
 			}
 		}
+		if dropped != "" {
+			stale = append(stale, filepath.Base(dropped)+" (no longer generated)")
+		}
 		if len(stale) > 0 {
 			return fmt.Errorf("generated files are stale: %s; run go generate", strings.Join(stale, ", "))
 		}
@@ -166,7 +185,34 @@ func generate(ctx context.Context, pattern string, timeout time.Duration, artifa
 			return err
 		}
 	}
+	if dropped != "" {
+		if err := os.Remove(dropped); err != nil {
+			return err
+		}
+		fmt.Fprintf(stderr, "cfgx: deleted %s: the schema no longer uses App.Labels\n", filepath.Base(dropped))
+	}
 	return nil
+}
+
+// packageDir is the directory of the package in dir relative to its
+// module's root, with forward slashes: "." for the root (labels/v1's
+// package.dir). Symbolic links are resolved on both sides first.
+func packageDir(ctx context.Context, dir string) (string, error) {
+	root, err := moduleRoot(ctx, dir)
+	if err != nil {
+		return "", err
+	}
+	if r, err := filepath.EvalSymlinks(root); err == nil {
+		root = r
+	}
+	if d, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = d
+	}
+	rel, err := filepath.Rel(root, dir)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("%s isn't inside its module's root %s", dir, root)
+	}
+	return filepath.ToSlash(rel), nil
 }
 
 // generatedHeader starts every Go file cfgx generates.

@@ -1,0 +1,87 @@
+# M11.1: with App.Labels, cfgx gen writes the settings' labels as a labels/v1
+# file next to the generated code, and -check covers it.
+cd internal/settings
+exec go run github.com/epistemer/cfgx/cmd/cfgx gen -artifacts - ./schema
+cmp zz_settings.labels.json ../../want/zz_settings.labels.json
+exec go run github.com/epistemer/cfgx/cmd/cfgx gen -check -artifacts - ./schema
+! stderr .
+
+# A stale labels file fails -check, which writes nothing.
+cp ../../files/stale.json zz_settings.labels.json
+! exec go run github.com/epistemer/cfgx/cmd/cfgx gen -check -artifacts - ./schema
+stderr 'generated files are stale: zz_settings\.labels\.json; run go generate'
+cmp zz_settings.labels.json ../../files/stale.json
+
+# Dropping App.Labels: -check names the file, and gen deletes it.
+exec go run github.com/epistemer/cfgx/cmd/cfgx gen -artifacts - ./schema
+cp ../../files/nolabels.go schema/schema.go
+! exec go run github.com/epistemer/cfgx/cmd/cfgx gen -check -artifacts - ./schema
+stderr 'zz_settings\.labels\.json \(no longer generated\); run go generate'
+exists zz_settings.labels.json
+exec go run github.com/epistemer/cfgx/cmd/cfgx gen -artifacts - ./schema
+stderr '^cfgx: deleted zz_settings\.labels\.json: the schema no longer uses App.Labels$'
+! exists zz_settings.labels.json
+
+-- files/stale.json --
+{}
+-- internal/settings/settings.go --
+package settings
+
+//go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/settings/schema/schema.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var Log = dsl.Group("log", "Logging",
+	dsl.Enum("level", "Minimum log level", "debug", "info").Default("info"),
+)
+
+var App = dsl.App("app", "Test app", Log).Labels()
+
+var Run = dsl.Command("Run").Uses(Log)
+-- files/nolabels.go --
+package schema
+
+import "github.com/epistemer/cfgx/dsl"
+
+var Log = dsl.Group("log", "Logging",
+	dsl.Enum("level", "Minimum log level", "debug", "info").Default("info"),
+)
+
+var App = dsl.App("app", "Test app", Log)
+
+var Run = dsl.Command("Run").Uses(Log)
+-- want/zz_settings.labels.json --
+{
+  "domain": "labels/v1",
+  "labels": [
+    {
+      "key": "settings.log",
+      "path": "log",
+      "text": "Logging",
+      "var": "L10nLog"
+    },
+    {
+      "key": "settings.log.level",
+      "path": "log.level",
+      "text": "Minimum log level",
+      "var": "L10nLogLevel"
+    },
+    {
+      "key": "settings.log.level.debug",
+      "path": "log.level.debug",
+      "text": "debug"
+    },
+    {
+      "key": "settings.log.level.info",
+      "path": "log.level.info",
+      "text": "info"
+    }
+  ],
+  "package": {
+    "dir": "internal/settings",
+    "name": "settings"
+  },
+  "producer": "cfgx"
+}
