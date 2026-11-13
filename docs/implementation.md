@@ -318,6 +318,12 @@ These all run on the IR before anything is written:
   claims. cfgx never imports i18n itself; only the app's generated file does,
   so cfgx's own module doesn't require it. `examples/zp` uses it, and its test
   loads a real translator over the labels.
+- **[decided, A14; lands with M11]** `App.Labels` replaces `App.I18n`: the
+  generator writes `Model.L10n` as `zz_<package>.labels.json`, a `labels/v1`
+  file, next to the generated code, and `RenderI18n` goes away
+  ([ADR 0008](adr/0008-labels-as-data.md)). i18n's `labels` generator then
+  writes `zz_<package>_i18n.go` from that file. Until M11.2 the bullet above
+  is what the code does.
 
 ---
 

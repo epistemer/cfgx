@@ -4,6 +4,45 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-13: labels as data (A14, ADR 0008); design only
+
+- **Landed:** design records, no code:
+  [ADR 0008](adr/0008-labels-as-data.md), amendment A14 in interface §12
+  with notes in §3.7 and §5.5, roadmap milestone M11, and a note in
+  implementation §2.5. They are in
+  [PR #41](https://github.com/epistemer/cfgx/pull/41), which is open and not
+  merged: an API change is yours to approve.
+- **Asked by you:** a second, critical look at the generation pipeline you
+  proposed for neozp (generators publish metadata, other packages ship
+  declarative generators over it, a driver runs them), and then the records
+  for it here and in i18n.
+- **Decided by you:** the direction. It replaces A13's rule that every
+  generator writes its own locales.
+- **Decided for you, overturnable:**
+  - cfgx writes the labels itself, as a `labels/v1` file. I had first
+    suggested publishing cfgx's model for an adapter to convert; the second
+    look reversed that, because `Model.L10n` already is the list, with its
+    names claimed against the generated package.
+  - `cfgx.lock.json` stays cfgx's own file. Other packages shouldn't read it.
+  - The API is `App.Labels()`, still opt-in. The file is
+    `zz_<package>.labels.json`, next to the generated code.
+  - `App.I18n()` goes without a deprecation period, since no tag has it, and
+    no tag is cut between M11.1 and M11.2.
+- **Checked:** the 62 labels of `examples/zp`, copied by a script from
+  today's `zz_settings_i18n.go` into a `labels/v1` file and rendered by a
+  prototype of i18n's generator (one jq query, one Go template), give the
+  same 117 lines of declarations as that file. Only comments differ.
+- **Not reviewed yet:** this session ran in Claude's cloud workspace, which
+  can't reach agy, so Gemini hasn't seen the ADR. The PR is the place for
+  that review.
+- **Next:** nothing in cfgx until the driver's spikes freeze `labels/v1`
+  (driver M1.6); then M11.1.
+- **Waiting on you:**
+  - the PR;
+  - the note in your global `CLAUDE.md` that every neozp generator emits its
+    locales, which A14 makes out of date;
+  - the earlier open items: the API proposals and v1.0.0.
+
 ## 2026-11-12: locales for the generated settings (A13)
 
 - **Landed:** `App.I18n()`. With it, `cfgx gen` also writes
