@@ -46,6 +46,7 @@
 | [M7](#m7--mutable-settings--bbolt) | Runtime-mutable settings, built-in bbolt store, admin API | ~25 | M3, M4, M5 (M7.5 also M6.1; M7.8 also M6.4) |
 | [M8](#m8--cfgx-init) | `cfgx init` scaffolding | ~5 | M6 |
 | [M9](#m9--hardening-and-v010) | Hardening, benchmarks, **v0.1.0** | ~10 | M6, M7, M8 |
+| [M11](#m11--labels-as-data) | After v0.1.0: labels as data, **v0.2.0** | ~6 | M9; the neozp generation driver; i18n M6.1 |
 
 The total to v0.1.0 is about 140 developer-days, roughly 28 weeks for one
 person working alone. With two people in parallel lanes (see
@@ -78,6 +79,7 @@ graph LR
   M6 --> M9
   M7 --> M9
   M8 --> M9
+  M9 --> M11
 ```
 
 ---
@@ -325,6 +327,28 @@ hand (problem 3).
 
 ---
 
+## M11 — Labels as data
+
+**Goal:** cfgx publishes its labels as a `labels/v1` file and stops writing Go
+for another package ([ADR 0008](adr/0008-labels-as-data.md), amendment A14).
+This milestone comes after v0.1.0. (M10 was the zp port, dropped on
+2026-11-10; its number isn't reused.)
+
+| ✓ | ID | Item | Size | Done when |
+|---|----|------|------|-----------|
+| ☐ | M11.1 | `App.Labels()`. The IR's `i18n` flag becomes `labels` (IR version 19). `cfgx gen` writes `zz_<package>.labels.json` next to the generated code, and `-check` covers it. `App.I18n()` keeps working, unreleased, and still writes the Go file, so `examples/zp` keeps building | M | A golden file for the labels file from the schema `TestI18nGolden` uses; a test that its records are the ones `RenderI18n` prints, in the same order; an e2e script where `-check` fails on a stale labels file; the file passes the driver's `labels/v1` schema, copied into testdata |
+| ☐ | M11.2 | `examples/zp` gets `zz_settings_i18n.go` from the driver and i18n's `labels` generator. Then remove `App.I18n()`, `RenderI18n` and the stub, and rewrite interface §3.7, §5.5 and §9, implementation §2.5, the README and the CHANGELOG | M | Before the old path is deleted, a test shows the driver's file has the same declarations as cfgx's; `examples/zp`'s `i18n_test.go` still passes; no Go file outside `examples/` mentions `epistemer/i18n` |
+| ☐ | M11.3 | Release `v0.2.0` | S | Tag pushed; the CHANGELOG lists `App.Labels()` and says `App.I18n()` was never released |
+
+**Needs:** M11.1 needs the `labels/v1` shape frozen, which the driver's spikes
+do. M11.2 needs the driver's first release and i18n's generator (i18n roadmap
+M6.1). No release is tagged between M11.1 and M11.2, so no tag ever carries
+`App.I18n()`.
+
+**Exit:** for labels, `cfgx gen` writes data, and nothing that imports i18n.
+
+---
+
 ## After v0.1.0 (ordered backlog)
 
 1. **Reloadable keys** ([implementation.md §3.7](implementation.md)). The DSL
@@ -364,6 +388,7 @@ hand (problem 3).
 | Scope creep | High / medium | v0.1.0 scope is frozen in implementation.md §8; everything else goes to the [backlog](#after-v010-ordered-backlog) |
 | Value-based rules treat a zero value as unset (a port of 0, an empty list) | Low / low | Documented in interface §3.5 (A4); the generate-time check stops non-zero defaults in exclusive rules |
 | Platform differences (Windows env case, paths) | Medium / medium | Windows and macOS in CI from M0 |
+| M11 waits on two other repositories: the neozp generation driver and i18n | Medium / low | `App.I18n()` keeps working until M11.2, and M11.1 needs only the frozen `labels/v1` shape, so cfgx is never left without labels |
 
 ---
 
@@ -466,6 +491,7 @@ you can review a few PRs a day.
 | Warning output | **`log/slog`**, replaceable at startup (amendment A2) |
 | Keys covered by the `config` subcommand | **Whole app**, with an optional command argument (A3) |
 | How an app declares and reaches its store | **`App.Store(pathKey)`** plus an injected `Store()` (A1) |
+| How labels reach i18n | **As data**: cfgx writes a `labels/v1` file, and i18n's generator writes the Go (A14, [ADR 0008](adr/0008-labels-as-data.md)). Replaces A13's generated Go |
 | Default agent model | **Gemini 4 Argon (High)** via agy; Claude picks a model and effort per task (below) |
 | Project owner until `v1.0.0` | **Claude**, acting for you ([ownership.md](ownership.md)) |
 | `cfgx init` skeleton contents | Claude decides at M8.1 (the proposal there uses logrus) |
