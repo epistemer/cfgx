@@ -12,11 +12,15 @@ cp ../../files/stale.json zz_settings.labels.json
 stderr 'generated files are stale: zz_settings\.labels\.json; run go generate'
 cmp zz_settings.labels.json ../../files/stale.json
 
-# Dropping App.Labels leaves the file, with a warning to delete it.
+# Dropping App.Labels: -check names the file, and gen deletes it.
 exec go run github.com/epistemer/cfgx/cmd/cfgx gen -artifacts - ./schema
 cp ../../files/nolabels.go schema/schema.go
+! exec go run github.com/epistemer/cfgx/cmd/cfgx gen -check -artifacts - ./schema
+stderr 'zz_settings\.labels\.json \(no longer generated\); run go generate'
+exists zz_settings.labels.json
 exec go run github.com/epistemer/cfgx/cmd/cfgx gen -artifacts - ./schema
-stderr '^cfgx: warning: the schema no longer uses App.Labels; delete zz_settings\.labels\.json$'
+stderr '^cfgx: deleted zz_settings\.labels\.json: the schema no longer uses App.Labels$'
+! exists zz_settings.labels.json
 
 -- files/stale.json --
 {}

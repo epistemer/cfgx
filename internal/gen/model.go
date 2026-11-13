@@ -1016,12 +1016,19 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		m.Commands = append(m.Commands, cm)
 	}
 
+	if app.I18n && app.Labels {
+		bad(app.Pos, "App.I18n and App.Labels both declare the labels in this package; use App.Labels")
+	}
 	if app.I18n || app.Labels {
 		m.I18n, m.Labels = app.I18n, app.Labels
 		// With App.Labels, i18n's generator declares the same names in this
 		// package (labels/v1 reserves them), so they are claimed either way.
-		claim("L10n", app.Pos, "label lookup (App.Labels)")
-		claim("l10n", app.Pos, "label table (App.Labels)")
+		feature := "App.Labels"
+		if app.I18n {
+			feature = "App.I18n"
+		}
+		claim("L10n", app.Pos, "label lookup ("+feature+")")
+		claim("l10n", app.Pos, "label table ("+feature+")")
 		// Paths are unique: a key is a leaf, so no group, key or other
 		// enum value lives under an enum value's path.
 		label := func(v, path, text string, pos ir.Pos, what string) {

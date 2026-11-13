@@ -44,9 +44,7 @@ func TestLabelsGolden(t *testing.T) {
 // TestLabelsMatchI18n: the labels file holds the records RenderI18n prints,
 // in the same order, so i18n's generator can write the same declarations.
 func TestLabelsMatchI18n(t *testing.T) {
-	a := i18nApp()
-	a.Labels = true
-	m, err := Build(a, "settings")
+	m, err := labelsApp()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +58,11 @@ func TestLabelsMatchI18n(t *testing.T) {
 	if err := json.Unmarshal(src, &doc); err != nil {
 		t.Fatal(err)
 	}
-	goSrc, err := RenderI18n(m)
+	mi, err := Build(i18nApp(), "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	goSrc, err := RenderI18n(mi)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,3 +198,11 @@ func validate(s map[string]any, v any, at string) []string {
 }
 
 func asList(v any) []any { l, _ := v.([]any); return l }
+
+func TestLabelsAndI18nRefused(t *testing.T) {
+	a := i18nApp()
+	a.Labels = true
+	if _, err := Build(a, "settings"); err == nil || !strings.Contains(err.Error(), "App.I18n and App.Labels both declare") {
+		t.Errorf("both: %v", err)
+	}
+}
