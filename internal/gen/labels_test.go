@@ -14,13 +14,11 @@ import (
 )
 
 func labelsApp() (*Model, error) {
-	a := i18nApp()
-	a.I18n = false
-	a.Labels = true
-	return Build(a, "settings")
+	return Build(labelsIR(), "settings")
 }
 
-// TestLabelsGolden is M11.1's labels file for the schema TestI18nGolden uses.
+// TestLabelsGolden is the labels file of a schema with nested groups and an
+// enum whose description needs quoting. Command Args get no labels.
 func TestLabelsGolden(t *testing.T) {
 	m, err := labelsApp()
 	if err != nil {
@@ -31,6 +29,9 @@ func TestLabelsGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	golden.Assert(t, filepath.Join("testdata", "labels.golden.json"), src)
+	if strings.Contains(string(src), "to.address") || strings.Contains(string(src), "migrate") {
+		t.Error("arguments are flags of one run and get no labels")
+	}
 
 	m, err = Build(nested(), "settings")
 	if err != nil {
@@ -39,67 +40,6 @@ func TestLabelsGolden(t *testing.T) {
 	if m.Labels || len(m.L10n) > 0 {
 		t.Error("labels without App.Labels")
 	}
-}
-
-// TestLabelsMatchI18n: the labels file holds the records RenderI18n prints,
-// in the same order, so i18n's generator can write the same declarations.
-func TestLabelsMatchI18n(t *testing.T) {
-	m, err := labelsApp()
-	if err != nil {
-		t.Fatal(err)
-	}
-	src, err := RenderLabels(m, "internal/settings")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var doc struct {
-		Labels []struct{ Key, Text, Path, Var string }
-	}
-	if err := json.Unmarshal(src, &doc); err != nil {
-		t.Fatal(err)
-	}
-	mi, err := Build(i18nApp(), "settings")
-	if err != nil {
-		t.Fatal(err)
-	}
-	goSrc, err := RenderI18n(mi)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Each entry of RenderI18n's l10n table: "path": Var or i18n.Key(key, text).
-	entry := regexp.MustCompile(`(?m)^\t("[^"]*"):\s+(L10n\w+|i18n\.Key\(("[^"]*"), ("(?:[^"\\]|\\.)*")\)),$`)
-	vars := regexp.MustCompile(`(?m)^\t(L10n\w+) += i18n\.Key\(("[^"]*"), ("(?:[^"\\]|\\.)*")\)$`)
-	decl := map[string][2]string{}
-	for _, v := range vars.FindAllStringSubmatch(string(goSrc), -1) {
-		decl[v[1]] = [2]string{v[2], v[3]}
-	}
-	got := entry.FindAllStringSubmatch(string(goSrc), -1)
-	if len(got) != len(doc.Labels) || len(got) == 0 {
-		t.Fatalf("RenderI18n has %d labels, the labels file %d", len(got), len(doc.Labels))
-	}
-	for i, l := range doc.Labels {
-		g := got[i]
-		key, text := g[3], g[4]
-		if strings.HasPrefix(g[2], "L10n") {
-			if g[2] != l.Var {
-				t.Errorf("label %d: var %s, RenderI18n has %s", i, l.Var, g[2])
-			}
-			key, text = decl[g[2]][0], decl[g[2]][1]
-		} else if l.Var != "" {
-			t.Errorf("label %d: var %s, RenderI18n has none", i, l.Var)
-		}
-		if want := quote(l.Path); g[1] != want {
-			t.Errorf("label %d: path %s, RenderI18n has %s", i, want, g[1])
-		}
-		if quote(l.Key) != key || quote(l.Text) != text {
-			t.Errorf("label %d: %q %q, RenderI18n has %s %s", i, l.Key, l.Text, key, text)
-		}
-	}
-}
-
-func quote(s string) string {
-	b, _ := json.Marshal(s)
-	return strings.ReplaceAll(string(b), `&`, "&")
 }
 
 // TestLabelsSchema checks the file against genx's labels/v1 JSON Schema,
@@ -198,11 +138,3 @@ func validate(s map[string]any, v any, at string) []string {
 }
 
 func asList(v any) []any { l, _ := v.([]any); return l }
-
-func TestLabelsAndI18nRefused(t *testing.T) {
-	a := i18nApp()
-	a.Labels = true
-	if _, err := Build(a, "settings"); err == nil || !strings.Contains(err.Error(), "App.I18n and App.Labels both declare") {
-		t.Errorf("both: %v", err)
-	}
-}

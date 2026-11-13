@@ -1,0 +1,15 @@
+# genx runs zp's code generation: cfgx writes the settings, the artifacts
+# and the settings' labels (labels/v1); i18n's labels generator turns the
+# labels into internal/settings/zz_settings_i18n.go.
+version: 1
+
+producers:
+  - name: settings
+    dir: internal/settings
+    run:   [go, tool, cfgx, gen, ./schema]
+    check: [go, tool, cfgx, gen, -check, ./schema]
+    emits:
+      - internal/settings/zz_settings.labels.json
+
+use:
+  - github.com/epistemer/i18n: [labels]

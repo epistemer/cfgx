@@ -342,7 +342,7 @@ both declarations.
 | `.Formats(dsl.YAML, dsl.JSON)` | accepted file formats (default: both) |
 | `.Initialisms(...)` | extra initialisms |
 | `.Global(groups...)` | settings every command gets, bound as persistent flags on the root |
-| `.I18n()` | also generate `zz_<package>_i18n.go`: translation keys of [epistemer/i18n](https://github.com/epistemer/i18n) for the labels of groups, keys and enum values (§5.5, A13). The app's module must require `github.com/epistemer/i18n`. Being replaced by `.Labels()` (A14) |
+| `.Labels()` | also write `zz_<package>.labels.json`: the labels of groups, keys and enum values as a `labels/v1` file, which genx turns into translation keys of [epistemer/i18n](https://github.com/epistemer/i18n) with i18n's generator (§5.5, A14) |
 | `.Store(pathKey)` | keep mutable keys in the built-in bbolt store, in the file named by `pathKey`, which must be a static `Path` key (§7.3). Every command that has the store, and the `config` subcommands, load `pathKey` and bind its flag automatically (A7) |
 
 ### 3.8 Commands
@@ -514,19 +514,29 @@ have the getter types (`cfgx.Secret`, `[]byte`, `*time.Location`), and fields of
 paths are never read (A6). The one read it makes is a `Location` default's zone,
 which loads like `time.LoadLocation`.
 
-### 5.5 Labels (`App.I18n`)
+### 5.5 Labels (`App.Labels`)
 
-> **Changing (A14, [ADR 0008](adr/0008-labels-as-data.md)).** `App.Labels()`
-> will replace `App.I18n()`: `cfgx gen` will write the labels as data, in
-> `zz_<package>.labels.json`, and i18n's own generator will write
-> `zz_<package>_i18n.go` from it. The variables and `L10n` below stay the
-> same. This section describes today's behaviour until roadmap M11.2
-> rewrites it.
+With `App.Labels()`, `cfgx gen` also writes `zz_<package>.labels.json` next to
+the generated code: the labels a settings dashboard shows, as a `labels/v1`
+file (A14, [ADR 0008](adr/0008-labels-as-data.md)). cfgx writes no Go that
+imports i18n. [genx](https://github.com/epistemer/genx), the neozp generation
+driver, runs cfgx as a producer and i18n's `labels` generator on the file,
+which writes `zz_<package>_i18n.go` in the same package:
 
-With `App.I18n()`, `cfgx gen` also writes `zz_<package>_i18n.go`, the labels a
-settings dashboard shows, as keys of `github.com/epistemer/i18n` (A13):
+```yaml
+# genx.yaml at the module root
+producers:
+  - name: settings
+    dir: internal/settings
+    run:   [go, tool, cfgx, gen, ./schema]
+    check: [go, tool, cfgx, gen, -check, ./schema]
+    emits: [internal/settings/zz_settings.labels.json]
+use:
+  - github.com/epistemer/i18n: [labels]
+```
 
 ```go
+// zz_settings_i18n.go, written by i18n's generator
 var (
 	L10nServer     = i18n.Key("settings.server", "HTTP server")
 	L10nServerPort = i18n.Key("settings.server.port", "Listen port")
@@ -546,15 +556,20 @@ func L10n(path string) i18n.TKer
   description. An enum value's is `settings.<key path>.<value>`, and its source
   text is the value. Every key the app loads gets one, mutable or not;
   command arguments don't, since they are flags of one run.
-- The variables are `L10n` plus the group's interface name or the key's getter
-  name, and they claim those names like any generated identifier.
-- `L10n` returns nil for a path that isn't a group, key or enum value.
+- In the file each label has its `key`, `text` and `path`; a group's or key's
+  has a `var`, `L10n` plus the interface's or getter's name. `package.dir` is
+  the package's directory relative to the module root.
+- cfgx claims the variables, `L10n` and `l10n` like any generated identifier,
+  since i18n's generator declares them in the same package.
 - Translations live in the i18n store and are edited in the running app. A
   renamed key gets a new label, and the old one's translations become i18n
   orphans until `Prune`.
-- Dropping `App.I18n()` turns the file into a stub without the i18n import and
-  prints a warning to delete it; `go generate` would fail if cfgx removed a
-  file it had already listed.
+- Dropping `App.Labels()`: `cfgx gen -check` names the leftover file, and
+  `cfgx gen` deletes it. genx then deletes the Go file it wrote from it.
+- With the generation in genx, `//go:generate go tool genx` sits in a
+  package genx doesn't write into, such as `main`, and tests use
+  `genxtest.AssertGenerated`. `cfgxtest.AssertGenerated` looks for a
+  `go:generate` line that runs cfgx in the package, which is gone.
 
 ---
 
@@ -810,7 +825,7 @@ warning: database.ssl_mode is deprecated, use database.sslmode (config.yaml:9:3)
 | Command | Purpose |
 |---------|---------|
 | `cfgx init` | scaffold a project: cobra root, settings package, schema, go:generate, `go tool` entry |
-| `cfgx gen ./schema` | generate code (plus `zz_<package>_i18n.go` with `App.I18n`, §5.5) and artifacts |
+| `cfgx gen ./schema` | generate code (plus `zz_<package>.labels.json` with `App.Labels`, §5.5) and artifacts |
 | `cfgx gen --check` | CI: fail if generated files are stale |
 | `cfgx diff <old cfgx.lock.json>` | config changelog: added, removed, retyped and re-defaulted keys, flagged as breaking or not |
 
@@ -861,4 +876,4 @@ warning: database.ssl_mode is deprecated, use database.sslmode (config.yaml:9:3)
 | 2026-11-07 | **A11.** Paths and discovery: `SecretFile` and `File` resolve like `Path`; an explicit config path must exist; unset variables skip a search path; `.yaml`, `.yml`, `.json` order, and two matches is an error (§3.2, §3.7). Review 0001, F13. | Amendment |
 | 2026-11-08 | **A12.** Every generated command type has `Args() []string`, returning the positional arguments cobra parsed, so run functions keep the signature `func(ctx, *Serve) error` (§3.8, §5.2). Chosen by epistemer over adding an `args` parameter to every run function. | Amendment |
 | 2026-11-12 | **A13.** `App.I18n()` generates `zz_<package>_i18n.go`: an `epistemer/i18n` key per group, key and enum value (`settings.<path>`, text from the description or the value), an `L10n<Name>` variable per group and key, and `L10n(path)` (§3.7, §5.5, §9). Requested by epistemer: every neozp package that generates code generates its locales too, following zp's `gen` conventions. Opt-in, the key names and `L10n` decided by Claude; overturnable. | Amendment |
-| 2026-11-13 | **A14.** `App.Labels()` replaces `App.I18n()`. With it, `cfgx gen` writes `zz_<package>.labels.json` next to the generated code: the labels of A13 as data, in the `labels/v1` shape neozp's generators share, with the same keys, texts, paths and `L10n<Name>` names, which cfgx still claims. cfgx no longer writes `zz_<package>_i18n.go`; i18n's `labels` generator writes it from that file, run by the neozp generation driver, with the same declarations. `App.I18n()` was never in a tagged release, so it goes without a deprecation period (§3.7, §5.5, §9; [ADR 0008](adr/0008-labels-as-data.md)). Direction chosen by epistemer: one generation pipeline over shared metadata, in place of A13's rule that every generator writes its own locales. `App.Labels()`, the file's name and place, and staying opt-in decided by Claude; overturnable. **Takes effect with roadmap M11**; until then §3.7, §5.5 and §9 describe A13. | Amendment |
+| 2026-11-13 | **A14.** `App.Labels()` replaces `App.I18n()`. With it, `cfgx gen` writes `zz_<package>.labels.json` next to the generated code: the labels of A13 as data, in the `labels/v1` shape neozp's generators share, with the same keys, texts, paths and `L10n<Name>` names, which cfgx still claims. cfgx no longer writes `zz_<package>_i18n.go`; i18n's `labels` generator writes it from that file, run by the neozp generation driver, with the same declarations. `App.I18n()` was never in a tagged release, so it goes without a deprecation period (§3.7, §5.5, §9; [ADR 0008](adr/0008-labels-as-data.md)). Direction chosen by epistemer: one generation pipeline over shared metadata, in place of A13's rule that every generator writes its own locales. `App.Labels()`, the file's name and place, and staying opt-in decided by Claude; overturnable. In effect since roadmap M11.2 (2026-11-13). | Amendment |

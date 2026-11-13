@@ -8,16 +8,18 @@ may change the API; the changes will be listed here.
 
 ### Added
 
-- `App.I18n()`: `cfgx gen` also writes `zz_<package>_i18n.go`, with a
-  translation key of [epistemer/i18n](https://github.com/epistemer/i18n) for
-  the label of every group, key and enum value (`settings.<path>`), an
-  `L10n<Name>` variable per group and key, and `L10n(path)` to find any of
-  them, for a settings dashboard (interface §5.5, A13). The app's module must
-  require `github.com/epistemer/i18n`.
+- `App.Labels()`: `cfgx gen` also writes `zz_<package>.labels.json`, the
+  label of every group, key and enum value (`settings.<path>`) as a
+  `labels/v1` file, for a settings dashboard (interface §5.5, A14).
+  [genx](https://github.com/epistemer/genx) turns it into translation keys of
+  [epistemer/i18n](https://github.com/epistemer/i18n), an `L10n<Name>`
+  variable per group and key, and `L10n(path)`, with i18n's `labels`
+  generator. cfgx itself doesn't depend on i18n. (`App.I18n()`, which wrote
+  that Go itself, was on `main` for a day and never released.)
 
 ### Changed
 
-- The IR version is 18, so `cfgx.lock.json` files say `"version": 18`.
+- The IR version is 19, so `cfgx.lock.json` files say `"version": 19`.
   `cfgx diff` still compares them with older lock files.
 
 ## v0.1.0 (2026-11-11)

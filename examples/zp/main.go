@@ -2,6 +2,8 @@
 // commands, each with only the configuration it uses.
 package main
 
+//go:generate go tool genx
+
 import (
 	"context"
 	"fmt"

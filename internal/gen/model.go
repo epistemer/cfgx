@@ -37,9 +37,8 @@ type Model struct {
 	// store.
 	StoreIdx   int
 	StoreAlias string // cfgx/store's name in the generated file
-	// I18n is set by App.I18n: RenderI18n then writes L10n, the labels of
-	// the groups, keys and enum values, in that order.
-	I18n   bool
+	// Labels is set by App.Labels: RenderLabels then writes L10n, the
+	// labels of the groups, keys and enum values, in that order.
 	Labels bool
 	L10n   []L10nModel
 	// ExampleConfig and JSONSchema are embedded in the generated file for
@@ -129,8 +128,7 @@ type KeyModel struct {
 	Pos          ir.Pos
 }
 
-// L10nModel is the label of a group, key or enum value (App.I18n and
-// App.Labels). Var is
+// L10nModel is the label of a group, key or enum value (App.Labels). Var is
 // its generated variable; an enum value's label has none and lives only in
 // the lookup table.
 type L10nModel struct {
@@ -1016,19 +1014,12 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 		m.Commands = append(m.Commands, cm)
 	}
 
-	if app.I18n && app.Labels {
-		bad(app.Pos, "App.I18n and App.Labels both declare the labels in this package; use App.Labels")
-	}
-	if app.I18n || app.Labels {
-		m.I18n, m.Labels = app.I18n, app.Labels
-		// With App.Labels, i18n's generator declares the same names in this
-		// package (labels/v1 reserves them), so they are claimed either way.
-		feature := "App.Labels"
-		if app.I18n {
-			feature = "App.I18n"
-		}
-		claim("L10n", app.Pos, "label lookup ("+feature+")")
-		claim("l10n", app.Pos, "label table ("+feature+")")
+	if app.Labels {
+		m.Labels = true
+		// i18n's labels generator declares these in this package (labels/v1
+		// reserves them), so cfgx claims them like its own identifiers.
+		claim("L10n", app.Pos, "label lookup (App.Labels)")
+		claim("l10n", app.Pos, "label table (App.Labels)")
 		// Paths are unique: a key is a leaf, so no group, key or other
 		// enum value lives under an enum value's path.
 		label := func(v, path, text string, pos ir.Pos, what string) {
