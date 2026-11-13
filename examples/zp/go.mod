@@ -4,8 +4,8 @@ go 1.26.0
 
 require (
 	github.com/epistemer/cfgx v0.0.0
-	github.com/epistemer/genx v0.1.0-rc.3
-	github.com/epistemer/i18n v0.1.1-0.20261113065937-e54210efe029
+	github.com/epistemer/genx v0.1.0
+	github.com/epistemer/i18n v0.2.0
 	github.com/spf13/cobra v1.10.2
 )
 

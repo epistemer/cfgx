@@ -338,7 +338,7 @@ This milestone comes after v0.1.0. (M10 was the zp port, dropped on
 |---|----|------|------|-----------|
 | ☑ | M11.1 | `App.Labels()`. The IR's `i18n` flag becomes `labels` (IR version 19). `cfgx gen` writes `zz_<package>.labels.json` next to the generated code, and `-check` covers it. `App.I18n()` keeps working, unreleased, and still writes the Go file, so `examples/zp` keeps building | M | A golden file for the labels file from the schema `TestI18nGolden` uses; a test that its records are the ones `RenderI18n` prints, in the same order; an e2e script where `-check` fails on a stale labels file; the file passes the driver's `labels/v1` schema, copied into testdata |
 | ☑ | M11.2 | `examples/zp` gets `zz_settings_i18n.go` from the driver and i18n's `labels` generator. Then remove `App.I18n()`, `RenderI18n` and the stub, and rewrite interface §3.7, §5.5 and §9, implementation §2.5, the README and the CHANGELOG | M | Before the old path is deleted, a test shows the driver's file has the same declarations as cfgx's; `examples/zp`'s `i18n_test.go` still passes; no Go file outside `examples/` mentions `epistemer/i18n` |
-| ☐ | M11.3 | Release `v0.2.0` | S | Tag pushed; the CHANGELOG lists `App.Labels()` and says `App.I18n()` was never released |
+| ✓ | M11.3 | Release `v0.2.0` | S | Tag pushed; the CHANGELOG lists `App.Labels()` and says `App.I18n()` was never released |
 
 **Needs:** the item numbers of the driver are in its
 [roadmap](https://github.com/epistemer/genx/blob/main/docs/roadmap.md). M11.1 needs the `labels/v1` shape frozen
