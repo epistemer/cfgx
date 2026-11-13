@@ -9,8 +9,9 @@ taken for you, what's next, and what's waiting on you. The terms are in
 - **Landed:** design records, no code:
   [ADR 0008](adr/0008-labels-as-data.md), amendment A14 in interface §12
   with notes in §3.7 and §5.5, roadmap milestone M11, and a note in
-  implementation §2.5. They are in PR_LINK, which is open and not merged: an
-  API change is yours to approve.
+  implementation §2.5. They are in
+  [PR #41](https://github.com/epistemer/cfgx/pull/41), which is open and not
+  merged: an API change is yours to approve.
 - **Asked by you:** a second, critical look at the generation pipeline you
   proposed for neozp (generators publish metadata, other packages ship
   declarative generators over it, a driver runs them), and then the records
