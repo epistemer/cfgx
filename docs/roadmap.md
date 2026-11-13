@@ -340,10 +340,12 @@ This milestone comes after v0.1.0. (M10 was the zp port, dropped on
 | ☐ | M11.2 | `examples/zp` gets `zz_settings_i18n.go` from the driver and i18n's `labels` generator. Then remove `App.I18n()`, `RenderI18n` and the stub, and rewrite interface §3.7, §5.5 and §9, implementation §2.5, the README and the CHANGELOG | M | Before the old path is deleted, a test shows the driver's file has the same declarations as cfgx's; `examples/zp`'s `i18n_test.go` still passes; no Go file outside `examples/` mentions `epistemer/i18n` |
 | ☐ | M11.3 | Release `v0.2.0` | S | Tag pushed; the CHANGELOG lists `App.Labels()` and says `App.I18n()` was never released |
 
-**Needs:** M11.1 needs the `labels/v1` shape frozen, which the driver's spikes
-do. M11.2 needs the driver's first release and i18n's generator (i18n roadmap
-M6.1). No release is tagged between M11.1 and M11.2, so no tag ever carries
-`App.I18n()`.
+**Needs:** the item numbers of the driver are in its
+[roadmap](neozp/genx-roadmap.md). M11.1 needs the `labels/v1` shape frozen
+(driver M1.6). M11.2 needs the driver's release candidate (driver M8.1) and
+i18n's generator (i18n roadmap M6.1), at pseudo-versions if need be. M11.3
+follows the driver's `v0.1.0` and i18n's `v0.2.0`. No release is tagged
+between M11.1 and M11.2, so no tag ever carries `App.I18n()`.
 
 **Exit:** for labels, `cfgx gen` writes data, and nothing that imports i18n.
 
