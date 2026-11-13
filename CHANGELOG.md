@@ -4,17 +4,18 @@ All notable changes to cfgx are listed here. Versions follow
 [semantic versioning](https://semver.org). Until v1.0.0, a minor release
 may change the API; the changes will be listed here.
 
-## Unreleased
+## v0.2.0 (2026-11-13)
 
 ### Added
 
 - `App.Labels()`: `cfgx gen` also writes `zz_<package>.labels.json`, the
   label of every group, key and enum value (`settings.<path>`) as a
   `labels/v1` file, for a settings dashboard (interface §5.5, A14).
-  [genx](https://github.com/epistemer/genx) turns it into translation keys of
-  [epistemer/i18n](https://github.com/epistemer/i18n), an `L10n<Name>`
-  variable per group and key, and `L10n(path)`, with i18n's `labels`
-  generator. cfgx itself doesn't depend on i18n. (`App.I18n()`, which wrote
+  [genx](https://github.com/epistemer/genx) (v0.1.0 or later) turns it
+  into translation keys of [epistemer/i18n](https://github.com/epistemer/i18n)
+  (v0.2.0 or later), an `L10n<Name>` variable per group and key, and
+  `L10n(path)`, with i18n's `labels` generator. cfgx itself doesn't depend
+  on i18n. (`App.I18n()`, which wrote
   that Go itself, was on `main` for a day and never released.)
 
 ### Changed
