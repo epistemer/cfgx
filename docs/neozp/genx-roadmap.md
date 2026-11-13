@@ -326,7 +326,7 @@ schemas for the manifest and metafile.
 | Three repositories must release in order | Medium / low | The table above; a release candidate; `App.I18n()` stays in cfgx until the switch |
 | A dependency's generator writes where it shouldn't | Low / high | Nothing runs unless the manifest names it; output stays inside the module and never replaces a file the driver didn't write; a generator can't run code |
 | The driver turns into a build system | High / medium | Parallelism, caching and watching are backlog items that need a measured reason |
-| The prototype used the C jq and hand-written inputs | – | S2 and S3 repeat it on gojq with real files |
+| The prototype ran on the C jq, with an input file a script made from cfgx's output | Low / medium | S2 and S3 repeat it on gojq with files a real producer writes |
 
 ## Decisions waiting on you
 
