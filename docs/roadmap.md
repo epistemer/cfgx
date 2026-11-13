@@ -364,6 +364,11 @@ between M11.1 and M11.2, so no tag ever carries `App.I18n()`.
 7. **Vet analyzer** that flags `Secret.Reveal()` values flowing into logging.
 8. **YAML anchors, aliases and merge keys** in config files. v0.1.0 rejects them
    with a clear error (ADR 0005).
+9. **`cfgx init` with genx**: a new app starts with `.Labels()`, a
+   `genx.yaml` that runs cfgx and i18n's `labels` generator, and
+   `//go:generate go tool genx` in `main`, so the four manual steps of
+   genx's quickstart disappear. It waits for neozp to settle what a new app
+   needs; genx's own `genx init` (its backlog item 5) may cover it instead.
 
 **Parking lot** (each needs an amendment before it can be scheduled):
 - offline `config history | set | reset` for an app that isn't running
