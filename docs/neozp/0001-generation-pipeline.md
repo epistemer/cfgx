@@ -36,7 +36,7 @@ three costs:
 
 1. cfgx's generator names another package's API in a template. cfgx's module
    doesn't require i18n, so nothing pins the API that template targets. Only
-   cfgx's `examples/zp` would notice a break.
+   cfgx's example modules would notice a break.
 2. A13's convention makes every later generator carry its own copy of the
    labels template, as zp's generators did.
 3. No generator sees all the keys, so nothing checks them across packages

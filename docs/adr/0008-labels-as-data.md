@@ -20,7 +20,7 @@ costs:
 
 - cfgx's generator holds a template for another package's API. cfgx's module
   doesn't require i18n, so nothing in cfgx pins `i18n.Key` or `i18n.TKer`.
-  Only `examples/zp` compiles the result.
+  Only the modules under `examples/` compile the result.
 - Every later neozp generator (models, enums, routes) would carry the same
   template. In zp, four generators did.
 - cfgx has to manage a file it may not be writing: dropping `App.I18n()`
@@ -114,7 +114,7 @@ Option 4.
 | `package.dir` | Its directory, with forward slashes, relative to the module root (`.` at the root) |
 | `labels[].key` | `settings.<path>`; for an enum value, `settings.<key path>.<value>` |
 | `labels[].text` | The group's or key's description; for an enum value, the value |
-| `labels[].path` | The path `Store().Keys()` reports; for an enum value, the key's path, a dot and the value |
+| `labels[].path` | The group's or key's dotted path, as `Store().Keys()` reports it; for an enum value, the key's path, a dot and the value |
 | `labels[].var` | `L10n` plus the group's interface name or the key's getter name. Enum values have none |
 
 The order is the one A13 uses: each group, then its keys, each key followed
@@ -130,9 +130,9 @@ level. The shape only gains optional fields within `v1`.
 On 2026-11-13 the 62 labels of `examples/zp` (48 with a variable) were
 copied by a script from the generated file into a `labels/v1` file, and
 rendered with one jq query and one Go template, the prototype of i18n's
-generator. The result has the same 117
-lines of declarations as the `zz_settings_i18n.go` that `App.I18n()` writes
-at commit `5a1759c`; only comments differ.
+generator. The result has the same 117 lines of declarations as the
+`zz_settings_i18n.go` that `App.I18n()` writes at commit `5a1759c`; only
+comments differ.
 
 ### Getting there
 
@@ -157,7 +157,7 @@ building:
 - The labels file is an interface to other packages. Its shape can't change
   the way `cfgx.lock.json` does.
 - The IR's `i18n` flag becomes `labels`, so the IR version becomes 19 and
-  every `cfgx.lock.json` changes one line.
+  every `cfgx.lock.json` changes with it.
 - Interface §3.7, §5.5 and §9, implementation §2.5, the README and the
   CHANGELOG are rewritten in M11.2, with the behaviour. Until then they
   describe A13, and amendment A14 in interface §12 records the decision.
