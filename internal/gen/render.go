@@ -2,6 +2,7 @@ package gen
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"go/format"
 	"strconv"
@@ -477,6 +478,36 @@ func Load{{.Name}}(ctx context.Context, opts ...cfgx.Option) (*{{.Name}}, error)
 	return engine.LoadCommand(ctx, &app, {{printf "%q" .Name}}, {{.KeysVar}}, new{{.Name}}, opts...)
 }
 {{end}}`))
+
+// RenderLabels produces the labels file of an app with App.Labels: a
+// labels/v1 document (genx interface §11) with every record of m.L10n, in
+// order. dir is the package's directory relative to the module root, with
+// forward slashes ("." for the root). Object keys come out sorted, so the
+// bytes are the same on every run.
+func RenderLabels(m *Model, dir string) ([]byte, error) {
+	labels := make([]any, 0, len(m.L10n))
+	for _, l := range m.L10n {
+		label := map[string]any{"key": l.Key, "text": l.Text, "path": l.Path}
+		if l.Var != "" {
+			label["var"] = l.Var
+		}
+		labels = append(labels, label)
+	}
+	doc := map[string]any{
+		"domain":   "labels/v1",
+		"producer": "cfgx",
+		"package":  map[string]any{"name": m.Package, "dir": dir},
+		"labels":   labels,
+	}
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(doc); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
 
 // RenderI18n produces the labels file of an app with App.I18n: an i18n key
 // per group, key and enum value, and L10n, which finds one by path.

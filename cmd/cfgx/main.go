@@ -128,6 +128,25 @@ func generate(ctx context.Context, pattern string, timeout time.Duration, artifa
 		all[labels] = []byte(generatedHeader + "\n// The schema no longer uses App.I18n: delete this file.\n\npackage " + pkg + "\n")
 		fmt.Fprintf(stderr, "cfgx: warning: the schema no longer uses App.I18n; delete %s\n", filepath.Base(labels))
 	}
+	// App.Labels: the same labels as a labels/v1 file, which genx turns
+	// into Go. A JSON file can't be a stub, so one the schema no longer
+	// asks for is left, with a warning.
+	data := filepath.Join(wd, "zz_"+pkg+".labels.json")
+	if model.Labels {
+		root, err := moduleRoot(ctx, wd)
+		if err != nil {
+			return err
+		}
+		dir, err := filepath.Rel(root, wd)
+		if err != nil {
+			return err
+		}
+		if all[data], err = gen.RenderLabels(model, filepath.ToSlash(dir)); err != nil {
+			return err
+		}
+	} else if _, err := os.Stat(data); err == nil {
+		fmt.Fprintf(stderr, "cfgx: warning: the schema no longer uses App.Labels; delete %s\n", filepath.Base(data))
+	}
 	if artifactDir != "-" {
 		if artifactDir == "" {
 			if artifactDir, err = moduleRoot(ctx, wd); err != nil {
