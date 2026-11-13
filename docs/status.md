@@ -4,6 +4,38 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-13: M11.1, M11.2, labels as data in effect
+
+- **Landed:**
+  - **M11.1** ([PR #42](https://github.com/epistemer/cfgx/pull/42)):
+    `App.Labels()` makes `cfgx gen` write `zz_<package>.labels.json`, a
+    `labels/v1` file for genx, next to the generated code; `-check` covers
+    it. IR version 19. A golden file, a test that its records match what
+    `App.I18n()` printed, a check against genx's `labels/v1` schema, and
+    e2e scripts.
+  - **M11.2** ([PR #43](https://github.com/epistemer/cfgx/pull/43)):
+    `examples/zp` generates through genx (`v0.1.0-rc.3`) and i18n's
+    generator; a test shows the new `zz_settings_i18n.go` declares what
+    `App.I18n()` wrote. Then `App.I18n()`, `RenderI18n` and the stub went,
+    never released. Interface §3.7, §5.5 and §9, implementation §2.5, the
+    README and the CHANGELOG describe `App.Labels`. Amendment A14 is in
+    effect.
+- **Reviewed:** Gemini 3.8 Flash (Medium), about 68k tokens; 4 of 6
+  findings taken: a labels file the schema no longer asks for is deleted,
+  `App.I18n` and `App.Labels` together were refused, symlinks are resolved
+  for `package.dir`, and the claim message names the flag.
+- **Found:** `cfgxtest.AssertGenerated` looks for the `go:generate` line
+  that runs cfgx in the package; under genx that line runs genx from
+  `main`. The example uses `genxtest.AssertGenerated`, and §5.5 says so.
+  A possible later fix: cfgxtest reading the producer's `check` from
+  `genx.yaml`.
+- **Decided for you:** dropping `App.Labels()` deletes the JSON file (a
+  JSON file doesn't upset `go generate`'s file list), where `App.I18n()`
+  left a stub.
+- **Next:** M11.3, `v0.2.0`, after genx `v0.1.0` and i18n `v0.2.0`. No tag
+  before then, so no release carries `App.I18n()`.
+- **Waiting on you:** nothing.
+
 ## 2026-11-13: labels as data (A14, ADR 0008); design only
 
 - **Landed:** design records, no code:
