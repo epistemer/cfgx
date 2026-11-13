@@ -312,18 +312,15 @@ These all run on the IR before anything is written:
   `config schema`), and per-key metadata (description, type, default text, enum
   values, tags, JSON Schema fragment, mutable, epoch) for `explain` and
   `Store.Keys()`.
-- **[decided, A13]** With `App.I18n`, `RenderI18n` writes
-  `zz_<package>_i18n.go` from `Model.L10n`, which `Build` fills in group
-  order (group, its keys, each key's enum values) and whose variable names it
-  claims. cfgx never imports i18n itself; only the app's generated file does,
-  so cfgx's own module doesn't require it. `examples/zp` uses it, and its test
-  loads a real translator over the labels.
-- **[decided, A14; lands with M11]** `App.Labels` replaces `App.I18n`: the
-  generator writes `Model.L10n` as `zz_<package>.labels.json`, a `labels/v1`
-  file, next to the generated code, and `RenderI18n` goes away
-  ([ADR 0008](adr/0008-labels-as-data.md)). i18n's `labels` generator then
-  writes `zz_<package>_i18n.go` from that file. Until M11.2 the bullet above
-  is what the code does.
+- **[decided, A14]** With `App.Labels`, `RenderLabels` writes `Model.L10n`
+  as `zz_<package>.labels.json`, a `labels/v1` file, next to the generated
+  code ([ADR 0008](adr/0008-labels-as-data.md)). `Build` fills `L10n` in group
+  order (group, its keys, each key's enum values) and claims the variable
+  names, `L10n` and `l10n`, which i18n's `labels` generator declares in the
+  same package when genx runs it. cfgx never imports i18n. `examples/zp`
+  generates through genx; its test loads a real translator over the labels,
+  and another shows the file genx writes has the declarations `App.I18n()`
+  wrote (A13, removed in M11.2, never released).
 
 ---
 

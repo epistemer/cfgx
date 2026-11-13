@@ -9,7 +9,8 @@ import (
 	"zp/internal/settings"
 )
 
-// The labels App.I18n generates are i18n keys: the translator registers
+// The labels App.Labels publishes, and i18n's generator turns into Go, are
+// i18n keys: the translator registers
 // them, a translation shows in its locale, and L10n finds them by path.
 func TestLabels(t *testing.T) {
 	tr := i18ntest.New(t, i18n.Locale{Code: "en", NativeName: "English"})

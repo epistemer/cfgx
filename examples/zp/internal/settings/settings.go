@@ -2,7 +2,8 @@
 // ./schema, and this file holds the computed values.
 package settings
 
-//go:generate go tool cfgx gen ./schema
+// genx runs cfgx gen here, then i18n's labels generator: see genx.yaml and
+// the go:generate line in main.go.
 
 import (
 	"errors"

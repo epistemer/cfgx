@@ -78,10 +78,6 @@ type App struct {
 	StorePos Pos    `json:"storePos,omitempty"`
 	// Initialisms are extra words written in capitals in Go names.
 	Initialisms []string `json:"initialisms,omitempty"`
-	// I18n makes the generator write translation keys for the labels of
-	// groups, keys and enum values (App.I18n). Unreleased; roadmap M11.2
-	// removes it in favour of Labels.
-	I18n bool `json:"i18n,omitempty"`
 	// Labels makes the generator write the same labels as data, a
 	// labels/v1 file for genx (App.Labels).
 	Labels   bool      `json:"labels,omitempty"`

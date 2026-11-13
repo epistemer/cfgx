@@ -39,7 +39,6 @@ type AppDef struct {
 	formats               []Format
 	global                []*GroupDef
 	initialisms           []string
-	i18n                  bool
 	labels                bool
 	store                 *PathKey
 	storePos              ir.Pos
@@ -95,21 +94,10 @@ func (a *AppDef) Store(pathKey *PathKey) *AppDef {
 	return a
 }
 
-// I18n makes cfgx gen also write zz_<package>_i18n.go: a translation key
-// of github.com/epistemer/i18n for the label of every group, key and enum
-// value, for a settings dashboard. A label's key is "settings." plus the
-// path, and its text is the description; an enum value's adds a dot and the
-// value's text, which is also its label. The app's module must require
-// github.com/epistemer/i18n.
-func (a *AppDef) I18n() *AppDef {
-	a.i18n = true
-	return a
-}
-
 // Labels makes cfgx gen also write zz_<package>.labels.json: the label of
 // every group, key and enum value, for a settings dashboard, as a labels/v1
-// file (cfgx ADR 0008). genx turns it into Go with i18n's labels generator;
-// cfgx itself writes no Go that imports i18n. A label's key is "settings."
+// file (cfgx ADR 0008). genx (github.com/epistemer/genx) turns it into Go
+// with i18n's labels generator; cfgx itself writes no Go that imports i18n. A label's key is "settings."
 // plus the path, its text is the description, its path is the path, and a
 // group's or key's label has a variable, L10n plus the interface's or
 // getter's name. An enum value's path adds a dot and the value's text, which
@@ -597,7 +585,6 @@ func Export(w io.Writer) error {
 		out.Formats = append(out.Formats, string(f))
 	}
 	out.Initialisms = a.initialisms
-	out.I18n = a.i18n
 	out.Labels = a.labels
 	// paths maps every group reachable from the App to its dotted path.
 	paths := map[*GroupDef]string{}

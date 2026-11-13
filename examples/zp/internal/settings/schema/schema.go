@@ -110,8 +110,9 @@ var App = dsl.App("zp", "ZaynPay backend",
 	ConfigFile("config", ".", "$HOME/.zp", "/etc/zp").
 	Initialisms("OTP", "JWT", "SMTP", "MFA").
 	Global(Log).
-	// Labels for a settings dashboard: zz_settings_i18n.go.
-	I18n()
+	// Labels for a settings dashboard, as data: zz_settings.labels.json,
+	// which genx turns into zz_settings_i18n.go with i18n's generator.
+	Labels()
 
 // Commands select settings. They are config profiles, not cobra commands.
 var (
