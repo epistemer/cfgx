@@ -202,7 +202,6 @@ func packageDir(ctx context.Context, dir string) (string, error) {
 	return filepath.ToSlash(rel), nil
 }
 
-
 // writeIfChanged writes data to path unless it already holds exactly that,
 // so an unchanged file keeps its timestamp.
 func writeIfChanged(path string, data []byte) error {
