@@ -68,6 +68,11 @@ func TestInitNames(t *testing.T) {
 			want:   initData{Module: "github.com/epistemer/example", Bin: "confab", Name: "confab", EnvPrefix: "CONFAB"},
 		},
 		{
+			module: "example.com/My_Service/v2",
+			name:   "svc",
+			want:   initData{Module: "example.com/My_Service/v2", Bin: "svc", Name: "svc", EnvPrefix: "SVC"},
+		},
+		{
 			module: "github.com/epistemer/example",
 			name:   "my-app",
 			want:   initData{Module: "github.com/epistemer/example", Bin: "my-app", Name: "my-app", EnvPrefix: "MY_APP"},

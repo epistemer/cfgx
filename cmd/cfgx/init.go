@@ -73,12 +73,10 @@ func namedInitData(module, name string) (initData, error) {
 	if !nameRE.MatchString(name) {
 		return initData{}, fmt.Errorf("-name %q isn't a name init accepts: lower-case letters, digits and single dashes, starting with a letter, such as my-app", name)
 	}
-	d, err := newInitData(module)
-	if err != nil {
-		return initData{}, err
+	if err := modmodule.CheckImportPath(module); err != nil {
+		return initData{}, fmt.Errorf("%q isn't a module path, such as example.com/hello: %v", module, err)
 	}
-	d.Bin, d.Name, d.EnvPrefix = name, name, strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
-	return d, nil
+	return initData{Module: module, Bin: name, Name: name, EnvPrefix: strings.ToUpper(strings.ReplaceAll(name, "-", "_"))}, nil
 }
 
 // render executes every template of the skeleton: the files to write, by
@@ -139,9 +137,12 @@ func initCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 	named := false
 	fl.Visit(func(f *flag.Flag) { named = named || f.Name == "name" })
-	d, err := newInitData(fl.Arg(0))
+	var d initData
+	var err error
 	if named {
 		d, err = namedInitData(fl.Arg(0), *name)
+	} else {
+		d, err = newInitData(fl.Arg(0))
 	}
 	if err == nil {
 		err = initModule(ctx, d, *local, stdout, stderr)
@@ -166,7 +167,7 @@ func initModule(ctx context.Context, d initData, local string, stdout, stderr io
 	sort.Strings(paths)
 	// What go mod and cfgx gen write, too.
 	made := []string{"go.mod", "go.sum", "internal/settings/zz_settings.go", d.Bin + ".example.yaml",
-		d.Bin + ".schema.json", ".env.example", "docs/CONFIG.md", "cfgx.lock.json"}
+		d.Bin + ".schema.json", ".env.example", "docs/CONFIG.md", "cfgx.lock.json", d.Bin + exe()}
 	var exist []string
 	for _, p := range append(made, paths...) {
 		if _, err := os.Lstat(filepath.FromSlash(p)); err == nil {
@@ -212,15 +213,11 @@ func initModule(ctx context.Context, d initData, local string, stdout, stderr io
 	} else {
 		steps = append(steps, []string{"get", "-tool", cfgxModule + "/cmd/cfgx@" + cfgxVersion()})
 	}
-	exe := ""
-	if runtime.GOOS == "windows" {
-		exe = ".exe"
-	}
 	steps = append(steps,
 		[]string{"mod", "tidy"},
 		[]string{"generate", "./..."},
 		[]string{"mod", "tidy"},
-		[]string{"build", "-o", d.Bin + exe, "."},
+		[]string{"build", "-o", d.Bin + exe(), "."},
 	)
 	for _, s := range steps {
 		fmt.Fprintln(stderr, "go", strings.Join(s, " "))
@@ -260,6 +257,14 @@ func undo(before map[string]bool) {
 	for _, p := range made {
 		os.Remove(p)
 	}
+}
+
+// exe is the suffix of a program's file name on this OS.
+func exe() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
 }
 
 // cfgxVersion is the version of the running cfgx, which the new module
