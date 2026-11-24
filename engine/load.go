@@ -616,13 +616,13 @@ func (l *loader[V]) loadKey(v *V, i int) {
 			return
 		}
 	}
-	if k.Check != nil && k.IsSet(v) {
-		if err := k.Check(v); err != nil {
+	if (k.Check != nil || k.Validate != nil) && k.IsSet(v) {
+		if err, own := k.check(v); err != nil {
 			src := "default"
 			if win != nil {
 				src = win.origin.String()
 			}
-			l.errs = append(l.errs, cfgx.Problem{Key: k.Path, Message: err.Error(), Source: src})
+			l.errs = append(l.errs, cfgx.Problem{Key: k.Path, Message: err.Error(), Source: src, Err: own})
 			return
 		}
 	}
@@ -1052,16 +1052,17 @@ func (l *loader[V]) storeLayer(k *Key[V], i int, win *candidate, origins []Origi
 	c := &candidate{raw: rec.Raw, origin: Origin{Layer: LayerStore}}
 	scratch := new(V)
 	err := apply(k, scratch, c, c.raw)
+	var own error // the app's Validate error, kept as Problem.Err (A15)
 	switch {
 	case err != nil:
 	case k.Required && !k.IsSet(scratch):
 		// Empty stays empty: a required key can't take it from the store.
 		err = errors.New("is required, but the stored value is empty")
-	case k.Check != nil && k.IsSet(scratch):
-		err = k.Check(scratch)
+	case (k.Check != nil || k.Validate != nil) && k.IsSet(scratch):
+		err, own = k.check(scratch)
 	}
 	if err != nil && l.strict[i] {
-		l.errs = append(l.errs, cfgx.Problem{Key: k.Path, Message: err.Error(), Source: "store"})
+		l.errs = append(l.errs, cfgx.Problem{Key: k.Path, Message: err.Error(), Source: "store", Err: own})
 		return win, origins, false
 	}
 	if err != nil {

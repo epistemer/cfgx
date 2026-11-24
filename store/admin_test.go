@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -41,7 +42,13 @@ func adminApp(dir string) *engine.App[adVals] {
 			Set:   func(v *adVals, r string) error { return engine.ParseDuration(r, &v.Wait) },
 			IsSet: func(v *adVals) bool { return v.Wait != 0 }, Show: func(v *adVals) any { return v.Wait.String() },
 			Format: func(v *adVals) (string, error) { return engine.FormatDuration(v.Wait), nil },
-			Check:  func(v *adVals) error { return engine.AtMost(v.Wait, time.Hour, "1h") }},
+			Check:  func(v *adVals) error { return engine.AtMost(v.Wait, time.Hour, "1h") },
+			Validate: func(v *adVals) error {
+				if v.Wait == 13*time.Second {
+					return errUnlucky
+				}
+				return nil
+			}},
 		{Path: "tags", Env: "AD_TAGS", Kind: "strings", Mutable: true,
 			SetItems: func(v *adVals, items []string) error { return engine.ParseStrings(items, &v.Tags) },
 			IsSet:    func(v *adVals) bool { return len(v.Tags) != 0 }, Show: func(v *adVals) any { return v.Tags },
@@ -234,4 +241,19 @@ func TestDB(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+var errUnlucky = errors.New("13s is unlucky")
+
+// Store.Update keeps a Validate function's error as Problem.Err (A15).
+func TestUpdateProblemErr(t *testing.T) {
+	s := adminStore(t, nil)
+	err := s.Update(context.Background(), map[string]string{"wait": "13s"})
+	var errs cfgx.Errors
+	if !errors.As(err, &errs) || len(errs) != 1 || errs[0].Err != errUnlucky || errs[0].Key != "wait" {
+		t.Fatalf("%v (%+v); want Err errUnlucky on wait", err, errs)
+	}
+	if err := s.Update(context.Background(), map[string]string{"wait": "2h"}); !errors.As(err, &errs) || errs[0].Err != nil {
+		t.Errorf("a constraint: %v, %+v", err, errs)
+	}
 }

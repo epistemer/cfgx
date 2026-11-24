@@ -6,6 +6,16 @@ may change the API; the changes will be listed here.
 
 ## Unreleased
 
+### Added
+
+- `cfgx.Problem.Err`: the error a key's `Validate` function returned,
+  unchanged, at startup, in typed `Update` and in `Store.Update`, so a
+  settings page can show the app's own, translated error on the field.
+  It is nil for problems cfgx finds itself (interface §7.4, A15). A
+  `cfgx.Problem` literal without field names no longer compiles.
+- Generated keys keep a `Validate` function apart from cfgx's own
+  constraints; run `go generate` to regenerate settings packages.
+
 ### Changed
 
 - `App.Labels()`: value labels (`settings.<key>.<value>`) are skipped for

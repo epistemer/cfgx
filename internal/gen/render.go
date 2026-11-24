@@ -124,19 +124,18 @@ var keys = [...]engine.Key[values]{
 		Schema: {{lit .Schema}},
 		{{- end}}
 		{{- end}}
-		{{- if or .Checks .Validate}}
+		{{- if .Checks}}
 		Check: func(v *values) error {
 		{{- range .Checks}}
 			if err := {{.}}; err != nil {
 				return err
 			}
 		{{- end}}
-		{{- if .Validate}}
-			return {{.Validate.Expr}}(v.{{.Field}})
-		{{- else}}
 			return nil
-		{{- end}}
 		},
+		{{- end}}
+		{{- if .Validate}}
+		Validate: func(v *values) error { return {{.Validate.Expr}}(v.{{.Field}}) },
 		{{- end}}
 		{{- if .Complete}}
 		Complete: &engine.Completion{ {{- if .CompleteExts}}Exts: []string{ {{- range $i, $e := .CompleteExts}}{{if $i}}, {{end}}{{printf "%q" $e}}{{end -}} }{{end}}{{if .CompleteDirs}}Dirs: true{{end}}{{if .CompleteFunc}}Func: {{.CompleteFunc.Expr}}{{end -}} },
