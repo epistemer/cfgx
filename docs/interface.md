@@ -235,7 +235,7 @@ with type-checked modifiers.
 | `Bool` | `bool` | flag is `--x` / `--x=false` |
 | `Duration` | `time.Duration` | `"90s"`, `"5m"`; bare numbers rejected (no unit ambiguity) |
 | `ByteSize` | `int64` | `"1MiB"`, `"512KB"`, or bytes |
-| `Enum(name, desc, values ...T)` | `T` | `T` is any type whose underlying type is a string, integer, float or bool type. A value's text is its `MarshalText`, else a string type's value, else its `String`, else its literal. Completion + docs list the values |
+| `Enum(name, desc, values ...T)` | `T` | `T` is any type whose underlying type is a string, integer, float or bool type. A value's text is its `MarshalText`, else a string type's value, else its `String`, else its literal. Completion + docs list the values. With `App.Labels`, a `T` that has a `Label()` method gets no value labels from cfgx (A16) |
 | `Secret` | `cfgx.Secret` | never a flag by default; also reads `<ENV>_FILE` (setting both is an error) |
 | `SecretFile` | `cfgx.Secret` | the setting is a path, resolved like `Path`; contents are loaded eagerly at startup from a regular file of at most 1 MiB |
 | `Path` | `string` | a path, cleaned and resolved relative to the config file's directory when set in a file |
@@ -549,13 +549,22 @@ func L10n(path string) i18n.TKer
 
 // in a dashboard template, for every k in s.Store().Keys():
 { settings.L10n(k.Key).T(ctx) }
-{ settings.L10n(k.Key + "." + v).T(ctx) } // each enum value v in k.Enum
+// each enum value v in k.Enum; nil when the value's type labels it (A16)
+if l := settings.L10n(k.Key + "." + v); l != nil { { l.T(ctx) } } else { { v } }
 ```
 
 - A group's or key's label is `settings.<path>`, and its source text is the
   description. An enum value's is `settings.<key path>.<value>`, and its source
   text is the value. Every key the app loads gets one, mutable or not;
   command arguments don't, since they are flags of one run.
+- An enum whose Go type labels its own values gets no value labels (A16,
+  [ADR 0009](adr/0009-enum-labels-from-the-type.md)): the type's labels are
+  the ones every other page shows, so a translator translates a value once.
+  The test is structural, since cfgx doesn't import i18n: `T`'s value method
+  set has `Label()` with no parameters and one result, as models' enums (an
+  `option.SelectOption`) have. The key's own label stays. `L10n` returns nil
+  for such a value's path, so a dashboard that walks `k.Enum` falls back to
+  the value's text, or the app labels the values through the type.
 - In the file each label has its `key`, `text` and `path`; a group's or key's
   has a `var`, `L10n` plus the interface's or getter's name. `package.dir` is
   the package's directory relative to the module root.
@@ -777,6 +786,44 @@ Rules:
   shared store is post-v0.1.0 work.
 - **No secrets in the store** in v0.1.0, since bbolt doesn't encrypt.
 
+### 7.4 Configuration errors
+
+Loading and writes report every problem at once, as `cfgx.Errors` (A15):
+
+```go
+package cfgx
+
+type Problem struct {
+	Key     string // the setting, e.g. database.port
+	Message string // what is wrong with it, in English, for logs
+	Source  string // where the value came from, e.g. "env ZP_DATABASE_PORT"; "" if nowhere
+	Err     error  // the error the key's Validate function returned, unchanged; nil otherwise
+}
+
+type Errors []Problem // sorted by key; Error() lists one problem per line
+```
+
+- `Err` is set only when the problem is the app's own: the key's `Validate`
+  function returned it, at startup, on reload or in `Update` (typed or
+  through `Store.Update`). `Message` is then `Err.Error()`.
+- Problems cfgx finds itself (parsing, `Range`, `Pattern` and the other
+  constraints, required keys, rules) have `Err == nil`. Their only text is
+  `Message`.
+- A settings page finds the field by `Key` and shows `Err` through the
+  app's error package, so a translated, public error lands on the right
+  field:
+
+```go
+var probs cfgx.Errors
+if errors.As(err, &probs) {
+	for _, p := range probs {
+		if p.Err != nil {
+			fieldFor(p.Key).Fail(p.Err) // the app's own mapping; epistemer/errors gives T(ctx) for people
+		}
+	}
+}
+```
+
 ---
 
 ## 8. Generated `config` subcommand
@@ -824,7 +871,7 @@ warning: database.ssl_mode is deprecated, use database.sslmode (config.yaml:9:3)
 
 | Command | Purpose |
 |---------|---------|
-| `cfgx init` | scaffold a project: cobra root, settings package, schema, go:generate, `go tool` entry |
+| `cfgx init [-name app] <module path>` | scaffold a project: cobra root, settings package, schema, go:generate, `go tool` entry. The app is named after the module path's last element, or `-name` (A17) |
 | `cfgx gen ./schema` | generate code (plus `zz_<package>.labels.json` with `App.Labels`, §5.5) and artifacts |
 | `cfgx gen --check` | CI: fail if generated files are stale |
 | `cfgx diff <old cfgx.lock.json>` | config changelog: added, removed, retyped and re-defaulted keys, flagged as breaking or not |
@@ -877,3 +924,6 @@ warning: database.ssl_mode is deprecated, use database.sslmode (config.yaml:9:3)
 | 2026-11-08 | **A12.** Every generated command type has `Args() []string`, returning the positional arguments cobra parsed, so run functions keep the signature `func(ctx, *Serve) error` (§3.8, §5.2). Chosen by epistemer over adding an `args` parameter to every run function. | Amendment |
 | 2026-11-12 | **A13.** `App.I18n()` generates `zz_<package>_i18n.go`: an `epistemer/i18n` key per group, key and enum value (`settings.<path>`, text from the description or the value), an `L10n<Name>` variable per group and key, and `L10n(path)` (§3.7, §5.5, §9). Requested by epistemer: every neozp package that generates code generates its locales too, following zp's `gen` conventions. Opt-in, the key names and `L10n` decided by Claude; overturnable. | Amendment |
 | 2026-11-13 | **A14.** `App.Labels()` replaces `App.I18n()`. With it, `cfgx gen` writes `zz_<package>.labels.json` next to the generated code: the labels of A13 as data, in the `labels/v1` shape neozp's generators share, with the same keys, texts, paths and `L10n<Name>` names, which cfgx still claims. cfgx no longer writes `zz_<package>_i18n.go`; i18n's `labels` generator writes it from that file, run by the neozp generation driver, with the same declarations. `App.I18n()` was never in a tagged release, so it goes without a deprecation period (§3.7, §5.5, §9; [ADR 0008](adr/0008-labels-as-data.md)). Direction chosen by epistemer: one generation pipeline over shared metadata, in place of A13's rule that every generator writes its own locales. `App.Labels()`, the file's name and place, and staying opt-in decided by Claude; overturnable. In effect since roadmap M11.2 (2026-11-13). | Amendment |
+| 2026-11-24 | **A15.** `cfgx.Problem` gets `Err error`: the error the key's `Validate` function returned, unchanged, so a settings page can show a translated, public error on the right field. `Message` stays `Err.Error()`. nil for every problem cfgx finds itself (§7.4). From Confab iteration 1, finding F12 (question C1). Direction chosen by epistemer on 2026-11-24; the field's name and when it is set proposed by Claude, **awaiting lock**. | Amendment |
+| 2026-11-24 | **A16.** With `App.Labels`, an `Enum` whose Go type has a `Label()` method (value receiver, no parameters, one result) gets no `settings.<key>.<value>` labels; the key's own label stays (§3.2, §5.5; [ADR 0009](adr/0009-enum-labels-from-the-type.md)). Reverses A14 for that case. From Confab iteration 1, finding F3 (question C2). Direction chosen by epistemer on 2026-11-24; the structural test proposed by Claude, **awaiting lock**. | Amendment |
+| 2026-11-24 | **A17.** `cfgx init -name <app>` names the app: the program, the cobra command, the config file, the generated artifacts and the env prefix. It defaults to the module path's last element, as before. A `-name` must be lower-case letters, digits and single dashes, starting with a letter, or init refuses it (§9). `go build .` still names a binary after the module path, so init builds with `-o <app>` and the README says so. From Confab iteration 1, finding F1 (question C3). Direction chosen by epistemer on 2026-11-24; the flag and its rule proposed by Claude, **awaiting lock**. | Amendment |

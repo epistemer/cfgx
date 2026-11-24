@@ -351,6 +351,23 @@ between M11.1 and M11.2, so no tag ever carries `App.I18n()`.
 
 ---
 
+## M12 — Confab iteration 1
+
+**Goal:** cfgx's share of the findings from Confab, the first app on all of
+neozp (`epistemer/example`, docs/findings.md): F1, F3, F12 and F14. epistemer
+answered questions C1–C3 on 2026-11-24; amendments A15–A17 give them exact
+names, and wait for epistemer's lock before M12.1–M12.3 start.
+
+| ✓ | ID | Item | Size | Done when |
+|---|----|------|------|-----------|
+| ☐ | M12.1 | **A15** (F12, C1): `Problem.Err`, the key's `Validate` error, unchanged. Generated keys keep the app's validator apart from cfgx's own constraints (`engine.Key.Validate`), so the loader knows whose error it is | M | Tests: a validator's error reaches `Problem.Err` unchanged (`errors.Is`/`As`) at startup, through the typed `Update` and through `Store.Update`, strict store path included; a range or parse problem has `Err == nil`; goldens regenerated |
+| ☐ | M12.2 | **A16** (F3, C2): no value labels for an `Enum` whose `T` has `Label()` ([ADR 0009](adr/0009-enum-labels-from-the-type.md)). IR flag `EnumLabeled`, IR version 20 | S | A golden labels file without the values of a labelled type, with them for a plain one; dsl tests for value and pointer receivers, a method with parameters, and two results |
+| ☐ | M12.3 | **A17** (F1, C3): `cfgx init -name <app>`. Builds with `-o`; README, `.gitignore`, the schema and `main.go` use the name | S | init tests for the default, `-name`, and refused names; the e2e init script runs with `-name` |
+| ☐ | M12.4 | F14, within the terms: the skeleton's `main.go` calls `slog.SetDefault` with its logrus bridge | XS | The skeleton's test shows a `slog.Default()` record in logrus's format |
+| ☐ | M12.5 | Release `v0.3.0`; the `cfgx` skill and the board's cfgx items current | S | Tag pushed; the CHANGELOG lists A15–A17 and F14, and says unkeyed `cfgx.Problem` literals break |
+
+---
+
 ## After v0.1.0 (ordered backlog)
 
 1. **Reloadable keys** ([implementation.md §3.7](implementation.md)). The DSL
