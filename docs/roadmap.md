@@ -365,6 +365,7 @@ names, locked by epistemer on 2026-11-24.
 | ☑ | M12.3 | **A17** (F1, C3): `cfgx init -name <app>`. Builds with `-o`; README, `.gitignore`, the schema and `main.go` use the name | S | init tests for the default, `-name`, and refused names; the e2e init script runs with `-name` |
 | ☑ | M12.4 | F14, within the terms: the skeleton's `main.go` calls `slog.SetDefault` with its logrus bridge | XS | The skeleton's test shows a `slog.Default()` record in logrus's format |
 | ✓ | M12.5 | Release `v0.3.0`; the `cfgx` skill and the board's cfgx items current | S | Tag pushed; the CHANGELOG lists A15–A17 and F14, and says unkeyed `cfgx.Problem` literals break |
+| ✓ | M12.6 | Fix: the skeleton sends the `log` package's output through the bridge at error level, so net/http's server errors survive `--log-level warn`. Release `v0.3.1` | XS | The e2e init script shows a `log.Print` line at `level=error`; tag pushed |
 
 ---
 

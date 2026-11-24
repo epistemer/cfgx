@@ -30,8 +30,10 @@ func main() {
 	}()
 	log := logging.New()
 	// Libraries that log through slog.Default, such as auth and handlers,
-	// go to the same logger as the rest.
+	// go to the same logger as the rest. So does the log package, at error
+	// level, so net/http's server errors still show at any log level.
 	slog.SetDefault(logging.Slog(log))
+	slog.SetLogLoggerLevel(slog.LevelError)
 	err := newRoot(log).ExecuteContext(ctx)
 	stop()
 	if err != nil {

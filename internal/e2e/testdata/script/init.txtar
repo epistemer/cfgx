@@ -30,6 +30,7 @@ stderr 'level=warning msg="unknown key \\"servr\\" in hello.yaml:1:1; did you me
 cp ../files/slog_test.go slog_test.go
 go test -run TestSlogDefault -v .
 stdout 'level=info msg="from a library" k=1'
+stdout 'level=error msg="from the log package"'
 
 # A second init refuses, and changes nothing.
 ! exec ../cfgx$exe init example.com/hello
@@ -59,6 +60,7 @@ servr:
 package main
 
 import (
+	"log"
 	"log/slog"
 	"os"
 	"testing"
@@ -69,4 +71,5 @@ func TestSlogDefault(t *testing.T) {
 	os.Args = []string{"hello", "version"}
 	main()
 	slog.Info("from a library", "k", 1)
+	log.Print("from the log package")
 }

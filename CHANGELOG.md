@@ -4,6 +4,15 @@ All notable changes to cfgx are listed here. Versions follow
 [semantic versioning](https://semver.org). Until v1.0.0, a minor release
 may change the API; the changes will be listed here.
 
+## v0.3.1 (2026-11-24)
+
+### Fixed
+
+- `cfgx init`'s `main.go` logs the standard `log` package's output at error
+  level through its bridge, so net/http's server errors still show when
+  the app's log level is warn or error. In v0.3.0 they went through at
+  info level and were dropped there.
+
 ## v0.3.0 (2026-11-24)
 
 From Confab, the first app on all of neozp (its findings F1, F3, F12 and
