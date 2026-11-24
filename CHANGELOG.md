@@ -4,6 +4,14 @@ All notable changes to cfgx are listed here. Versions follow
 [semantic versioning](https://semver.org). Until v1.0.0, a minor release
 may change the API; the changes will be listed here.
 
+## Unreleased
+
+### Changed
+
+- `cfgx init`'s `main.go` sets its logrus bridge as `slog.SetDefault`'s
+  logger too, so libraries that log through `slog.Default()` write in the
+  app's format (Confab finding F14).
+
 ## v0.2.0 (2026-11-13)
 
 ### Added

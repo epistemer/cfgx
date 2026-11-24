@@ -35,7 +35,9 @@ works, and nothing an app has to delete first.
 Option 2. The skeleton is:
 
 - `main.go`: the cobra root, `settings.BindRoot` with `cfgx.WithLogger` set
-  to the slog bridge, `serve`, `version` and `config` commands, cobra's
+  to the slog bridge, which is also `slog.SetDefault`'s logger, so libraries
+  that log through `slog.Default()` (auth, handlers, i18n) share the app's
+  format (added 2026-11-24, Confab finding F14), `serve`, `version` and `config` commands, cobra's
   default `completion` command, and `ExecuteContext` with a context from
   `signal.NotifyContext` (interrupt, and SIGTERM where it exists).
 - `internal/settings/settings.go`: the `//go:generate go tool cfgx gen

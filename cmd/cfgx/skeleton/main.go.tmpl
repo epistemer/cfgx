@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"runtime/debug"
@@ -36,9 +37,12 @@ func main() {
 func newRoot() *cobra.Command {
 	log := logging.New()
 	root := &cobra.Command{Use: "{{.Bin}}", Short: "{{.Bin}} is a cfgx application", SilenceUsage: true}
-	// cfgx's warnings, such as unknown keys in the config file, go to the
-	// same logger as the rest.
-	settings.BindRoot(root, cfgx.WithLogger(logging.Slog(log)))
+	// Libraries that log with log/slog, such as cfgx's warnings about
+	// unknown keys in the config file, go to the same logger as the rest:
+	// cfgx through WithLogger, the others through slog.Default.
+	slogger := logging.Slog(log)
+	slog.SetDefault(slogger)
+	settings.BindRoot(root, cfgx.WithLogger(slogger))
 	root.AddCommand(
 		settings.ServeCommand(&cobra.Command{Use: "serve", Short: "Run the HTTP server"},
 			func(ctx context.Context, s *settings.Serve) error {
