@@ -73,13 +73,13 @@ func TestInitNames(t *testing.T) {
 			want:   initData{Module: "github.com/epistemer/example", Bin: "my-app", Name: "my-app", EnvPrefix: "MY_APP"},
 		},
 	} {
-		d, err := newInitData(tc.module, tc.name)
+		d, err := namedInitData(tc.module, tc.name)
 		if err != nil || d != tc.want {
 			t.Errorf("%s -name %s: %+v, %v; want %+v", tc.module, tc.name, d, err, tc.want)
 		}
 	}
 	for _, bad := range []string{"Confab", "2fa", "a--b", "-a", "a-", "a_b", "a b", "", "a/b"} {
-		if _, err := newInitData("example.com/hello", bad); err == nil {
+		if _, err := namedInitData("example.com/hello", bad); err == nil {
 			t.Errorf("-name %q accepted", bad)
 		}
 	}

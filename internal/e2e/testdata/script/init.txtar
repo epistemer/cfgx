@@ -37,7 +37,7 @@ stderr 'refusing to overwrite go.mod, go.sum, internal/settings/zz_settings.go, 
 
 # A refused name writes nothing.
 ! exec ../cfgx$exe init -name Bad example.com/x
-stderr 'cfgx init: -name "Bad" must match'
+stderr 'cfgx init: -name "Bad" isn.t a name init accepts'
 
 # A second run in a new directory with -name sets the app name.
 cd ..
