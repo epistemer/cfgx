@@ -25,18 +25,25 @@ taken for you, what's next, and what's waiting on you. The terms are in
   - **M12.3** (A17, F1, [PR #48](https://github.com/epistemer/cfgx/pull/48)):
     `cfgx init -name <app>`; init builds with `-o`, and refuses an
     existing binary.
-  - **`v0.3.0`** tagged.
+  - **`v0.3.0`** tagged; **`v0.3.1`** fixes the skeleton's `log`
+    package level (M12.6).
 - **Agents:** Argon was cooling down (until about 2026-11-28).
   Gemini 4 Hydrogen (High) built M12.2 (about 255k tokens) and reviewed
   M12.1 (about 41k); Gemini 3.8 Flash (High) built M12.3 (about 183k) and
   reviewed M12.4 (about 189k), M12.2 (about 81k) and M12.3 (about 70k).
-  Claude reviewed both builds; M12.3's named path was simplified.
+  Claude reviewed both builds; M12.3's named path was simplified. Two PR
+  branches (#48, #49) were rebased on main and pushed with
+  `--force-with-lease`.
 - **Reviewed, taken:** `slog.SetDefault` in `main`, not in the command
   constructor; Problem.Err tests for a Validate-only key and a value that
   fails both; `-name` checks only the module path; init refuses an
-  existing binary. **Not taken:** deadlock and level concerns about the
-  existing slog bridge (speculative); M12.2's "missing import" and
-  "testdata import" (false: the tests pass).
+  existing binary. **Not taken:** a deadlock concern about the slog
+  bridge (it needs a logrus hook that logs through `log`); M12.2's
+  "missing import" and "testdata import" (false: the tests pass). The
+  review's level point was wrongly set aside at first: after
+  `slog.SetDefault`, the `log` package's output (net/http's server errors)
+  went through at info level and was dropped at `--log-level warn`. Fixed
+  in v0.3.1 (M12.6), which sets it to error level.
 - **Decided for you:** a `-name` that isn't already in canonical form is
   refused, not rewritten; `Err` is nil for cfgx's own constraints, so a
   value that fails a constraint and the validator reports the constraint.
