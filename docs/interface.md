@@ -795,7 +795,7 @@ package cfgx
 
 type Problem struct {
 	Key     string // the setting, e.g. database.port
-	Message string // what is wrong with it, in English, for logs
+	Message string // what is wrong with it, for logs
 	Source  string // where the value came from, e.g. "env ZP_DATABASE_PORT"; "" if nowhere
 	Err     error  // the error the key's Validate function returned, unchanged; nil otherwise
 }
@@ -804,8 +804,8 @@ type Errors []Problem // sorted by key; Error() lists one problem per line
 ```
 
 - `Err` is set only when the problem is the app's own: the key's `Validate`
-  function returned it, at startup, on reload or in `Update` (typed or
-  through `Store.Update`). `Message` is then `Err.Error()`.
+  function returned it, at startup or in `Update` (typed or through
+  `Store.Update`). `Message` is then `Err.Error()`.
 - Problems cfgx finds itself (parsing, `Range`, `Pattern` and the other
   constraints, required keys, rules) have `Err == nil`. Their only text is
   `Message`.

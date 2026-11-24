@@ -233,12 +233,10 @@ var keys = [...]engine.Key[values]{
 	{
 		Path: "auth.emailfrom", Env: "ZP_AUTH_EMAILFROM", Flag: "auth-emailfrom",
 		Type: "string", Desc: "Sender address for auth emails", Quote: true,
-		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.AuthEmailFrom) },
-		IsSet: func(v *values) bool { return v.AuthEmailFrom != "" },
-		Show:  func(v *values) any { return v.AuthEmailFrom },
-		Check: func(v *values) error {
-			return validate.Email(v.AuthEmailFrom)
-		},
+		Set:      func(v *values, raw string) error { return engine.ParseString(raw, &v.AuthEmailFrom) },
+		IsSet:    func(v *values) bool { return v.AuthEmailFrom != "" },
+		Show:     func(v *values) any { return v.AuthEmailFrom },
+		Validate: func(v *values) error { return validate.Email(v.AuthEmailFrom) },
 	},
 	{
 		Path: "auth.otp.ttl", Env: "ZP_AUTH_OTP_TTL", Flag: "auth-otp-ttl",
@@ -478,12 +476,10 @@ var keys = [...]engine.Key[values]{
 	{
 		Path: "to.address", Env: "", Flag: "to-address",
 		Type: "string", Desc: "Recipient address", FlagOnly: true, Quote: true, Required: true,
-		Set:   func(v *values, raw string) error { return engine.ParseString(raw, &v.TestEmailToAddress) },
-		IsSet: func(v *values) bool { return v.TestEmailToAddress != "" },
-		Show:  func(v *values) any { return v.TestEmailToAddress },
-		Check: func(v *values) error {
-			return validate.Email(v.TestEmailToAddress)
-		},
+		Set:      func(v *values, raw string) error { return engine.ParseString(raw, &v.TestEmailToAddress) },
+		IsSet:    func(v *values) bool { return v.TestEmailToAddress != "" },
+		Show:     func(v *values) any { return v.TestEmailToAddress },
+		Validate: func(v *values) error { return validate.Email(v.TestEmailToAddress) },
 	},
 	{
 		Path: "template", Env: "", Flag: "template",

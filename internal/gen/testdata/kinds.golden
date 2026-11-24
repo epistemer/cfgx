@@ -246,8 +246,9 @@ var keys = [...]engine.Key[values]{
 			if err := engine.Match(v.KName, patternKName1, "[a-z]+"); err != nil {
 				return err
 			}
-			return errors.New(v.KName)
+			return nil
 		},
+		Validate: func(v *values) error { return errors.New(v.KName) },
 	},
 	{
 		Path: "k.cpus", Env: "K_K_CPUS", Flag: "k-cpus",

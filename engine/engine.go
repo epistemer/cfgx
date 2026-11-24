@@ -78,9 +78,13 @@ type Key[V any] struct {
 	// Go values that encode as JSON, with a secret masked, a URL's password
 	// redacted and a file's contents summed up by size.
 	Show func(v *V) any
-	// Check runs the key's constraints, then its Validate function, on a
-	// value that is set; nil if it has none.
+	// Check runs the key's constraints (Range, Pattern, ...) on a value
+	// that is set; nil if it has none.
 	Check func(v *V) error
+	// Validate runs the key's Validate function on a value that is set,
+	// after Check; nil if it has none. Its error is the app's own, so the
+	// problem keeps it as cfgx.Problem.Err (A15).
+	Validate func(v *V) error
 	// DefaultFrom names the function DefaultFunc calls, for --help.
 	DefaultFrom string
 	// Hidden leaves the flag out of --help.
@@ -246,4 +250,20 @@ func TestDefaults[V any](a *App[V], v *V) {
 			}
 		}
 	}
+}
+
+// check runs k's constraints, then its Validate function, on a value that
+// is set. own is the error when Validate returned it, nil otherwise.
+func (k *Key[V]) check(v *V) (err, own error) {
+	if k.Check != nil {
+		if err := k.Check(v); err != nil {
+			return err, nil
+		}
+	}
+	if k.Validate != nil {
+		if err := k.Validate(v); err != nil {
+			return err, err
+		}
+	}
+	return nil, nil
 }

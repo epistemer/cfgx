@@ -40,8 +40,9 @@ func writeApp(dir string) *App[wrVals] {
 			IsSet: func(v *wrVals) bool { return v.Bolt != "" }, Show: func(v *wrVals) any { return v.Bolt }},
 		{Path: "rate", Env: "WT_RATE", Mutable: true, Required: true, Epoch: 2,
 			Set: rSet, IsSet: rIs, Format: rFmt,
-			Check:   func(v *wrVals) error { return AtMost(v.Rate, 1000, "1000") },
-			Default: func(v *wrVals) { v.Rate = 100 }, DefaultText: "100"},
+			Check:    func(v *wrVals) error { return AtMost(v.Rate, 1000, "1000") },
+			Validate: func(v *wrVals) error { return refuse(v.Rate) },
+			Default:  func(v *wrVals) { v.Rate = 100 }, DefaultText: "100"},
 		{Path: "burst", Env: "WT_BURST", Mutable: true, Set: bSet, IsSet: bIs, Format: bFmt},
 		{Path: "fixed", Env: "WT_FIXED", Set: fSet, IsSet: fIs},
 		{Path: "token", Env: "WT_TOKEN", FileEnv: true, MaxFileSize: 1 << 20,
@@ -322,5 +323,32 @@ func TestOnChangePanic(t *testing.T) {
 	}()
 	if err := w.Write(context.Background(), setRate(20)); err != nil || fmt.Sprint(calls) != "[a b a b]" {
 		t.Errorf("%v, calls %v", err, calls)
+	}
+}
+
+var errRefused = errors.New("999 isn't a rate")
+
+func refuse(n int) error {
+	if n == 999 {
+		return fmt.Errorf("rate: %w", errRefused)
+	}
+	return nil
+}
+
+// A typed write that the key's Validate function refuses reports its
+// error as Problem.Err, unchanged; a constraint's problem has none (A15).
+func TestWriteProblemErr(t *testing.T) {
+	w := loadWriter(t, writeApp(t.TempDir()), nil)
+	ctx := context.Background()
+	var errs cfgx.Errors
+	err := w.Write(ctx, setRate(999))
+	if !errors.As(err, &errs) || len(errs) != 1 {
+		t.Fatalf("%v; want one problem", err)
+	}
+	if p := errs[0]; !errors.Is(p.Err, errRefused) || p.Key != "rate" || p.Source != "store" || p.Message != p.Err.Error() {
+		t.Errorf("%+v", p)
+	}
+	if err := w.Write(ctx, setRate(5000)); !errors.As(err, &errs) || len(errs) != 1 || errs[0].Err != nil {
+		t.Errorf("a constraint: %v, %+v", err, errs)
 	}
 }
