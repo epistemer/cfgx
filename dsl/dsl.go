@@ -260,29 +260,30 @@ type KeyDef interface {
 }
 
 type keyBase struct {
-	name, desc string
-	kind       ir.Kind
-	def        *string
-	required   bool
-	tags       []*TagDef
-	aliases    []string
-	deprecated string
-	typ        *ir.Type       // enums: the values' Go type
-	enum       []ir.EnumValue // enums: the values
-	problems   []string
-	short      rune
-	flag, env  string
-	fileKey    string
-	goName     string
-	sources    []string
-	hidden     bool
-	example    *string
-	complete   *ir.Completion
-	mutable    bool
-	epoch      int
-	checks     []ir.Check
-	validate   *ir.FuncRef
-	defFunc    *ir.FuncRef
+	name, desc  string
+	kind        ir.Kind
+	def         *string
+	required    bool
+	tags        []*TagDef
+	aliases     []string
+	deprecated  string
+	typ         *ir.Type       // enums: the values' Go type
+	enum        []ir.EnumValue // enums: the values
+	enumLabeled bool           // enums: T labels its own values via Label() (A16)
+	problems    []string
+	short       rune
+	flag, env   string
+	fileKey     string
+	goName      string
+	sources     []string
+	hidden      bool
+	example     *string
+	complete    *ir.Completion
+	mutable     bool
+	epoch       int
+	checks      []ir.Check
+	validate    *ir.FuncRef
+	defFunc     *ir.FuncRef
 	// finish checks what can only be checked once every modifier has run,
 	// such as a default against Range; each returns a problem or "".
 	finish []func() string
@@ -757,6 +758,7 @@ func (k *keyBase) export(tags []string) ir.Key {
 		Deprecated:  k.deprecated,
 		Type:        k.typ,
 		Enum:        k.enum,
+		EnumLabeled: k.enumLabeled,
 		Short:       shortText(k.short),
 		Flag:        k.flag,
 		Env:         k.env,

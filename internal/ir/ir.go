@@ -9,7 +9,7 @@ import (
 // Version is the IR format version. dsl.Export writes it, and the generator
 // refuses IR of any other version, which catches a schema built against a
 // different cfgx release than the generator.
-const Version = 19
+const Version = 20
 
 // Pos is a position in the schema's source.
 type Pos struct {
@@ -123,6 +123,9 @@ type Key struct {
 	Type *Type `json:"type,omitempty"`
 	// Enum lists an enum's values, in declaration order.
 	Enum []EnumValue `json:"enum,omitempty"`
+	// EnumLabeled reports that T labels its own values: it has a Label()
+	// method (A16), so App.Labels writes no value labels.
+	EnumLabeled bool `json:"enumLabeled,omitempty"`
 	// Naming and source modifiers (M4.9). Short is a one-letter flag; Flag
 	// and Env replace the derived names whole; FileKey replaces the key's
 	// segment of its file path, and GoName its segment of Go names. "" keeps

@@ -1,0 +1,38 @@
+{
+  "domain": "labels/v1",
+  "labels": [
+    {
+      "key": "settings.log",
+      "path": "log",
+      "text": "Logging",
+      "var": "L10nLog"
+    },
+    {
+      "key": "settings.log.mode",
+      "path": "log.mode",
+      "text": "Execution mode",
+      "var": "L10nLogMode"
+    },
+    {
+      "key": "settings.log.level",
+      "path": "log.level",
+      "text": "Log level",
+      "var": "L10nLogLevel"
+    },
+    {
+      "key": "settings.log.level.debug",
+      "path": "log.level.debug",
+      "text": "debug"
+    },
+    {
+      "key": "settings.log.level.info",
+      "path": "log.level.info",
+      "text": "info"
+    }
+  ],
+  "package": {
+    "dir": "internal/settings",
+    "name": "settings"
+  },
+  "producer": "cfgx"
+}

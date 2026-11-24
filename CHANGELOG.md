@@ -8,6 +8,11 @@ may change the API; the changes will be listed here.
 
 ### Changed
 
+- `App.Labels()`: value labels (`settings.<key>.<value>`) are skipped for
+  enum types whose value method set has `Label()` with no parameters and one
+  result; the key's own label stays (interface §5.5, A16,
+  [ADR 0009](docs/adr/0009-enum-labels-from-the-type.md)).
+- The IR version is 20, so `cfgx.lock.json` files say `"version": 20`.
 - `cfgx init`'s `main.go` sets its logrus bridge as `slog.SetDefault`'s
   logger too, so libraries that log through `slog.Default()` write in the
   app's format (Confab finding F14).

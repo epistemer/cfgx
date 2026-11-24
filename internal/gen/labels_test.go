@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"bytes"
 	"encoding/json"
 	"go/token"
 	"os"
@@ -8,9 +9,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/epistemer/cfgx/dsl"
+	"github.com/epistemer/cfgx/internal/gen/testdata/labeled"
 	"github.com/epistemer/cfgx/internal/golden"
+	"github.com/epistemer/cfgx/internal/ir"
 )
 
 func labelsApp() (*Model, error) {
@@ -32,6 +37,15 @@ func TestLabelsGolden(t *testing.T) {
 	if strings.Contains(string(src), "to.address") || strings.Contains(string(src), "migrate") {
 		t.Error("arguments are flags of one run and get no labels")
 	}
+	if !strings.Contains(string(src), `"settings.scheduler.execmode"`) {
+		t.Error("labeled enum key must keep its own label")
+	}
+	if strings.Contains(string(src), "settings.scheduler.execmode.") {
+		t.Error("labeled enum must get no value labels")
+	}
+	if !strings.Contains(string(src), `"settings.database.sslmode.disable"`) {
+		t.Error("plain enum must keep its value labels")
+	}
 
 	m, err = Build(nested(), "settings")
 	if err != nil {
@@ -42,17 +56,8 @@ func TestLabelsGolden(t *testing.T) {
 	}
 }
 
-// TestLabelsSchema checks the file against genx's labels/v1 JSON Schema,
-// copied into testdata, and the rules genx adds to it (interface §11).
-func TestLabelsSchema(t *testing.T) {
-	m, err := labelsApp()
-	if err != nil {
-		t.Fatal(err)
-	}
-	src, err := RenderLabels(m, "internal/settings")
-	if err != nil {
-		t.Fatal(err)
-	}
+func checkLabelsDoc(t *testing.T, src []byte) {
+	t.Helper()
 	var doc, schema any
 	if err := json.Unmarshal(src, &doc); err != nil {
 		t.Fatal(err)
@@ -83,6 +88,70 @@ func TestLabelsSchema(t *testing.T) {
 				t.Errorf("var %q isn't a usable identifier", v)
 			}
 		}
+	}
+}
+
+// TestLabelsSchema checks the file against genx's labels/v1 JSON Schema,
+// copied into testdata, and the rules genx adds to it (interface §11).
+func TestLabelsSchema(t *testing.T) {
+	m, err := labelsApp()
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := RenderLabels(m, "internal/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkLabelsDoc(t, src)
+}
+
+var (
+	dslLabelsOnce sync.Once
+	dslLabelsIR   []byte
+	dslLabelsErr  error
+)
+
+// TestLabelsEnumLabeledFromDSL runs a real DSL schema importing a named enum
+// type with Label() string alongside a plain string enum through Export, Build
+// and RenderLabels, verifying the schema and labels output end to end.
+func TestLabelsEnumLabeledFromDSL(t *testing.T) {
+	dslLabelsOnce.Do(func() {
+		g := dsl.Group("log", "Logging",
+			dsl.Enum("mode", "Execution mode", labeled.Sequential, labeled.Parallel).Default(labeled.Sequential),
+			dsl.Enum("level", "Log level", "debug", "info").Default("info"),
+		)
+		dsl.App("app", "Test app", g).Labels()
+		dsl.Command("Run").Uses(g)
+		var buf bytes.Buffer
+		dslLabelsErr = dsl.Export(&buf)
+		dslLabelsIR = buf.Bytes()
+	})
+	if dslLabelsErr != nil {
+		t.Fatal(dslLabelsErr)
+	}
+	app, err := ir.Decode(bytes.NewReader(dslLabelsIR))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := Build(app, "settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src, err := RenderLabels(m, "internal/settings")
+	if err != nil {
+		t.Fatal(err)
+	}
+	golden.Assert(t, filepath.Join("testdata", "labels_enum_dsl.golden.json"), src)
+	checkLabelsDoc(t, src)
+	s := string(src)
+	if !strings.Contains(s, `"settings.log.mode"`) {
+		t.Error("labeled enum key missing its own label")
+	}
+	if strings.Contains(s, "settings.log.mode.") {
+		t.Error("labeled enum must not emit value labels")
+	}
+	if !strings.Contains(s, `"settings.log.level.debug"`) || !strings.Contains(s, `"settings.log.level.info"`) {
+		t.Error("plain enum must emit value labels")
 	}
 }
 
