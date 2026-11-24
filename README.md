@@ -36,6 +36,8 @@ go run github.com/epistemer/cfgx/cmd/cfgx@latest init example.com/hello
 ./hello serve
 ```
 
+`-name app` names the app something other than the module path's last
+element (`init -name confab example.com/example`).
 `hello serve` listens on `localhost:8080`, and `curl localhost:8080`
 answers `hello from hello`. Stop it with Ctrl+C. The schema is in
 `internal/settings/schema/schema.go`.

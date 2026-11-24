@@ -4,6 +4,45 @@ Newest first. Every working session adds an entry: what landed, the decisions
 taken for you, what's next, and what's waiting on you. The terms are in
 [ownership.md](ownership.md).
 
+## 2026-11-24: M12, Confab iteration 1, v0.3.0
+
+- **Asked by you:** cfgx's share of Confab iteration 1's findings
+  (`epistemer/example` docs/findings.md F1, F3, F12, F14), whose
+  directions you chose on 2026-11-24 (C1–C3).
+- **Decided by you:** amendments A15–A17 locked as drafted
+  ([PR #45](https://github.com/epistemer/cfgx/pull/45)); C1b
+  (`Errors.Unwrap`) and C2b (typed values in `store.KeyInfo`) answered no.
+- **Landed:**
+  - **M12.4** (F14, [PR #46](https://github.com/epistemer/cfgx/pull/46)):
+    the init skeleton's `main` sets `slog.Default` to its logrus bridge.
+  - **M12.2** (A16, F3, [PR #47](https://github.com/epistemer/cfgx/pull/47)):
+    no value labels for an `Enum` whose type has a value-receiver
+    `Label()` with no parameters and one result; IR version 20;
+    [ADR 0009](adr/0009-enum-labels-from-the-type.md).
+  - **M12.1** (A15, F12, [PR #49](https://github.com/epistemer/cfgx/pull/49)):
+    `cfgx.Problem.Err`, the key's `Validate` error, unchanged; generated
+    keys carry `Validate` apart from `Check`. Interface §7.4.
+  - **M12.3** (A17, F1, [PR #48](https://github.com/epistemer/cfgx/pull/48)):
+    `cfgx init -name <app>`; init builds with `-o`, and refuses an
+    existing binary.
+  - **`v0.3.0`** tagged.
+- **Agents:** Argon was cooling down (until about 2026-11-28).
+  Gemini 4 Hydrogen (High) built M12.2 (about 255k tokens) and reviewed
+  M12.1 (about 41k); Gemini 3.8 Flash (High) built M12.3 (about 183k) and
+  reviewed M12.4 (about 189k), M12.2 (about 81k) and M12.3 (about 70k).
+  Claude reviewed both builds; M12.3's named path was simplified.
+- **Reviewed, taken:** `slog.SetDefault` in `main`, not in the command
+  constructor; Problem.Err tests for a Validate-only key and a value that
+  fails both; `-name` checks only the module path; init refuses an
+  existing binary. **Not taken:** deadlock and level concerns about the
+  existing slog bridge (speculative); M12.2's "missing import" and
+  "testdata import" (false: the tests pass).
+- **Decided for you:** a `-name` that isn't already in canonical form is
+  refused, not rewritten; `Err` is nil for cfgx's own constraints, so a
+  value that fails a constraint and the validator reports the constraint.
+- **Next:** the backlog, as neozp needs it.
+- **Waiting on you:** nothing.
+
 ## 2026-11-13: M11.3, v0.2.0
 
 - **Landed:**

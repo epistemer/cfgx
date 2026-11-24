@@ -4,7 +4,10 @@ All notable changes to cfgx are listed here. Versions follow
 [semantic versioning](https://semver.org). Until v1.0.0, a minor release
 may change the API; the changes will be listed here.
 
-## Unreleased
+## v0.3.0 (2026-11-24)
+
+From Confab, the first app on all of neozp (its findings F1, F3, F12 and
+F14); amendments A15–A17, locked by epistemer on 2026-11-24.
 
 ### Added
 
