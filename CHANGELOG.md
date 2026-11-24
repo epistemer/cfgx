@@ -15,6 +15,8 @@ may change the API; the changes will be listed here.
   `cfgx.Problem` literal without field names no longer compiles.
 - Generated keys keep a `Validate` function apart from cfgx's own
   constraints; run `go generate` to regenerate settings packages.
+- `cfgx init -name <app>` names the app: the program, cobra command,
+  config file, generated artifacts and env prefix (A17).
 
 ### Changed
 

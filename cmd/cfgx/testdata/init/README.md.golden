@@ -6,7 +6,7 @@ reads them, the example config and [docs/CONFIG.md](docs/CONFIG.md) are
 generated from it.
 
 ```sh
-go build .
+go build -o hello .
 ./hello serve                  # listens on localhost:8080
 ./hello serve --server-addr :9090
 ./hello config explain         # every setting, its value and where it came from

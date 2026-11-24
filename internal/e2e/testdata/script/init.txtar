@@ -35,6 +35,23 @@ stdout 'level=info msg="from a library" k=1'
 ! exec ../cfgx$exe init example.com/hello
 stderr 'refusing to overwrite go.mod, go.sum, internal/settings/zz_settings.go, hello.example.yaml'
 
+# A refused name writes nothing.
+! exec ../cfgx$exe init -name Bad example.com/x
+stderr 'cfgx init: -name "Bad" isn.t a name init accepts'
+
+# A second run in a new directory with -name sets the app name.
+cd ..
+mkdir confab
+cd confab
+exec ../cfgx$exe init -cfgx $CFGX_ROOT -name confab example.com/example
+stdout '^Created example.com/example\. Next: \./confab serve\r?$'
+exists confab$exe
+exists confab.example.yaml confab.schema.json
+exec ./confab$exe config explain
+stdout '^server.addr\s+localhost:8080\s+default'
+exec ./confab$exe config env
+stdout 'CONFAB_SERVER_ADDR'
+
 -- files/hello.yaml --
 servr:
   addr: ":9090"

@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -36,7 +37,10 @@ type initData struct {
 	EnvPrefix string // HELLO
 }
 
-var majorRE = regexp.MustCompile(`^v[0-9]+$`)
+var (
+	majorRE = regexp.MustCompile(`^v[0-9]+$`)
+	nameRE  = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+)
 
 // newInitData derives the names from a module path: the program is named
 // after its last element, as go build names it.
@@ -60,6 +64,19 @@ func newInitData(module string) (initData, error) {
 		name = strings.TrimSuffix(name, "-")
 	}
 	return initData{Module: module, Bin: bin, Name: name, EnvPrefix: strings.ToUpper(strings.ReplaceAll(name, "-", "_"))}, nil
+}
+
+// namedInitData is newInitData for an app named by -name (A17), which
+// names the program too. The name must already be in the form a derived
+// name takes, so nothing is rewritten behind the developer's back.
+func namedInitData(module, name string) (initData, error) {
+	if !nameRE.MatchString(name) {
+		return initData{}, fmt.Errorf("-name %q isn't a name init accepts: lower-case letters, digits and single dashes, starting with a letter, such as my-app", name)
+	}
+	if err := modmodule.CheckImportPath(module); err != nil {
+		return initData{}, fmt.Errorf("%q isn't a module path, such as example.com/hello: %v", module, err)
+	}
+	return initData{Module: module, Bin: name, Name: name, EnvPrefix: strings.ToUpper(strings.ReplaceAll(name, "-", "_"))}, nil
 }
 
 // render executes every template of the skeleton: the files to write, by
@@ -92,7 +109,7 @@ func render(d initData) (map[string][]byte, error) {
 	return out, err
 }
 
-const initUsage = `usage: cfgx init [-cfgx dir] <module path>
+const initUsage = `usage: cfgx init [-cfgx dir] [-name app] <module path>
 
 Creates a cobra application with a cfgx settings package in the current
 directory (docs/adr/0007-init-skeleton.md): it writes the files, then runs
@@ -101,6 +118,8 @@ it. It refuses to overwrite a file that exists.
 
 -cfgx dir uses the cfgx module in dir, through a replace directive, for
 working on cfgx itself.
+-name app names the app: the program, cobra command, config file and
+env prefix. Defaults to the module path's last element.
 `
 
 func initCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -108,6 +127,7 @@ func initCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fl.SetOutput(stderr)
 	fl.Usage = func() { fmt.Fprint(stderr, initUsage) }
 	local := fl.String("cfgx", "", "use the cfgx module in this directory")
+	name := fl.String("name", "", "name the app: program, cobra command, config file and env prefix")
 	if err := fl.Parse(args); err != nil {
 		return 2
 	}
@@ -115,18 +135,27 @@ func initCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stderr, initUsage)
 		return 2
 	}
-	if err := initModule(ctx, fl.Arg(0), *local, stdout, stderr); err != nil {
+	named := false
+	fl.Visit(func(f *flag.Flag) { named = named || f.Name == "name" })
+	var d initData
+	var err error
+	if named {
+		d, err = namedInitData(fl.Arg(0), *name)
+	} else {
+		d, err = newInitData(fl.Arg(0))
+	}
+	if err == nil {
+		err = initModule(ctx, d, *local, stdout, stderr)
+	}
+	if err != nil {
 		fmt.Fprintln(stderr, "cfgx init:", err)
 		return 1
 	}
 	return 0
 }
 
-func initModule(ctx context.Context, module, local string, stdout, stderr io.Writer) error {
-	d, err := newInitData(module)
-	if err != nil {
-		return err
-	}
+func initModule(ctx context.Context, d initData, local string, stdout, stderr io.Writer) error {
+	module := d.Module
 	files, err := render(d)
 	if err != nil {
 		return err
@@ -138,7 +167,7 @@ func initModule(ctx context.Context, module, local string, stdout, stderr io.Wri
 	sort.Strings(paths)
 	// What go mod and cfgx gen write, too.
 	made := []string{"go.mod", "go.sum", "internal/settings/zz_settings.go", d.Bin + ".example.yaml",
-		d.Bin + ".schema.json", ".env.example", "docs/CONFIG.md", "cfgx.lock.json"}
+		d.Bin + ".schema.json", ".env.example", "docs/CONFIG.md", "cfgx.lock.json", d.Bin + exe()}
 	var exist []string
 	for _, p := range append(made, paths...) {
 		if _, err := os.Lstat(filepath.FromSlash(p)); err == nil {
@@ -188,7 +217,7 @@ func initModule(ctx context.Context, module, local string, stdout, stderr io.Wri
 		[]string{"mod", "tidy"},
 		[]string{"generate", "./..."},
 		[]string{"mod", "tidy"},
-		[]string{"build", "."},
+		[]string{"build", "-o", d.Bin + exe(), "."},
 	)
 	for _, s := range steps {
 		fmt.Fprintln(stderr, "go", strings.Join(s, " "))
@@ -228,6 +257,14 @@ func undo(before map[string]bool) {
 	for _, p := range made {
 		os.Remove(p)
 	}
+}
+
+// exe is the suffix of a program's file name on this OS.
+func exe() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
 }
 
 // cfgxVersion is the version of the running cfgx, which the new module

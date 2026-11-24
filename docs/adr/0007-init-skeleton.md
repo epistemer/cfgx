@@ -56,7 +56,12 @@ Option 2. The skeleton is:
 - `.gitignore` (the binary, `*.db`) and a README that says how to add a key.
 - go.mod: `go mod init`, then `go get -tool github.com/epistemer/cfgx/cmd/cfgx`
   at the version of the running cfgx, then `go mod tidy`, `go generate`,
-  `go mod tidy` and `go build .`, which leaves the program built.
+  `go mod tidy` and `go build -o <program> .`, which leaves the program
+  built.
+- The program is named after the module path's last element, or after
+  `-name` (added 2026-11-24, amendment A17, Confab finding F1). Since
+  `go build .` names a binary after the module path whatever the app is
+  called, init and the README build with `-o`.
 
 `init` refuses to run if any file it or the go command would write exists,
 and removes what it made if a step fails, so it can run again.
