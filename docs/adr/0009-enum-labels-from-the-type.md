@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Status | Proposed (amendment A16, awaiting epistemer's lock) |
+| Status | Accepted (amendment A16, locked by epistemer on 2026-11-24) |
 | Date | 2026-11-24 |
 | Roadmap item | M12.2 |
 | Deciders | epistemer chose the direction on 2026-11-24 (question C2 of Confab iteration 1). Claude proposed the test and its records. It changes ADR 0008 for one case |
@@ -51,8 +51,9 @@ its own values.
 - The DSL records the fact in the IR (`EnumLabeled`), and `gen` leaves those
   values out of `zz_<package>.labels.json`. The IR version goes up.
 - `L10n(path)` returns nil for such a value's path. A generic dashboard falls
-  back to the value's text; interface §5.5's example says so. Option 4 stays
-  open for when a generic dashboard needs the type's labels.
+  back to the value's text; interface §5.5's example says so. Option 4 was
+  asked as question C2b and answered no for now; it stays open for when a
+  generic dashboard needs the type's labels.
 - Translations stored for `settings.<key>.<value>` of such a key become i18n
   orphans until `Prune`. Confab's are dead keys already.
 - Every other neozp generator whose enums have `Label()` (models today) is

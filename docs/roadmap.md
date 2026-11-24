@@ -356,7 +356,7 @@ between M11.1 and M11.2, so no tag ever carries `App.I18n()`.
 **Goal:** cfgx's share of the findings from Confab, the first app on all of
 neozp (`epistemer/example`, docs/findings.md): F1, F3, F12 and F14. epistemer
 answered questions C1–C3 on 2026-11-24; amendments A15–A17 give them exact
-names, and wait for epistemer's lock before M12.1–M12.3 start.
+names, locked by epistemer on 2026-11-24.
 
 | ✓ | ID | Item | Size | Done when |
 |---|----|------|------|-----------|
