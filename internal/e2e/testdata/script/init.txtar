@@ -26,6 +26,11 @@ cp ../files/hello.yaml hello.yaml
 exec ./hello$exe config explain
 stderr 'level=warning msg="unknown key \\"servr\\" in hello.yaml:1:1; did you mean \\"server\\"\?"'
 
+# So do libraries that log through slog.Default, such as auth and handlers.
+cp ../files/slog_test.go slog_test.go
+go test -run TestSlogDefault -v .
+stdout 'level=info msg="from a library" k=1'
+
 # A second init refuses, and changes nothing.
 ! exec ../cfgx$exe init example.com/hello
 stderr 'refusing to overwrite go.mod, go.sum, internal/settings/zz_settings.go, hello.example.yaml'
@@ -33,3 +38,18 @@ stderr 'refusing to overwrite go.mod, go.sum, internal/settings/zz_settings.go, 
 -- files/hello.yaml --
 servr:
   addr: ":9090"
+-- files/slog_test.go --
+package main
+
+import (
+	"log/slog"
+	"os"
+	"testing"
+)
+
+// main sets slog's default logger; version is a command that loads nothing.
+func TestSlogDefault(t *testing.T) {
+	os.Args = []string{"hello", "version"}
+	main()
+	slog.Info("from a library", "k", 1)
+}

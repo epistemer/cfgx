@@ -5,11 +5,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"runtime/debug"
 	"syscall"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/epistemer/cfgx"
@@ -26,15 +28,18 @@ func main() {
 		<-ctx.Done()
 		stop()
 	}()
-	err := newRoot().ExecuteContext(ctx)
+	log := logging.New()
+	// Libraries that log through slog.Default, such as auth and handlers,
+	// go to the same logger as the rest.
+	slog.SetDefault(logging.Slog(log))
+	err := newRoot(log).ExecuteContext(ctx)
 	stop()
 	if err != nil {
 		os.Exit(1)
 	}
 }
 
-func newRoot() *cobra.Command {
-	log := logging.New()
+func newRoot(log *logrus.Logger) *cobra.Command {
 	root := &cobra.Command{Use: "{{.Bin}}", Short: "{{.Bin}} is a cfgx application", SilenceUsage: true}
 	// cfgx's warnings, such as unknown keys in the config file, go to the
 	// same logger as the rest.
