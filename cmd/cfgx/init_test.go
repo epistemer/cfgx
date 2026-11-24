@@ -57,6 +57,32 @@ func TestInitNames(t *testing.T) {
 			t.Errorf("%q accepted", bad)
 		}
 	}
+	for _, tc := range []struct {
+		module string
+		name   string
+		want   initData
+	}{
+		{
+			module: "github.com/epistemer/example",
+			name:   "confab",
+			want:   initData{Module: "github.com/epistemer/example", Bin: "confab", Name: "confab", EnvPrefix: "CONFAB"},
+		},
+		{
+			module: "github.com/epistemer/example",
+			name:   "my-app",
+			want:   initData{Module: "github.com/epistemer/example", Bin: "my-app", Name: "my-app", EnvPrefix: "MY_APP"},
+		},
+	} {
+		d, err := newInitData(tc.module, tc.name)
+		if err != nil || d != tc.want {
+			t.Errorf("%s -name %s: %+v, %v; want %+v", tc.module, tc.name, d, err, tc.want)
+		}
+	}
+	for _, bad := range []string{"Confab", "2fa", "a--b", "-a", "a-", "a_b", "a b", "", "a/b"} {
+		if _, err := newInitData("example.com/hello", bad); err == nil {
+			t.Errorf("-name %q accepted", bad)
+		}
+	}
 }
 
 // init refuses to overwrite files, and then writes nothing.
@@ -77,6 +103,11 @@ func TestInitRefuses(t *testing.T) {
 	}
 	if code := initCmd(context.Background(), nil, &out, &errb); code != 2 {
 		t.Errorf("no module path: exit %d", code)
+	}
+	errb.Reset()
+	if code := initCmd(context.Background(), []string{"-name", "Bad", "example.com/hello"}, &out, &errb); code != 1 ||
+		!strings.Contains(errb.String(), "cfgx init: -name") {
+		t.Errorf("-name Bad: exit %d, %s", code, errb.String())
 	}
 }
 

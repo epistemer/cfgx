@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"sort"
 	"strings"
@@ -37,10 +38,22 @@ type initData struct {
 }
 
 var majorRE = regexp.MustCompile(`^v[0-9]+$`)
+var nameRE = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+
+func checkName(name string) error {
+	if !nameRE.MatchString(name) {
+		return fmt.Errorf("-name %q must match ^[a-z][a-z0-9]*(-[a-z0-9]+)*$ (lower-case letters, digits and single dashes, starting with a letter)", name)
+	}
+	return nil
+}
 
 // newInitData derives the names from a module path: the program is named
-// after its last element, as go build names it.
-func newInitData(module string) (initData, error) {
+// after its last element, as go build names it. When an explicit app name is
+// passed, it names the program, cobra command, config file and env prefix.
+func newInitData(module string, name ...string) (initData, error) {
+	if len(name) > 0 {
+		return newInitDataNamed(module, name[0])
+	}
 	if err := modmodule.CheckImportPath(module); err != nil {
 		return initData{}, fmt.Errorf("%q isn't a module path, such as example.com/hello: %v", module, err)
 	}
@@ -54,12 +67,28 @@ func newInitData(module string) (initData, error) {
 	}
 	// The app's name gives the env prefix: lower-case letters and digits,
 	// in words joined by single dashes, starting with a letter.
-	name := strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(bin), "-"), "-")
-	if name == "" || name[0] < 'a' || name[0] > 'z' {
-		name = "app-" + name
-		name = strings.TrimSuffix(name, "-")
+	appName := strings.Trim(regexp.MustCompile(`[^a-z0-9]+`).ReplaceAllString(strings.ToLower(bin), "-"), "-")
+	if appName == "" || appName[0] < 'a' || appName[0] > 'z' {
+		appName = "app-" + appName
+		appName = strings.TrimSuffix(appName, "-")
 	}
-	return initData{Module: module, Bin: bin, Name: name, EnvPrefix: strings.ToUpper(strings.ReplaceAll(name, "-", "_"))}, nil
+	return initData{Module: module, Bin: bin, Name: appName, EnvPrefix: strings.ToUpper(strings.ReplaceAll(appName, "-", "_"))}, nil
+}
+
+// newInitDataNamed derives the names using an explicit app name.
+func newInitDataNamed(module, name string) (initData, error) {
+	if err := checkName(name); err != nil {
+		return initData{}, err
+	}
+	if err := modmodule.CheckImportPath(module); err != nil {
+		return initData{}, fmt.Errorf("%q isn't a module path, such as example.com/hello: %v", module, err)
+	}
+	return initData{
+		Module:    module,
+		Bin:       name,
+		Name:      name,
+		EnvPrefix: strings.ToUpper(strings.ReplaceAll(name, "-", "_")),
+	}, nil
 }
 
 // render executes every template of the skeleton: the files to write, by
@@ -92,7 +121,7 @@ func render(d initData) (map[string][]byte, error) {
 	return out, err
 }
 
-const initUsage = `usage: cfgx init [-cfgx dir] <module path>
+const initUsage = `usage: cfgx init [-cfgx dir] [-name app] <module path>
 
 Creates a cobra application with a cfgx settings package in the current
 directory (docs/adr/0007-init-skeleton.md): it writes the files, then runs
@@ -101,6 +130,8 @@ it. It refuses to overwrite a file that exists.
 
 -cfgx dir uses the cfgx module in dir, through a replace directive, for
 working on cfgx itself.
+-name app names the app: the program, cobra command, config file and
+env prefix. Defaults to the module path's last element.
 `
 
 func initCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int {
@@ -108,6 +139,9 @@ func initCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fl.SetOutput(stderr)
 	fl.Usage = func() { fmt.Fprint(stderr, initUsage) }
 	local := fl.String("cfgx", "", "use the cfgx module in this directory")
+	var name string
+	var hasName bool
+	fl.StringVar(&name, "name", "", "name the app: program, cobra command, config file and env prefix")
 	if err := fl.Parse(args); err != nil {
 		return 2
 	}
@@ -115,15 +149,30 @@ func initCmd(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stderr, initUsage)
 		return 2
 	}
-	if err := initModule(ctx, fl.Arg(0), *local, stdout, stderr); err != nil {
+	fl.Visit(func(f *flag.Flag) {
+		if f.Name == "name" {
+			hasName = true
+		}
+	})
+	var nameOpt *string
+	if hasName {
+		nameOpt = &name
+	}
+	if err := initModule(ctx, fl.Arg(0), nameOpt, *local, stdout, stderr); err != nil {
 		fmt.Fprintln(stderr, "cfgx init:", err)
 		return 1
 	}
 	return 0
 }
 
-func initModule(ctx context.Context, module, local string, stdout, stderr io.Writer) error {
-	d, err := newInitData(module)
+func initModule(ctx context.Context, module string, name *string, local string, stdout, stderr io.Writer) error {
+	var d initData
+	var err error
+	if name != nil {
+		d, err = newInitDataNamed(module, *name)
+	} else {
+		d, err = newInitData(module)
+	}
 	if err != nil {
 		return err
 	}
@@ -184,11 +233,15 @@ func initModule(ctx context.Context, module, local string, stdout, stderr io.Wri
 	} else {
 		steps = append(steps, []string{"get", "-tool", cfgxModule + "/cmd/cfgx@" + cfgxVersion()})
 	}
+	exe := ""
+	if runtime.GOOS == "windows" {
+		exe = ".exe"
+	}
 	steps = append(steps,
 		[]string{"mod", "tidy"},
 		[]string{"generate", "./..."},
 		[]string{"mod", "tidy"},
-		[]string{"build", "."},
+		[]string{"build", "-o", d.Bin + exe, "."},
 	)
 	for _, s := range steps {
 		fmt.Fprintln(stderr, "go", strings.Join(s, " "))
