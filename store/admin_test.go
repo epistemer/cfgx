@@ -250,10 +250,10 @@ func TestUpdateProblemErr(t *testing.T) {
 	s := adminStore(t, nil)
 	err := s.Update(context.Background(), map[string]string{"wait": "13s"})
 	var errs cfgx.Errors
-	if !errors.As(err, &errs) || len(errs) != 1 || errs[0].Err != errUnlucky || errs[0].Key != "wait" {
+	if !errors.As(err, &errs) || len(errs) != 1 || errs[0].Err != errUnlucky || errs[0].Key != "wait" || errs[0].Source != "store" {
 		t.Fatalf("%v (%+v); want Err errUnlucky on wait", err, errs)
 	}
-	if err := s.Update(context.Background(), map[string]string{"wait": "2h"}); !errors.As(err, &errs) || errs[0].Err != nil {
+	if err := s.Update(context.Background(), map[string]string{"wait": "2h"}); !errors.As(err, &errs) || len(errs) != 1 || errs[0].Err != nil {
 		t.Errorf("a constraint: %v, %+v", err, errs)
 	}
 }

@@ -8,7 +8,7 @@ import (
 // Problem is one thing wrong with the configuration.
 type Problem struct {
 	Key     string // the setting, e.g. database.port
-	Message string // what is wrong with it, in English, for logs
+	Message string // what is wrong with it, for logs
 	Source  string // where the value came from, e.g. "env ZP_DATABASE_PORT"; "" if nowhere
 	// Err is the error the key's Validate function returned, unchanged, so
 	// a settings page can show the app's own, translated error on the

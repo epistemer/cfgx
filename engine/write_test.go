@@ -348,7 +348,7 @@ func TestWriteProblemErr(t *testing.T) {
 	if p := errs[0]; !errors.Is(p.Err, errRefused) || p.Key != "rate" || p.Source != "store" || p.Message != p.Err.Error() {
 		t.Errorf("%+v", p)
 	}
-	if err := w.Write(ctx, setRate(5000)); !errors.As(err, &errs) || errs[0].Err != nil {
+	if err := w.Write(ctx, setRate(5000)); !errors.As(err, &errs) || len(errs) != 1 || errs[0].Err != nil {
 		t.Errorf("a constraint: %v, %+v", err, errs)
 	}
 }

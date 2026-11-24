@@ -122,4 +122,26 @@ func TestProblemErr(t *testing.T) {
 	if p := load(0, map[string]string{"CFGXT_N": "x"})[0]; p.Err != nil {
 		t.Errorf("a parse error: %+v; want Err nil", p)
 	}
+	// 70 fails both: the constraint runs first, so the problem is cfgx's.
+	if p := load(0, map[string]string{"CFGXT_N": "70"})[0]; p.Err != nil || p.Source != "env CFGXT_N" {
+		t.Errorf("both fail: %+v; want the constraint's problem, Err nil", p)
+	}
+}
+
+// A key with a Validate function and no constraints is checked too.
+func TestValidateOnly(t *testing.T) {
+	k := Key[chkVals]{
+		Path: "n", Env: "CFGXT_N",
+		Set:      func(v *chkVals, r string) error { return ParseInt(r, &v.N) },
+		IsSet:    func(v *chkVals) bool { return v.N != 0 },
+		Validate: func(v *chkVals) error { return unlucky{v.N} },
+	}
+	_, err := Load(&App[chkVals]{EnvPrefix: "CFGXT", Keys: []Key[chkVals]{k}}, nil, []int{0}, Options{
+		LookupEnv: func(s string) (string, bool) { return "3", s == "CFGXT_N" },
+		Environ:   func() []string { return nil },
+	})
+	var errs cfgx.Errors
+	if !errors.As(err, &errs) || len(errs) != 1 || errs[0].Err != (unlucky{3}) {
+		t.Errorf("%v; want Err unlucky{3}", err)
+	}
 }
