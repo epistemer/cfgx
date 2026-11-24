@@ -28,9 +28,8 @@ stderr 'level=warning msg="unknown key \\"servr\\" in hello.yaml:1:1; did you me
 
 # So do libraries that log through slog.Default, such as auth and handlers.
 cp ../files/slog_test.go slog_test.go
-exec go test -run TestSlogDefault -v .
+go test -run TestSlogDefault -v .
 stdout 'level=info msg="from a library" k=1'
-rm slog_test.go
 
 # A second init refuses, and changes nothing.
 ! exec ../cfgx$exe init example.com/hello
@@ -44,10 +43,13 @@ package main
 
 import (
 	"log/slog"
+	"os"
 	"testing"
 )
 
+// main sets slog's default logger; version is a command that loads nothing.
 func TestSlogDefault(t *testing.T) {
-	newRoot()
+	os.Args = []string{"hello", "version"}
+	main()
 	slog.Info("from a library", "k", 1)
 }

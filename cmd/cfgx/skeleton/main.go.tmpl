@@ -11,6 +11,7 @@ import (
 	"runtime/debug"
 	"syscall"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/epistemer/cfgx"
@@ -27,22 +28,22 @@ func main() {
 		<-ctx.Done()
 		stop()
 	}()
-	err := newRoot().ExecuteContext(ctx)
+	log := logging.New()
+	// Libraries that log through slog.Default, such as auth and handlers,
+	// go to the same logger as the rest.
+	slog.SetDefault(logging.Slog(log))
+	err := newRoot(log).ExecuteContext(ctx)
 	stop()
 	if err != nil {
 		os.Exit(1)
 	}
 }
 
-func newRoot() *cobra.Command {
-	log := logging.New()
+func newRoot(log *logrus.Logger) *cobra.Command {
 	root := &cobra.Command{Use: "{{.Bin}}", Short: "{{.Bin}} is a cfgx application", SilenceUsage: true}
-	// Libraries that log with log/slog, such as cfgx's warnings about
-	// unknown keys in the config file, go to the same logger as the rest:
-	// cfgx through WithLogger, the others through slog.Default.
-	slogger := logging.Slog(log)
-	slog.SetDefault(slogger)
-	settings.BindRoot(root, cfgx.WithLogger(slogger))
+	// cfgx's warnings, such as unknown keys in the config file, go to the
+	// same logger as the rest.
+	settings.BindRoot(root, cfgx.WithLogger(logging.Slog(log)))
 	root.AddCommand(
 		settings.ServeCommand(&cobra.Command{Use: "serve", Short: "Run the HTTP server"},
 			func(ctx context.Context, s *settings.Serve) error {
