@@ -66,6 +66,12 @@
       "var": "L10nSchedulerWorkers"
     },
     {
+      "key": "settings.scheduler.execmode",
+      "path": "scheduler.execmode",
+      "text": "Task execution mode",
+      "var": "L10nSchedulerExecmode"
+    },
+    {
       "key": "settings.scheduler.retry",
       "path": "scheduler.retry",
       "text": "Retry policy",

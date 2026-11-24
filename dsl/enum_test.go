@@ -1,6 +1,7 @@
 package dsl
 
 import (
+	"bytes"
 	"reflect"
 	"slices"
 	"testing"
@@ -89,5 +90,60 @@ func TestStringMapKeys(t *testing.T) {
 	want := []string{`default key "a=b" must be non-empty, without = or outer spaces`, `example key " c" must be non-empty, without = or outer spaces`}
 	if !slices.Equal(k.problems, want) {
 		t.Errorf("problems = %q", k.problems)
+	}
+}
+
+type (
+	valLabelStr    string
+	valLabelCustom int
+	ptrLabel       string
+	paramLabel     string
+	twoResultLabel string
+	zeroResult     string
+	otherMethod    string
+	labelTag       struct{}
+)
+
+func (valLabelStr) Label() string           { return "x" }
+func (valLabelCustom) Label() labelTag      { return labelTag{} }
+func (*ptrLabel) Label() string             { return "x" }
+func (paramLabel) Label(x int) string       { return "x" }
+func (twoResultLabel) Label() (string, int) { return "x", 0 }
+func (zeroResult) Label()                   {}
+func (otherMethod) Title() string           { return "x" }
+
+func TestEnumLabeled(t *testing.T) {
+	cases := []struct {
+		name string
+		key  func() KeyDef
+		want bool
+	}{
+		{"value receiver string", func() KeyDef { return Enum("k", "K", valLabelStr("a")) }, true},
+		{"value receiver custom result", func() KeyDef { return Enum("k", "K", valLabelCustom(1)) }, true},
+		{"plain string", func() KeyDef { return Enum("k", "K", "a", "b") }, false},
+		{"pointer receiver", func() KeyDef { return Enum("k", "K", ptrLabel("a")) }, false},
+		{"label with parameter", func() KeyDef { return Enum("k", "K", paramLabel("a")) }, false},
+		{"label with two results", func() KeyDef { return Enum("k", "K", twoResultLabel("a")) }, false},
+		{"label with no results", func() KeyDef { return Enum("k", "K", zeroResult("a")) }, false},
+		{"different method name", func() KeyDef { return Enum("k", "K", otherMethod("a")) }, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			reset()
+			g := Group("g", "G", c.key())
+			App("app", "App", g)
+			var buf bytes.Buffer
+			if err := Export(&buf); err != nil {
+				t.Fatal(err)
+			}
+			a, err := ir.Decode(&buf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := a.Groups[0].Keys[0].EnumLabeled
+			if got != c.want {
+				t.Errorf("EnumLabeled = %v, want %v", got, c.want)
+			}
+		})
 	}
 }

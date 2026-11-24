@@ -15,7 +15,10 @@ func TestRoundTrip(t *testing.T) {
 		Global: []string{"database"}, GlobalOrphans: []Ref{{Name: "log", Pos: Pos{"schema.go", 2}}},
 		Groups: []Group{{
 			Name: "database", Desc: "Database connection", Pos: Pos{"schema.go", 3},
-			Keys: []Key{{Name: "host", Desc: "Host", Kind: KindString, Default: &def, Required: true, Pos: Pos{"schema.go", 4}}},
+			Keys: []Key{
+				{Name: "host", Desc: "Host", Kind: KindString, Default: &def, Required: true, Pos: Pos{"schema.go", 4}},
+				{Name: "mode", Desc: "Mode", Kind: KindEnum, Type: &Type{Path: "example/models", Pkg: "models", Name: "Mode", Kind: "string"}, Enum: []EnumValue{{Text: "a", Lit: `"a"`}}, EnumLabeled: true, Pos: Pos{"schema.go", 5}},
+			},
 		}},
 		Commands: []Command{{Name: "Serve", Uses: []string{"database"}, Pos: Pos{"schema.go", 9}}},
 		Pos:      Pos{"schema.go", 7},

@@ -88,6 +88,9 @@ func (k *EnumKey[T]) describe() {
 	case t.PkgPath() != "" && !token.IsExported(t.Name()):
 		problem("enum type %s isn't exported, so the generated code can't name it", t)
 	}
+	if m, ok := t.MethodByName("Label"); ok && m.Type.NumIn() == 1 && m.Type.NumOut() == 1 {
+		k.enumLabeled = true
+	}
 	if len(k.values) == 0 {
 		problem("an enum needs at least one value")
 		return

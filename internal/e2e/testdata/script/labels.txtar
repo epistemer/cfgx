@@ -28,13 +28,28 @@ stderr '^cfgx: deleted zz_settings\.labels\.json: the schema no longer uses App.
 package settings
 
 //go:generate go run github.com/epistemer/cfgx/cmd/cfgx gen ./schema
+-- internal/models/models.go --
+package models
+
+type Mode string
+
+const (
+	Sequential Mode = "sequential"
+	Parallel   Mode = "parallel"
+)
+
+func (m Mode) Label() string { return "mode." + string(m) }
 -- internal/settings/schema/schema.go --
 package schema
 
-import "github.com/epistemer/cfgx/dsl"
+import (
+	"example.com/e2e/internal/models"
+	"github.com/epistemer/cfgx/dsl"
+)
 
 var Log = dsl.Group("log", "Logging",
 	dsl.Enum("level", "Minimum log level", "debug", "info").Default("info"),
+	dsl.Enum("mode", "Execution mode", models.Sequential, models.Parallel).Default(models.Sequential),
 )
 
 var App = dsl.App("app", "Test app", Log).Labels()
@@ -43,10 +58,14 @@ var Run = dsl.Command("Run").Uses(Log)
 -- files/nolabels.go --
 package schema
 
-import "github.com/epistemer/cfgx/dsl"
+import (
+	"example.com/e2e/internal/models"
+	"github.com/epistemer/cfgx/dsl"
+)
 
 var Log = dsl.Group("log", "Logging",
 	dsl.Enum("level", "Minimum log level", "debug", "info").Default("info"),
+	dsl.Enum("mode", "Execution mode", models.Sequential, models.Parallel).Default(models.Sequential),
 )
 
 var App = dsl.App("app", "Test app", Log)
@@ -77,6 +96,12 @@ var Run = dsl.Command("Run").Uses(Log)
       "key": "settings.log.level.info",
       "path": "log.level.info",
       "text": "info"
+    },
+    {
+      "key": "settings.log.mode",
+      "path": "log.mode",
+      "text": "Execution mode",
+      "var": "L10nLogMode"
     }
   ],
   "package": {

@@ -1032,8 +1032,10 @@ func Build(app *ir.App, pkg string) (*Model, error) {
 			label("L10n"+g.Iface, g.Path, g.Desc, g.pos, "label of group "+g.Path)
 			for _, k := range g.Keys {
 				label("L10n"+k.Getter, k.Path, k.Desc, k.Pos, "label of "+k.Path)
-				for _, e := range k.Enum {
-					label("", k.Path+"."+e.Text, e.Text, k.Pos, "")
+				if !k.ir.EnumLabeled {
+					for _, e := range k.Enum {
+						label("", k.Path+"."+e.Text, e.Text, k.Pos, "")
+					}
 				}
 			}
 		}

@@ -906,8 +906,8 @@ func TestMutableNamesClaimed(t *testing.T) {
 	}
 }
 
-// labelsApp is nested with App.Labels and a string enum whose description
-// needs quoting.
+// labelsIR is nested with App.Labels, a plain string enum whose description
+// needs quoting, and an EnumLabeled enum whose type labels its own values.
 func labelsIR() *ir.App {
 	a := nested()
 	a.Labels = true
@@ -915,6 +915,11 @@ func labelsIR() *ir.App {
 	g.Keys = append(g.Keys, ir.Key{Name: "sslmode", Desc: `SSL mode, as in "sslmode=require"`, Kind: ir.KindEnum,
 		Type: &ir.Type{Name: "string", Kind: "string"},
 		Enum: []ir.EnumValue{{Text: "disable", Lit: `"disable"`}, {Text: "verify-full", Lit: `"verify-full"`}}})
+	sched := &a.Groups[2]
+	sched.Keys = append(sched.Keys, ir.Key{Name: "execmode", Desc: "Task execution mode", Kind: ir.KindEnum,
+		Type:        &ir.Type{Path: "github.com/epistemer/cfgx/internal/gen/testdata/labeled", Pkg: "labeled", Name: "Mode", Kind: "string"},
+		Enum:        []ir.EnumValue{{Text: "sequential", Lit: `"sequential"`}, {Text: "parallel", Lit: `"parallel"`}},
+		EnumLabeled: true})
 	return a
 }
 
